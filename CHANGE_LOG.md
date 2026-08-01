@@ -20,6 +20,39 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-01 16:08
+  - Host class(es): Linux/WSL AMD64
+  - Summary: Completed Phase 3 (Model Gateway) of the AWF build sequence — LiteLLM in-process integration, the Model Profile contract, and one working profile validated end-to-end against a local Ollama endpoint.
+  - Scope:
+    - `backend/src/awf/registry/model_profile.py` (new — `ModelProfile`/`Candidate`/`Privacy`/`Fallback`/`Limits`, `parse_model_profile`, `load_model_profile`)
+    - `backend/src/awf/gateway/{__init__.py,client.py}` (new — `complete()`: priority-ordered candidates, secrets-store API-key resolution by name, ordered/none fallback)
+    - `backend/tests/fixtures/model_profiles/local_ollama_r0.yaml`
+    - `backend/tests/test_phase3_model_gateway.py` (new, 8 tests)
+    - `data/registry/model-profiles/phi4-mini/1.0.0.yaml` (first real, published Model Profile)
+    - `backend/pyproject.toml` (added `litellm`)
+  - Validation:
+    - `pytest backend/tests/` → 39 passed (31 prior + 8 new)
+    - Against the real repo: `resolve_registry_object(repo_root, "model-profiles", "phi4-mini", "1.0.0")` located the published profile under `data/registry/`, `load_model_profile` parsed it, and `gateway.client.complete()` returned `"pong"` from a real completion call to `ollama/phi4-mini:latest` at `http://172.31.96.1:11434` (Ollama on the WSL host)
+    - Fallback (`ordered` continues to the next candidate, `none` raises immediately) and secrets-store API-key resolution (candidate declares `api_key_secret_name`, value never in the profile file) verified with a monkeypatched `litellm.completion`
+  - Notes:
+    - The published `phi4-mini` profile requires no `api_key_secret_name` since Ollama needs no auth; the secrets-resolution path is proven by a dedicated test with a real Fernet-encrypted secret, not by the live call
+    - Token/cost `limits` are wired only as far as `max_output_tokens_per_call` → LiteLLM's `max_tokens`; input-token and cost-ceiling enforcement are not implemented and remain open for a later pass
+
+- Timestamp: 2026-08-01 15:57
+  - Host class(es): Linux/WSL AMD64
+  - Summary: Re-aligned Phases 0–1 with the Architect-updated spec's two-root registry model (`config/app_registry/` repo defaults + `data/registry/` operator additions, Section 9.3) — added the `config/app_registry/` layout, updated `registry_index`'s schema, and implemented the dual-root resolution lookup.
+  - Scope:
+    - `config/app_registry/{agents,capabilities,MCP,skills,voice-profiles,workflows}/.gitkeep` (new repo layout, Phase 0)
+    - `backend/src/awf/db/schema.py` (`registry_index`: added `source` enum column `config`|`data`; `trust_status` now nullable, null when `source='config'`)
+    - `backend/src/awf/registry/resolve.py` (new — `resolve_registry_object(repo_root, kind, name, version)`, Phase 1)
+    - `backend/tests/test_phase1_registry_resolve.py` (new, 6 tests)
+  - Validation:
+    - `pytest backend/tests/` → 31 passed (25 prior + 6 new)
+    - Fresh `backend/.venv` rebuilt from the `python3.12` altinstall; `backend/.venv/bin/awf-setup` re-run against the real repo produced a new `.env` (fresh `AWF_SECRET_KEY`) and `data/awf_db/awf.db` with the updated `registry_index` shape, confirmed via `PRAGMA table_info`
+  - Notes:
+    - `capability_record.load_capability_record` still takes an explicit `Path` — not yet wired to call `resolve_registry_object`; that integration and populating `registry_index`'s `source`/`trust_status` from a real publish step remain open
+    - `.gitignore` required no change: it already fully gitignores `data/registry/*` except `.gitkeep`, matching the updated spec's "operator-personal, untracked" model for `data/`
+
 - Timestamp: 2026-08-01 07:19
   - Host class(es): Linux/WSL AMD64
   - Summary: Completed Phase 2 (Secrets) of the AWF build sequence — Fernet-backed `secrets` table access, key rotation, and the `awf secret set/list/rotate-key` entrypoints.

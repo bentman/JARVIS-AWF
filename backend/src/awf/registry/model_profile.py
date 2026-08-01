@@ -1,0 +1,130 @@
+"""Model Profile schema, loading, and validation (Section 11)."""
+
+from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
+
+PURPOSES = ("general-reasoning", "coding", "judge", "adversary", "embedding")
+DATA_CLASSES = ("public", "internal", "confidential")
+FALLBACK_MODES = ("none", "ordered")
+
+
+class ModelProfileValidationError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class Privacy:
+    maximum_data_class: str
+    local_only: bool
+
+
+@dataclass(frozen=True)
+class Candidate:
+    provider: str
+    model: str
+    priority: int
+    enabled: bool
+    api_base: str | None = None
+    api_key_secret_name: str | None = None
+
+    @property
+    def litellm_model(self) -> str:
+        return f"{self.provider}/{self.model}"
+
+
+@dataclass(frozen=True)
+class Fallback:
+    mode: str
+    allow_quality_degrade: bool
+
+
+@dataclass(frozen=True)
+class Limits:
+    max_input_tokens_per_call: int
+    max_output_tokens_per_call: int
+    max_cost_usd_per_call: float
+
+
+@dataclass(frozen=True)
+class ModelProfile:
+    purpose: str
+    privacy: Privacy
+    candidates: tuple[Candidate, ...]
+    fallback: Fallback
+    limits: Limits
+
+    def enabled_candidates_by_priority(self) -> tuple[Candidate, ...]:
+        return tuple(
+            sorted((c for c in self.candidates if c.enabled), key=lambda c: c.priority)
+        )
+
+
+def _require(mapping: dict, key: str, context: str) -> object:
+    if key not in mapping:
+        raise ModelProfileValidationError(f"{context}: missing required field '{key}'")
+    return mapping[key]
+
+
+def _require_enum(value: object, allowed: tuple[str, ...], context: str) -> str:
+    if value not in allowed:
+        raise ModelProfileValidationError(f"{context}: '{value}' not in {allowed}")
+    return value  # type: ignore[return-value]
+
+
+def parse_model_profile(raw: dict) -> ModelProfile:
+    privacy_raw = _require(raw, "privacy", "model profile")
+    candidates_raw = _require(raw, "candidates", "model profile")
+    fallback_raw = _require(raw, "fallback", "model profile")
+    limits_raw = _require(raw, "limits", "model profile")
+
+    if not isinstance(candidates_raw, list) or not candidates_raw:
+        raise ModelProfileValidationError("model profile: 'candidates' must be a non-empty list")
+
+    privacy = Privacy(
+        maximum_data_class=_require_enum(
+            _require(privacy_raw, "maximum_data_class", "privacy"),
+            DATA_CLASSES,
+            "privacy.maximum_data_class",
+        ),
+        local_only=bool(_require(privacy_raw, "local_only", "privacy")),
+    )
+
+    candidates = tuple(
+        Candidate(
+            provider=_require(c, "provider", "candidate"),
+            model=_require(c, "model", "candidate"),
+            priority=int(_require(c, "priority", "candidate")),
+            enabled=bool(_require(c, "enabled", "candidate")),
+            api_base=c.get("api_base"),
+            api_key_secret_name=c.get("api_key_secret_name"),
+        )
+        for c in candidates_raw
+    )
+
+    fallback = Fallback(
+        mode=_require_enum(_require(fallback_raw, "mode", "fallback"), FALLBACK_MODES, "fallback.mode"),
+        allow_quality_degrade=bool(_require(fallback_raw, "allow_quality_degrade", "fallback")),
+    )
+
+    limits = Limits(
+        max_input_tokens_per_call=int(_require(limits_raw, "max_input_tokens_per_call", "limits")),
+        max_output_tokens_per_call=int(_require(limits_raw, "max_output_tokens_per_call", "limits")),
+        max_cost_usd_per_call=float(_require(limits_raw, "max_cost_usd_per_call", "limits")),
+    )
+
+    return ModelProfile(
+        purpose=_require_enum(_require(raw, "purpose", "model profile"), PURPOSES, "purpose"),
+        privacy=privacy,
+        candidates=candidates,
+        fallback=fallback,
+        limits=limits,
+    )
+
+
+def load_model_profile(path: Path) -> ModelProfile:
+    raw = yaml.safe_load(path.read_text())
+    if not isinstance(raw, dict):
+        raise ModelProfileValidationError(f"{path}: model profile must be a YAML mapping")
+    return parse_model_profile(raw)

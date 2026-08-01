@@ -4,7 +4,7 @@
 
 1. Explicit user instruction.
 2. This `AGENTS.md`.
-3. `docs\AGENTIC_WORKFLOW_FABRIC_SPEC.md` (AWF-Lite) — active implementation target.
+3. `docs\AGENTIC_WORKFLOW_FABRIC_SPEC.md` (AWF) — active implementation target.
 4. Architecture and implementation docs under `docs/`.
 5. Source code and tests in this repo.
 
@@ -46,7 +46,7 @@ The system must support these targets without assuming any one acceleration path
     - `.\backend\.venv\Scripts\python.exe` # Windows  
 - Keep platform-specific behavior behind adapters or capability checks.
 - Prefer Python standard library for foundation code unless a dependency materially reduces complexity.
-- Follow the AWF-Lite reference implementation choices (`docs\AGENTIC_WORKFLOW_FABRIC_SPEC.md`) unless an ADR supersedes them; consult full AWF (`docs\AGENTIC_WORKFLOW_FABRIC_SPEC.md`) only where AWF-Lite is silent.
+- Follow the AWF reference implementation choices (`docs\AGENTIC_WORKFLOW_FABRIC_SPEC.md`) unless an ADR supersedes them.
 - Use simple, community-standard shapes:
   - agents: directory with `main.py`, `manifest.yaml`, health endpoint or health command, structured logs.
   - MCP servers: JSON-RPC/MCP-compliant tools/resources/prompts, JSON Schema inputs, explicit errors, timeouts, audit logs.

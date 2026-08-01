@@ -101,8 +101,9 @@ DDL_STATEMENTS = [
         name TEXT NOT NULL,
         version TEXT NOT NULL,
         digest TEXT NOT NULL,
+        source TEXT NOT NULL CHECK (source IN ('config', 'data')),
         path TEXT NOT NULL,
-        trust_status TEXT NOT NULL CHECK (trust_status IN (
+        trust_status TEXT CHECK (trust_status IS NULL OR trust_status IN (
             'local', 'trusted', 'quarantined', 'blocked'
         )),
         indexed_at TEXT NOT NULL,

@@ -8,6 +8,7 @@
 /.env.*
 # tracked example
 !/.env.example
+.claude/*
 
 # ------------------------------------------------------------
 # Python

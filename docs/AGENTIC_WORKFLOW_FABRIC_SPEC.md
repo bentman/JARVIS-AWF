@@ -55,7 +55,7 @@ Substituting an alternative for any resolution below requires a new ADR.
 
 | Decision area | Resolution |
 |---|---|
-| Durable state | SQLite only — no additional database, orchestrator, or background service. All durable state lives under `data/`, structured so the whole directory can be copied to another machine or shared later without a migration step. |
+| Durable state | SQLite only — no additional database, orchestrator, or background service. Execution state (the database, artifacts) lives under `data/`, gitignored and copyable to another machine as a unit (Section 7). Registry definitions live under `config/app_registry/` (repository defaults) and `data/registry/` (operator additions), resolved per 9.3. |
 | Sandbox/isolation | No mandatory container backend. Each named CLI adapter's own sandbox/permission system is the primary isolation boundary (Section 10). AWF additionally provides a Git worktree per mutating Run and a disposable, non-durable scratch directory at `cache/sandbox/<run_id>/` (gitignored, never backed up, safe to delete anytime). Containers are an optional, documented escalation path for explicitly untrusted content only. |
 | Attendance model | Mostly attended (operator-initiated). Multi-agent handoff loops (producer↔reviewer, agent-to-agent cycles) are a first-class pattern (Section 13). Unattended operation is a near-term direction the architecture MUST NOT preclude; it is not built in this pass (Section 15). |
 | Secrets | Encrypted `secrets` table inside `data/awf_db/awf.db`. Values are opaque ciphertext, never human-readable, overwrite-only (no partial edit — a write replaces the whole value). The symmetric key lives at `./.env` as `AWF_SECRET_KEY`, gitignored, machine-local, and **not** part of the relocatable `data/` bundle — moving `data/` to another machine requires re-supplying the key there. |
@@ -110,7 +110,7 @@ Each phase MUST be functionally complete — with its own passing tests — befo
 | Phase | Scope | Exit condition | Depends on |
 |---|---|---|---|
 | 0 — Bootstrap | Repo layout (Section 7); `data/awf_db/awf.db` schema created (Section 8); `.env` template with `AWF_SECRET_KEY` generated; `cache/sandbox/` created and gitignored | Fresh checkout + one setup command produces a valid empty `data/awf_db/awf.db` and a populated `.env` | none |
-| 1 — Registry + Capability Guard | Registry file layout under `data/registry/`; Capability Record schema (Section 9.1); Capability Guard authorization function (Section 9.2) | A hand-written Capability Record loads, validates, and a sample allow/deny check returns the correct decision, with a test for each risk class R0–R3 | Phase 0 |
+| 1 — Registry + Capability Guard | Registry file layout across `config/app_registry/` and `data/registry/` (9.3); Capability Record schema (Section 9.1); Capability Guard authorization function (Section 9.2) | A hand-written Capability Record loads, validates, and a sample allow/deny check returns the correct decision, with a test for each risk class R0–R3 | Phase 0 |
 | 2 — Secrets | `secrets` table; Fernet encrypt/decrypt round trip; the in-process secrets-access function; `awf secret set` / `list` / `rotate-key` (Section 16.1) | Set → restart process → the secrets-access function returns the same plaintext; `awf secret list` shows names only; rotate-key re-encrypts every row and the old key no longer decrypts | Phase 0 |
 | 3 — Model Gateway | LiteLLM library integration; Model Profile contract (Section 11); at least one working profile | A trivial completion call succeeds end-to-end through a registered Model Profile, sourcing its API key from Phase 2's secrets store | Phases 1, 2 |
 | 4 — Durable execution core | `runs`/`steps`/`events`/`artifacts` tables; Run/Step state machine (Section 13); startup recovery scan | A synthetic no-op two-step workflow survives a mid-run process kill and resumes from the last completed step with no duplicate side effects | Phase 0 |
@@ -140,17 +140,24 @@ JARVIS/
     AGENTIC_WORKFLOW_FABRIC_SPEC.md             (this document)
     adr/                                        (short deviation records, created on first use)
   config/                                        <- repo-owned, git-tracked
+    app_registry/                                (repository-default registry objects — Section 9.3)
+      agents/<name>/<version>.yaml
+      capabilities/<name>/<version>.yaml
+      MCP/<name>/<version>.yaml
+      skills/<name>/<version>/SKILL.md           (+ optional scripts/, references/, assets/)
+      voice-profiles/<name>/<version>.yaml
+      workflows/<name>/<version>.yaml
     voice/{stt,tts,vad,wake}/                    (hardware-profile manifests: one YAML per profile pinning artifact URL + sha256 — Section 16.4)
-  data/                                          <- durable, relocatable; back this up
+  data/                                          <- gitignored except .gitkeep; operator-personal, portable; back this up
     artifacts/                                   (content-addressed: artifacts/<sha256[0:2]>/<sha256>)
     awf_db/
       awf.db                                     (SQLite: all durable state, Section 8)
-    registry/                                    (git-trackable source of truth, Section 9.3)
+    registry/                                    (operator-curated registry additions — Section 9.3)
       agents/<name>/<version>.yaml
       capabilities/<name>/<version>.yaml
       MCP/<name>/<version>.yaml
       model-profiles/<name>/<version>.yaml
-      skills/<name>/<version>/SKILL.md           (+ optional scripts/, references/, assets/)
+      skills/<name>/<version>/SKILL.md
       voice-profiles/<name>/<version>.yaml
       workflows/<name>/<version>.yaml
   cache/
@@ -160,7 +167,7 @@ JARVIS/
     src/awf/
       db/                                         (SQLite schema + connection — Section 8; Phase 0)
       events/                                     (append-only event writer — Section 14; Phase 0, used by every module)
-      registry/                                   (load/validate/publish/index — Section 9.3; Phase 1)
+      registry/                                   (load/validate/publish/index across both registry roots — Section 9.3; Phase 1)
       guard/                                      (Capability Guard — Section 9.2; Phase 1)
       secrets/                                    (Fernet store + secrets-access function — Section 9.4; Phase 2)
       gateway/                                    (LiteLLM Model Gateway — Section 11; Phase 3)
@@ -183,11 +190,12 @@ JARVIS/
 ```
 
 Rules:
-- `data/` MUST be relocatable: nothing under it may hardcode an absolute path from the machine it was created on.
-- `cache/` MUST NOT be treated as durable by any code path. Nothing under `cache/` may be a required input to resuming a Run — the startup recovery scan MUST be able to fully reconstruct pending work from `data/awf_db/awf.db` alone.
-- `.env` MUST be in `.gitignore` and MUST NOT be copied when `data/` is relocated or shared; the receiving machine generates or is given its own.
-- Modules under `backend/src/awf/` are created in the phase noted beside them: Phase 0 creates only `db/` and `events/`; later modules appear when their phase begins, never as empty stubs.
-- `models/` MUST be gitignored and re-fetchable: it holds operator-downloaded models (some under non-commercial licenses) and MUST NOT be required for resuming a Run, included in the relocatable `data/` bundle, or redistributed with AWF. The manifests that pin its contents live in repo-owned, git-tracked `config/voice/`.
+- **`config/`:** git-tracked in full. `config/app_registry/` holds repository-default registry objects (9.3); `config/voice/` holds hardware-profile manifests (16.4).
+- **`data/`:** gitignored in full except a `.gitkeep` placeholder per empty subdirectory, so a fresh checkout carries the directory skeleton with no content. Every path under it stays relative to `data/` itself, so the whole tree can be copied to another machine or backed up as a unit.
+- **`cache/`:** ephemeral scratch only. Run resumption reads `data/awf_db/awf.db` alone (13.2).
+- **`.env`:** gitignored, machine-local; relocating or sharing `data/` does not carry it.
+- **`backend/src/awf/`:** modules appear in the phase noted beside them; Phase 0 creates only `db/` and `events/`.
+- **`models/`:** gitignored, populated from `config/voice/` manifests (16.4) at setup. Distribution ships `config/`, `backend/`, and `frontend/` only.
 
 ---
 
@@ -203,7 +211,7 @@ All tables live in one file, `data/awf_db/awf.db`. Column shapes are a contract,
 | `artifacts` | `artifact_id` (TEXT, PK) · `run_id` · `step_id` · `sha256` · `relative_path` (under `data/artifacts/`) · `media_type` · `artifact_type` (enum: candidate, plan, patch, report, test-result, finding, verdict) · `complete` (BOOLEAN) · `created_at` | An artifact row MUST NOT be marked `complete=true` until the bytes at `relative_path` are fully written and hashed. |
 | `approvals` | `approval_id` (TEXT, PK) · `run_id` · `step_id` · `action_digest` (sha256 of the exact proposed action) · `status` (enum: pending, approved, rejected, expired) · `reason` (nullable) · `requested_at` · `decided_at` (nullable) | A changed `action_digest` invalidates any prior decision — re-request required. |
 | `secrets` | `name` (TEXT, PK) · `ciphertext` (BLOB) · `created_at` · `updated_at` | Overwrite-only. Never queried by anything other than the secrets-access function. |
-| `registry_index` | `kind` · `name` · `version` · `digest` (sha256) · `path` (relative, under `data/registry/`) · `trust_status` (enum: local, trusted, quarantined, blocked) · `indexed_at` | A derived, rebuildable cache over `data/registry/`. Git + the files themselves remain the source of truth; this table exists purely for fast lookup. |
+| `registry_index` | `kind` · `name` · `version` · `digest` (sha256) · `source` (enum: config, data) · `path` (relative to its source root) · `trust_status` (enum: local, trusted, quarantined, blocked; null when `source=config`) · `indexed_at` | A derived, rebuildable cache spanning `config/app_registry/` and `data/registry/` (9.3). The files on disk remain the source of truth; this table exists purely for fast lookup. |
 
 ---
 
@@ -211,7 +219,7 @@ All tables live in one file, `data/awf_db/awf.db`. Column shapes are a contract,
 
 ### 9.1 Capability Record
 
-Every callable capability — an MCP tool, a local Python activity, or a named CLI adapter action — MUST have a Capability Record file under `data/registry/capabilities/<name>/<version>.yaml` with this shape:
+Every callable capability — an MCP tool, a local Python activity, or a named CLI adapter action — MUST have a Capability Record file at `config/app_registry/capabilities/<name>/<version>.yaml` or `data/registry/capabilities/<name>/<version>.yaml` (resolution order: 9.3), with this shape:
 
 ```yaml
 identity: {type: mcp-tool|activity|cli-adapter-action, provider: <id>, name: <name>, version: <semver>}
@@ -226,20 +234,24 @@ Risk classes: R0 = safe/read-only autoallow, R1 = reversible/idempotent bounded 
 ### 9.2 Capability Guard
 
 The Capability Guard is a single, deterministic, versioned Python module (not a service, not a sidecar) that:
-- loads the Capability Record for any requested action;
+- loads the Capability Record for any requested action (resolution order: 9.3);
 - checks it against the invoking Agent Manifest's declared capability allowlist (the manifest's `capabilities` field is a maximum, never a grant beyond what's listed);
 - returns an allow/deny/approval-required decision;
 - writes the decision to the `events` table before the action executes.
 
 Authorization is code outside the model, never a model's self-assessment. The Guard MUST be pure with respect to its inputs (Capability Record + Agent Manifest + declared risk class in, decision out) so it is unit-testable.
 
-### 9.3 Registry as source of truth
+### 9.3 Registry resolution
 
-`data/registry/` (Workflows, Agents, Capabilities, MCP server definitions, Model Profiles, Voice Profiles, Skills) is git-trackable and content-addressed: each file's SHA-256 is its digest, computed at publish time. `registry_index` in SQLite is a derived cache, rebuildable at any time by rescanning `data/registry/` — it MUST NOT be treated as authoritative if it and the files on disk disagree; the files win.
+A registry object of a given `kind` and `name` resolves through one of two roots: `config/app_registry/<kind>/<name>/<version>.yaml` and `data/registry/<kind>/<name>/<version>.yaml`. `config/app_registry/` is git-tracked and holds the repository's default Agents, Capabilities, MCP server definitions, Skills, Voice Profiles, and Workflows. `data/registry/` is gitignored (Section 7) and holds every object the operator adds afterward, across those same six kinds plus a seventh, `model-profiles`, which has no `config/app_registry/` counterpart — a Model Profile names a specific provider account and budget, so it is always operator-specific.
 
-Each `data/registry/MCP/<name>/<version>.yaml` file is an MCP server definition: it declares how AWF starts or connects to that MCP server (transport, command/args or URL, required environment references), which tools/resources/prompts it exposes (by name, for cross-referencing with Capability Records in `capabilities/`), and its trust status. The `provider` field on a Capability Record MUST reference a registered MCP server name when the capability type is `mcp-tool`.
+Lookup checks `data/registry/<kind>/<name>/` first. If any version exists there, resolution uses that tree exclusively for that `kind`+`name` — `config/app_registry/` is not read, merged, or blended in for the same name. Only when `data/registry/<kind>/<name>/` has no entry does resolution fall back to `config/app_registry/<kind>/<name>/`. Version selection (`name@version`) proceeds normally within whichever tree resolution lands on.
 
-Trust tiers: `local` (authored here), `trusted` (reviewed and approved), `quarantined` (installed but not usable in normal workflows), `blocked`. Anything pulled from a community source (a shared Skill, an external MCP server definition) enters as `quarantined` by default and requires an explicit promotion action to `trusted`, which is itself an R2 action.
+Both roots are content-addressed: each file's SHA-256 is its digest, computed at publish time. `registry_index` in SQLite (Section 8) is a derived cache spanning both roots, disambiguated by its `source` column; it is rebuilt by rescanning both trees and defers to the files on disk whenever they disagree.
+
+Each `MCP/<name>/<version>.yaml` file is an MCP server definition: it declares how AWF starts or connects to that server (transport, command/args or URL, required environment references), the tools/resources/prompts it exposes (by name, for cross-referencing with Capability Records), and — in `data/registry/` — its trust status. The `provider` field on a Capability Record MUST reference an MCP server name resolvable through the lookup above when the capability type is `mcp-tool`.
+
+Trust tiers apply within `data/registry/`: `local` (operator-authored), `trusted` (reviewed and approved), `quarantined` (installed but not usable in normal workflows), `blocked`. An object pulled from a community source (a shared Skill, an external MCP server definition) enters as `quarantined` and requires an explicit promotion action to `trusted`, itself an R2 action (12.2). Objects in `config/app_registry/` carry no trust field; inclusion in the repository is the review.
 
 ### 9.4 Secrets
 
@@ -270,7 +282,7 @@ Vendor CLI flags and config keys change on each vendor's release cadence, so thi
 | Adapter | Required default configuration state | Escalation for high-risk steps | Primary docs |
 |---|---|---|---|
 | **Claude Code** | Non-interactive invocation; permission mode equivalent to `acceptEdits` with a repo-scoped, version-controlled allow/deny rule set; `bypassPermissions` / `--dangerously-skip-permissions` MUST NOT be used outside an explicit container/VM escalation | Enable Claude Code's OS-level sandbox (filesystem + network isolation for Bash) | https://code.claude.com/docs/en/permissions , https://www.anthropic.com/engineering/claude-code-sandboxing |
-| **OpenAI Codex CLI** | Non-interactive invocation; `sandbox_mode` equivalent to `workspace-write`; `approval_policy` equivalent to `on-request`; a named profile checked into `data/registry/` (not the operator's home directory) so it's versioned with everything else | `sandbox_mode: read-only` for reviewer/adversary roles; `danger-full-access` only inside an explicit container escalation and only for an R2-approved action | https://developers.openai.com/codex/concepts/sandboxing , https://developers.openai.com/codex/config-reference |
+| **OpenAI Codex CLI** | Non-interactive invocation; `sandbox_mode` equivalent to `workspace-write`; `approval_policy` equivalent to `on-request`; a named profile committed to the repository (not the operator's home directory) so it travels with `config/` | `sandbox_mode: read-only` for reviewer/adversary roles; `danger-full-access` only inside an explicit container escalation and only for an R2-approved action | https://developers.openai.com/codex/concepts/sandboxing , https://developers.openai.com/codex/config-reference |
 | **Google Antigravity CLI (`agy`)** | Non-interactive/headless invocation with an explicit approval policy set (never rely on an implicit default in headless mode); permission preset equivalent to `proceed-in-sandbox`; native OS-level terminal sandbox (`enableTerminalSandbox`) enabled | Permission preset equivalent to `strict` for reviewer/adversary roles | https://antigravity.google/docs/cli/features , https://github.com/google-antigravity/antigravity-cli |
 | **GitHub Copilot CLI** | Non-interactive invocation; explicit `--allow-tool`/`--available-tools` entries only — `--allow-all`/`--yolo` MUST NOT be used by AWF's default profile; a `preToolUse` hook wired to call the Capability Guard, because this adapter's permission model is application-level and advisory, **not** OS-enforced (recheck current docs before relying on it) | Enable the tool's local sandbox (`/sandbox enable`) or cloud sandbox for anything above R0/R1, since there is no default kernel-level isolation | https://docs.github.com/en/copilot/how-tos/copilot-cli/ |
 | **Cline CLI** | Non-interactive invocation with structured (NDJSON) output; per-category auto-approve limited to read operations and an explicit safe-command allowlist; `--yolo` MUST NOT be used by AWF's default profile; repository instructions supplied via `AGENTS.md` (and mirrored to `.clinerules/` if the installed version does not yet read `AGENTS.md` directly) | Manual review required before any auto-approved terminal command outside the safe-command allowlist runs, regardless of adapter setting | https://docs.cline.bot/ , https://github.com/cline/cline |
@@ -312,7 +324,7 @@ fallback: {mode: none|ordered, allow_quality_degrade: false}
 limits: {max_input_tokens_per_call: <int>, max_output_tokens_per_call: <int>, max_cost_usd_per_call: <decimal>}
 ```
 
-Candidates reference LiteLLM's own `provider/model` naming so a profile can point at any LiteLLM-supported provider, including local OpenAI-compatible endpoints (Ollama, llama.cpp server, LM Studio) for the operator's GPU/NPU-equipped machines. API keys referenced by a candidate MUST be resolved through the `secrets` table by name, never embedded in the profile file itself, since profile files are git-tracked.
+Candidates reference LiteLLM's own `provider/model` naming so a profile can point at any LiteLLM-supported provider, including local OpenAI-compatible endpoints (Ollama, llama.cpp server, LM Studio) for the operator's GPU/NPU-equipped machines. API keys referenced by a candidate MUST be resolved through the `secrets` table by name — never embedded in the profile file itself, since Model Profiles live in `data/registry/model-profiles/` (9.3) with no config-side counterpart, and a secret in a readable file defeats the point of the secrets table regardless of tracking status.
 
 **Escalation**: for one shared gateway across machines or clients, the self-hosted **LiteLLM Proxy** (Docker) MAY be introduced as a single additional local service, addressed like any other provider endpoint; the Model Profile contract is unchanged.
 
@@ -342,7 +354,7 @@ Eight node types, exactly:
 | `handoff` | Transfer control between two Agent invocations, allowing cycles | Section 13.4 |
 
 **High-risk trigger list** (MUST be classified R2 or higher, MUST require the escalated Gate tier (12.3), regardless of what any individual capability's own default risk class says):
-- any write to `data/awf_db/awf.db`, `.env`, or anything under `data/registry/capabilities/` from within a Run (i.e., a Run modifying its own authorization surface);
+- any write to `data/awf_db/awf.db`, `.env`, or any Capability Record under `config/app_registry/` or `data/registry/` from within a Run (a Run modifying its own authorization surface);
 - any edit to `AGENTS.md`, this document, or AWF's own control-plane source under `backend/src/awf/`;
 - any delete/overwrite of a file outside the Run's own Git worktree;
 - any new outbound network destination added to an adapter's or capability's allowlist;
@@ -492,7 +504,7 @@ AWF-CLI is an npm-distributed TypeScript application — npm package **`awf-cli`
 | `/theme`, `/keybindings` | Presentation |
 | `/clear`, `/quit` | Session housekeeping |
 
-**Custom slash commands are registry Skills** — a Skill published at `data/registry/skills/<name>/<version>/SKILL.md` (Agent Skills standard) surfaces as `/<name>`, with its frontmatter `description` and argument hint shown in the autocomplete menu. There is no second custom-command file format: the registry Skill is the single source of truth, already versioned, digest-pinned, and trust-tiered.
+**Custom slash commands are registry Skills** — a Skill published under `config/app_registry/skills/` or `data/registry/skills/` (9.3) (Agent Skills standard) surfaces as `/<name>`, with its frontmatter `description` and argument hint shown in the autocomplete menu. There is no second custom-command file format: the registry Skill is the single source of truth, already versioned and digest-pinned.
 
 **Configuration.** Frontend settings live at `~/.awf/settings.json` (user), `<repo>/.awf/settings.json` (project), `<repo>/.awf/settings.local.json` (gitignored); precedence local > project > user. The schema is exactly: `theme` (`"dark"|"light"|"system"`, default `"system"`), `keybindings` (map, default empty), `verbosity` (`"quiet"|"normal"|"verbose"`, default `"normal"`), `defaultWorkflow` (`name@version`, default unset), plus GUI-only `wakeWordEnabled` (boolean, default `false`) and `inputDevice`/`outputDevice` (audio device ids, default: system default). A key outside this schema MUST fail validation with an error naming the key. Anything that affects execution — capabilities, approvals, model routing, trust — lives in the registry and core, never in frontend settings.
 
@@ -538,7 +550,7 @@ AWF-GUI (`frontend/gui/`) is a desktop application whose defining capability is 
 
 ### 16.5 Personas and Voice Profiles
 
-A **Voice Profile** is a registry object at `data/registry/voice-profiles/<name>/<version>.yaml` — versioned, digest-pinned, and trust-tiered like every other registry kind:
+A **Voice Profile** is a registry object at `config/app_registry/voice-profiles/<name>/<version>.yaml` or `data/registry/voice-profiles/<name>/<version>.yaml` (9.3), versioned and digest-pinned:
 
 ```yaml
 persona:
@@ -557,10 +569,10 @@ limits: {max_seconds_per_utterance: <int>}
 
 Rules:
 - An Agent Manifest MAY declare `voice: <name>@<version>`. When that agent's output is spoken, the GUI resolves the referenced profile; agents without a profile use the `narrator` profile.
-- Bootstrap (Phase 12 setup) MUST publish four Voice Profiles at version `1.0.0`, all Kokoro: `narrator` (voice_id `bf_isabella`), `builder` (`am_michael`), `verifier` (`bf_emma`), `adversary` (`bm_george`). These are the defaults for the Trifecta roles and unassigned agents; the operator edits them like any other registry object.
+- `config/app_registry/voice-profiles/` ships four Voice Profiles at version `1.0.0`, all Kokoro: `narrator` (voice_id `bf_isabella`), `builder` (`am_michael`), `verifier` (`bf_emma`), `adversary` (`bm_george`) — the defaults for the Trifecta roles and unassigned agents. An operator override goes in `data/registry/voice-profiles/` under the same name (9.3).
 - Roles active in the same workflow SHOULD map to audibly distinct `voice_id`s (e.g., Builder/Verifier/Adversary as three different Kokoro voices) so the operator can attribute speech without looking at the screen.
 - `persona.style_prompt` styles **delivery only** — the phrasing and tone of spoken/rendered feedback. It MUST NOT be injected into the agent's working prompt, MUST NOT alter the Trifecta role constraints, and MUST NOT change the substance of any Finding or Verdict: findings are verbalized faithfully, styled only in delivery. Persona is a presentation attribute, never an authorization or behavior attribute.
-- `cloud:<provider>` candidates MUST be skipped when `privacy.local_only: true`; their API keys resolve by name through the secrets table, never appearing in the profile file, which is git-tracked.
+- `cloud:<provider>` candidates MUST be skipped when `privacy.local_only: true`; their API keys resolve by name through the secrets table, never appearing in the profile file itself.
 - **License isolation:** the core links only permissively-licensed speech code. Concretely for the selected stack: Kokoro G2P runs through `misaki`'s permissive path, and the GPL `espeak-ng` fallback MUST NOT be imported or compiled into the core. Non-commercial model weights (including openWakeWord's prebuilt models) MUST NOT be redistributed with AWF — they exist only in the operator-downloaded `models/` tree.
 
 ---
@@ -577,7 +589,7 @@ The five named CLI adapters remain governed by their own upstream terms — veri
 
 1. No workflow logic may bypass the Capability Guard (Section 9.2).
 2. No agent invocation may write its own acceptance verdict (Section 12.3).
-3. No secret may appear in plaintext in `data/registry/`, the `events` table, or any artifact.
+3. No secret may appear in plaintext in `config/app_registry/`, `data/registry/`, the `events` table, or any artifact.
 4. No handoff loop may omit `maxHops` (Section 13.4).
 5. No mutating step may run outside its Run's dedicated Git worktree.
 6. No registry object may be republished under an existing `name@version` with different bytes — a content change requires a new version.
@@ -599,6 +611,7 @@ The five named CLI adapters remain governed by their own upstream terms — veri
 | MCP 2026-07-28 (current spec) | https://modelcontextprotocol.io/specification/2026-07-28 , https://blog.modelcontextprotocol.io/posts/2026-07-28/ |
 | Agent Skills open standard | https://agentskills.io/specification |
 | AGENTS.md convention | https://agents.md/ |
+| XDG Base Directory Specification (basis for the config/data split in Section 7) | https://specifications.freedesktop.org/basedir/latest/ |
 | A2A 1.0 | https://github.com/a2aproject/A2A/blob/main/docs/specification.md |
 | Lightweight durable-execution pattern (reference, not a dependency) | https://docs.dbos.dev/ |
 | Anthropic — building effective agents / effective harnesses (basis for Trifecta: independent reviewer in fresh context, producer/reviewer separation, artifacts-over-memory) | https://www.anthropic.com/engineering/building-effective-agents , https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents |

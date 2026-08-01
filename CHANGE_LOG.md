@@ -20,6 +20,23 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-01 16:39
+  - Host class(es): Linux/WSL AMD64
+  - Summary: Completed Phase 5 (Isolation + first reference adapter) of the AWF build sequence — Git worktree manager, `cache/sandbox/<run_id>/` lifecycle, the generic Agent Runtime Adapter contract, and the Claude Code reference adapter.
+  - Scope:
+    - `backend/src/awf/isolation/{__init__.py,worktree.py,scratch.py}` (new)
+    - `backend/src/awf/adapters/{__init__.py,base.py,claude_code.py}` (new)
+    - `backend/src/awf/engine/agent_step.py` (new — `run_agent_step`: commits the worktree only after the Step's `SUCCEEDED` status is persisted)
+    - `backend/tests/test_phase5_{isolation,claude_code_adapter,agent_step}.py` (new, 12 tests)
+  - Validation:
+    - `pytest backend/tests/` → 55 passed (43 prior + 12 new)
+    - Against the real repo: created a dedicated worktree at `cache/worktrees/phase5-live-demo` on branch `awf/run/phase5-live-demo`, drove the real `claude` CLI (non-interactive, `--permission-mode acceptEdits`, no bypass flag) through `run_agent_step` to create `PHASE5_DEMO.md`, confirmed via a monkeypatch-free live run that the Step reached `SUCCEEDED` before the commit was made (`output.commit_sha` returned, `git log` in the worktree showed the commit), then removed the worktree and branch - `git worktree list`/`git branch --list "awf/*"` confirm no residue in the main repo
+    - Unit tests verify the adapter never emits `--dangerously-skip-permissions`/`bypassPermissions`, maps `is_error`→`FAILED`/`COMPLETED` correctly, and that `run_agent_step` raises without committing when the adapter's status isn't `COMPLETED` (a spy on `commit_all_changes` confirms it's never called)
+  - Notes:
+    - Only Claude Code is implemented per Phase 5's scope ("one fully working named adapter"); Codex CLI, Antigravity CLI, Copilot CLI, and Cline CLI are Phase 6
+    - No Workflow Definition contract or Gate node exists yet (Phase 7/8) - `run_agent_step` is invoked directly by the caller with an explicit `AgentInvocation`, not resolved from a workflow YAML's `agent` node
+    - The optional Podman container escalation tier (Section 10.4) is out of scope; only the default isolation tier (worktree + scratch dir + adapter's own permission system) is built
+
 - Timestamp: 2026-08-01 16:31
   - Host class(es): Linux/WSL AMD64
   - Summary: Completed Phase 4 (Durable execution core) of the AWF build sequence — Run/Step execution with the Section 13.2 durability rule, and the startup recovery scan.

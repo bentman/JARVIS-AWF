@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:cline.ghost.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:agentpedia.codes)",
+      "WebFetch(domain:google-gemini.github.io)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(npm view *)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:huggingface.co)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); items=[\\(k,v\\) for k,v in d.items\\(\\) if k not in \\('created','modified'\\)]; print\\('\\\\n'.join\\(f'{k} {v}' for k,v in items[-12:]\\)\\)\")",
+      "Bash(curl -s https://api.github.com/repos/google-antigravity/antigravity-cli)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('language'\\), d.get\\('description'\\), d.get\\('created_at'\\), d.get\\('stargazers_count'\\)\\)\")",
+      "Bash(curl -s \"https://api.github.com/repos/vercel/ink/releases?per_page=5\")",
+      "Bash(python3 -c \"import json,sys; [print\\(r['tag_name'], r['published_at'], '|', \\(r['body'] or ''\\)[:200].replace\\(chr\\(10\\),' '\\)\\) for r in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s https://raw.githubusercontent.com/sst/opentui/main/README.md)",
+      "WebFetch(domain:geminicli.com)",
+      "Bash(curl -s https://raw.githubusercontent.com/openai/codex/main/docs/config.md)",
+      "Bash(curl -s https://raw.githubusercontent.com/openai/codex/main/docs/getting-started.md)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d.items\\(\\)\\)[-2:]\\)\")",
+      "WebFetch(domain:antigravity.google)",
+      "WebFetch(domain:developers.googleblog.com)",
+      "WebFetch(domain:developers.openai.com)",
+      "WebFetch(domain:learn.chatgpt.com)",
+      "WebFetch(domain:agents.md)",
+      "WebFetch(domain:www.anthropic.com)",
+      "WebFetch(domain:docs.github.com)",
+      "WebFetch(domain:cursor.com)",
+      "WebFetch(domain:kiro.dev)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(awk -F: '{print $1}')",
+      "Bash(awk '{ *)"
+    ]
+  }
+}

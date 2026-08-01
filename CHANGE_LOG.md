@@ -20,6 +20,21 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-01 16:31
+  - Host class(es): Linux/WSL AMD64
+  - Summary: Completed Phase 4 (Durable execution core) of the AWF build sequence — Run/Step execution with the Section 13.2 durability rule, and the startup recovery scan.
+  - Scope:
+    - `backend/src/awf/engine/{__init__.py,run.py,executor.py,recovery.py}` (new)
+    - `backend/tests/fixtures/engine/crash_runner.py` (new — standalone subprocess script)
+    - `backend/tests/test_phase4_durable_execution.py` (new, 4 tests)
+  - Validation:
+    - `pytest backend/tests/` → 43 passed (39 prior + 4 new)
+    - Genuine mid-Run crash test: a real subprocess creates a Run + two Steps, Step 1 succeeds and persists (bumping a counter file), then Step 2 calls `os._exit(137)` - a real, uncatchable process kill, not a simulated exception. A second, separate subprocess then calls `scan_incomplete_runs`, finds the Run, and calls `run_workflow` again with the same ordered Step list: Step 1 is skipped (`run_step` sees `SUCCEEDED` and never re-invokes its function - counter file stays at `1`), Step 2 re-runs and completes, and the Run reaches `SUCCEEDED`
+  - Notes:
+    - No Workflow Definition contract exists yet (Section 12, Phase 7) - the ordered Step list is supplied directly by the caller for this phase's synthetic two-step case, matching Phase 4's stated dependency (Phase 0 only, not Phase 7)
+    - `scan_incomplete_runs` only lists Run IDs; actually resuming still requires the caller to supply the same deterministic Step list, per the durability rule's premise that node-selection logic is deterministic given inputs and completed Steps - a real resume-and-replay-from-definition path is Phase 7+ work
+    - Retry/backoff for `TRANSIENT`/`TIMEOUT` failure classes (Section 13.3) is not implemented - `run_step` currently has no failure-class handling at all, since the exit condition only requires surviving a hard kill, not a soft retryable failure
+
 - Timestamp: 2026-08-01 16:08
   - Host class(es): Linux/WSL AMD64
   - Summary: Completed Phase 3 (Model Gateway) of the AWF build sequence — LiteLLM in-process integration, the Model Profile contract, and one working profile validated end-to-end against a local Ollama endpoint.

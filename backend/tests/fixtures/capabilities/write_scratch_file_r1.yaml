@@ -1,0 +1,5 @@
+identity: {type: activity, provider: local, name: write_scratch_file, version: 1.0.0}
+schema: {input: schemas/write_scratch_file.input.json, output: schemas/write_scratch_file.output.json}
+effects: {operation: create, reversible: true, idempotent: true, external_side_effect: false}
+risk_class: R1
+approval: never

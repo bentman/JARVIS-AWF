@@ -32,7 +32,8 @@
       "WebFetch(domain:kiro.dev)",
       "Bash(echo \"exit: $?\")",
       "Bash(awk -F: '{print $1}')",
-      "Bash(awk '{ *)"
+      "Bash(awk '{ *)",
+      "Bash(python3.12 --version)"
     ]
   }
 }

@@ -1,0 +1,5 @@
+identity: {type: activity, provider: local, name: read_file, version: 1.0.0}
+schema: {input: schemas/read_file.input.json, output: schemas/read_file.output.json}
+effects: {operation: read, reversible: true, idempotent: true, external_side_effect: false}
+risk_class: R0
+approval: never

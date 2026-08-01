@@ -1,0 +1,5 @@
+identity: {type: cli-adapter-action, provider: claude-code, name: git_push, version: 1.0.0}
+schema: {input: schemas/git_push.input.json, output: schemas/git_push.output.json}
+effects: {operation: communicate, reversible: false, idempotent: false, external_side_effect: true}
+risk_class: R2
+approval: per-invocation

@@ -112,6 +112,7 @@ Thumbs.db
 !/data/registry/MCP/
 !/data/registry/model-profiles/
 !/data/registry/skills/
+!/data/registry/voice-profiles/
 !/data/registry/workflows/
 
 # data/agents (agent ledger; I.2)
@@ -141,6 +142,10 @@ Thumbs.db
 # data/registry/skills
 /data/registry/skills/*
 !/data/registry/skills/.gitkeep
+
+# data/registry/voice-profiles
+/data/registry/voice-profiles/*
+!/data/registry/voice-profiles/.gitkeep
 
 # data/registry/workflows
 /data/registry/workflows/*

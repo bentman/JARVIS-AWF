@@ -20,6 +20,22 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-01 07:19
+  - Host class(es): Linux/WSL AMD64
+  - Summary: Completed Phase 2 (Secrets) of the AWF build sequence — Fernet-backed `secrets` table access, key rotation, and the `awf secret set/list/rotate-key` entrypoints.
+  - Scope:
+    - `backend/src/awf/envfile.py`
+    - `backend/src/awf/secrets/{__init__.py,store.py,cli.py}`
+    - `backend/tests/test_phase2_secrets.py`
+    - `backend/pyproject.toml` (added `cryptography`; registered `awf-secret` console script)
+  - Validation:
+    - `pytest backend/tests/` → 25 passed (17 prior + 8 new)
+    - Against the real repo, across five genuinely separate process invocations of `backend/.venv/bin/awf-secret`/`python -c`: set `demo-key` → list showed only the name → fresh-process read via the secrets-access function returned the original plaintext → `rotate-key` changed `AWF_SECRET_KEY` in `.env` → post-rotation the new key decrypted `demo-key` correctly and the old key raised `cryptography.fernet.InvalidToken`
+  - Notes:
+    - `awf secret set` prompts via `getpass` rather than taking the value as an argv token, so it never appears in shell history or `ps`
+    - No `awf secret get` — Section 16.1 lists only `set`/`list`/`rotate-key`; reads happen through the in-process secrets-access function (`awf.secrets.store.get_secret`), never over a CLI surface
+    - `secrets/cli.py` is a standalone console script for this phase, not a stub under `backend/src/awf/cli/` (that module is Section-7-tagged for Phase 10); its `run(argv, repo_root)` is what Phase 10 will wire directly into the unified `awf` command's subparser tree, so this is not throwaway code
+
 - Timestamp: 2026-08-01 07:13
   - Host class(es): Linux/WSL AMD64
   - Summary: Completed Phase 1 (Registry + Capability Guard) of the AWF build sequence — Capability Record load/validate and the Capability Guard authorization function.

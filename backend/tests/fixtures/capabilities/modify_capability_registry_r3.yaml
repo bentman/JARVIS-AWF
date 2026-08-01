@@ -1,0 +1,5 @@
+identity: {type: activity, provider: local, name: modify_capability_registry, version: 1.0.0}
+schema: {input: schemas/modify_capability_registry.input.json, output: schemas/modify_capability_registry.output.json}
+effects: {operation: update, reversible: false, idempotent: false, external_side_effect: true}
+risk_class: R3
+approval: per-invocation

@@ -20,6 +20,24 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-02 12:47
+  - Host class(es): Linux/WSL AMD64
+  - Summary: Completed Phase 6 (Remaining named adapters) of the AWF build sequence for 3 of the 4 listed adapters — Codex CLI, Antigravity CLI, and GitHub Copilot CLI, all live-validated. Cline CLI is not implemented - blocked by a real CLI limitation, not a decision to skip it.
+  - Scope:
+    - `backend/src/awf/adapters/{codex_cli.py,antigravity_cli.py,copilot_cli.py}` (new)
+    - `backend/tests/test_phase6_{codex_adapter,antigravity_adapter,copilot_adapter}.py` (new, 12 tests)
+    - `~/.gemini/antigravity-cli/settings.json` (operator-global, outside the repo) - added `permissions.allow: ["write_file(*)"]`, required for `agy` to write non-interactively at all (see Notes)
+  - Validation:
+    - `pytest backend/tests/` → 67 passed (55 prior + 12 new)
+    - Codex CLI: real end-to-end run via `run_agent_step` in a dedicated worktree - `codex exec` (sandbox_mode `workspace-write`, approval_policy `on-request`) created a file, Step reached `SUCCEEDED` before the commit, worktree/branch removed afterward with no residue
+    - Antigravity CLI: real end-to-end run via `run_agent_step` in a dedicated worktree - `agy --print` (`--mode accept-edits --sandbox`) created a file, Step reached `SUCCEEDED` before the commit, worktree/branch removed afterward with no residue
+    - Copilot CLI: real end-to-end run via `run_agent_step` in a dedicated worktree, once the user completed Copilot login - `copilot -p ... --allow-tool write` (no yolo) created a file, Step reached `SUCCEEDED` before the commit, worktree/branch removed afterward with no residue
+  - Notes:
+    - **GitHub Copilot CLI** was not installed at session start; installed via `npm install -g @github/copilot` (v1.0.77) with the user's approval. Live validation was initially blocked on a Copilot-licensed token (the environment's `gh` v2.4.0 predates `gh auth token`, and no `COPILOT_GITHUB_TOKEN`/`GH_TOKEN` was set); the user completed `copilot`'s own interactive `/login` device-code flow, after which `--allow-tool` worked non-interactively with no yolo. The adapter's event-schema handling (`_final_assistant_message`) and its docstring were updated to match the real JSONL shape (`session.*`/`assistant.*` events, terminated by one `result` event with `exitCode` and `usage.codeChanges.filesModified`) confirmed against this live session.
+    - **Antigravity CLI (`agy`)** has a permission-grant system independent of `--mode`/`--sandbox`/`trustedWorkspaces`: every headless `write_file` call is auto-denied by default (`toolPermission=request-review`), and the top-level JSON still reports `"status":"SUCCESS"` with an empty `response` even when the write was denied - the adapter cannot trust that field alone (documented in the module). Fixed by adding `permissions.allow: ["write_file(*)"]` to the operator's global `~/.gemini/antigravity-cli/settings.json` (the exact literal token `write_file(*)`, confirmed via the CLI binary's own embedded strings; a path-scoped glob like `write_file(<repo>/**)` was tried first and did not match). This is a global, not per-repo, grant - narrower path-scoped matching was not found working and is a follow-up if `agy` sees broader use.
+    - **Cline CLI** was not implemented at all this phase: `man cline` confirms `-y`/`--no-interactive`/`--yolo` are three aliases for the single fully-autonomous mode in the installed version - there is no CLI-level way to run non-interactively without full yolo, which the spec's Section 10.2 table forbids for AWF's default profile. Per the user's decision, Cline is left unbuilt and flagged here as blocked by a real vendor-CLI limitation (Section 10.2's own caution: flags/config surfaces change per vendor release), not skipped by choice.
+    - Phase 6's exit condition ("each adapter passes the same synthetic task the reference adapter passed in Phase 5") is met for Codex, Antigravity, and Copilot
+
 - Timestamp: 2026-08-01 16:39
   - Host class(es): Linux/WSL AMD64
   - Summary: Completed Phase 5 (Isolation + first reference adapter) of the AWF build sequence — Git worktree manager, `cache/sandbox/<run_id>/` lifecycle, the generic Agent Runtime Adapter contract, and the Claude Code reference adapter.

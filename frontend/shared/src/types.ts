@@ -1,0 +1,113 @@
+/** Section 16.3 method surface - exhaustive. Adding a method is a change to
+ * this list; a frontend needing an unlisted method fixes this file, never
+ * reads `data/` directly. */
+export type MethodName =
+  | "awf/run.start"
+  | "awf/run.status"
+  | "awf/run.list"
+  | "awf/run.resume"
+  | "awf/approval.list"
+  | "awf/approval.approve"
+  | "awf/approval.reject"
+  | "awf/artifact.list"
+  | "awf/artifact.read"
+  | "awf/registry.list"
+  | "awf/registry.get"
+  | "awf/registry.validate"
+  | "awf/registry.publish"
+  | "awf/secret.set"
+  | "awf/secret.listNames"
+  | "awf/events.subscribe";
+
+export interface JsonRpcRequest {
+  jsonrpc: "2.0";
+  id: number;
+  method: MethodName;
+  params?: Record<string, unknown>;
+}
+
+export interface JsonRpcError {
+  code: number;
+  message: string;
+}
+
+export interface JsonRpcResponse<T = unknown> {
+  jsonrpc: "2.0";
+  id: number | null;
+  result?: T;
+  error?: JsonRpcError;
+}
+
+export interface RunStep {
+  step_id: string;
+  run_id: string;
+  node_id: string;
+  attempt: number;
+  status: string;
+  output_json: string | null;
+  started_at: string;
+  ended_at: string | null;
+}
+
+export interface RunStatus {
+  run_id: string;
+  workflow_ref: string;
+  status: string;
+  steps: RunStep[];
+  [key: string]: unknown;
+}
+
+export interface RunSummary {
+  run_id: string;
+  workflow_ref: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RunStartResult {
+  run_id: string;
+  status: string;
+  repairs_used?: number;
+  verdict_artifact_id?: string | null;
+  [key: string]: unknown;
+}
+
+export interface Approval {
+  approval_id: string;
+  run_id: string;
+  step_id: string;
+  action_digest: string;
+  status: string;
+  reason: string | null;
+  requested_at: string;
+  decided_at: string | null;
+}
+
+export interface Artifact {
+  artifact_id: string;
+  run_id: string;
+  step_id: string;
+  sha256: string;
+  relative_path: string;
+  media_type: string;
+  artifact_type: string;
+  complete: number;
+  created_at: string;
+}
+
+export interface RegistryEntry {
+  source: "config" | "data";
+  kind: string;
+  name: string;
+  version: string;
+}
+
+export class ProtocolError extends Error {
+  code: number;
+  constructor(code: number, message: string) {
+    super(message);
+    this.code = code;
+    this.name = "ProtocolError";
+  }
+}

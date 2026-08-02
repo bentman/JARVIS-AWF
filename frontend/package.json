@@ -1,0 +1,16 @@
+{
+  "name": "awf-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "shared",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces"
+  }
+}

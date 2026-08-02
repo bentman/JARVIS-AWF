@@ -33,9 +33,12 @@ def create_step(
     attempt: int = 1,
     input_json: str = "{}",
 ) -> None:
+    # Idempotent: resuming a crashed Run re-walks the same node sequence and
+    # will re-request a step_id that already exists (Section 13.2) - that
+    # MUST NOT reset an in-flight or completed Step's recorded state.
     now = utc_now_rfc3339()
     conn.execute(
-        "INSERT INTO steps (step_id, run_id, node_id, attempt, status, input_json, started_at) "
+        "INSERT OR IGNORE INTO steps (step_id, run_id, node_id, attempt, status, input_json, started_at) "
         "VALUES (?, ?, ?, ?, 'PENDING', ?, ?)",
         (step_id, run_id, node_id, attempt, input_json, now),
     )

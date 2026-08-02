@@ -20,6 +20,28 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-02 16:23
+  - Host class(es): Linux/WSL AMD64
+  - Summary: Completed Phase 11 (AWF-CLI TUI) of the AWF build sequence — the `frontend/` npm-workspaces monorepo, `@awf/protocol-client` (the single TS protocol client, Section 16.3), and `awf-cli`, an inline Ink 7 + React 19.2 terminal UI implementing every built-in slash command in Section 16.2. Along the way, found and fixed two real durability bugs in the Python core that only surfaced once multiple real Runs accumulated in the same persistent repo database.
+  - Scope:
+    - `frontend/{package.json,tsconfig.base.json}` (new - npm workspaces root: `shared`, `cli`)
+    - `frontend/shared/` (new - package `@awf/protocol-client`: `client.ts`, `transport.ts` (spawns `awf serve --stdio`), `types.ts`, 7 vitest tests)
+    - `frontend/cli/` (new - package `awf-cli`: `commands.ts` (slash-command dispatch, testable independent of Ink), `settings.ts` (Section 16.2 `~/.awf`/`<repo>/.awf` precedence + schema validation), `App.tsx` (Ink component: `<Static>` scrollback, live input line, fuzzy slash-command suggestions), `cli.tsx` (entry point), 31 vitest/ink-testing-library tests)
+    - `backend/src/awf/engine/run.py` (bug fix: `create_step` is now `INSERT OR IGNORE` - idempotent - since resuming a crashed Run re-walks the same node sequence and re-requests a `step_id` that already exists; the prior plain `INSERT` raised `UNIQUE constraint failed` on any second resume attempt)
+  - Validation:
+    - `pytest backend/tests/` → 146 passed (unchanged count, `create_step` fix didn't need new Python tests - covered by the live crash-safety demo below); `vitest` → 7 passed (`shared`) + 31 passed (`cli`) = 38 new
+    - Both packages built clean under `tsc --strict` with no type errors
+    - Real end-to-end validation via a genuine PTY (not ink-testing-library, which couldn't reliably drive Ink 7's keypress internals through a synthetic stdin - see Notes): spawned the compiled `dist/cli.js` under a pseudo-terminal, typed every built-in command from the Section 16.2 table character-by-character, and confirmed each produced correct output against the real repo: `/runs`, `/workflows`, `/capabilities`, `/model`, `/secrets` all showed real prior-phase data; `/agents`/`/skills`/`/mcp`/`/voices`/`/approvals` correctly showed empty (nothing published/pending for those kinds yet); `/settings`/`/theme`/`/keybindings` returned defaults without touching the protocol client
+    - Crash-safety (the phase's other named exit condition): typed `/run produce-gate-repair-demo@1.0.0`, waited for the produce Step to genuinely be in flight (`RUNNING` in `steps`, real `claude` subprocess active), then `os.killpg(SIGKILL)` the TUI's entire process group - the Node process, its `awf serve --stdio` child, and that child's own `claude` subprocess all died together (confirmed via `pgrep -g` on the killed group). The Run was left `RUNNING` with `produce#1` still `RUNNING` and the worktree intact. A completely independent `awf resume` (Python CLI, no relation to the dead TUI) then completed the Run to `SUCCEEDED` - `git log` in the worktree showed exactly one `workflow: produce` and one `workflow: repair` commit, confirming no duplicated side effects
+  - Notes:
+    - **Two real bugs found and fixed while proving the above, both latent since Phase 7/10 and only surfaced now that Phase 11 ran several real Runs back-to-back against the same persistent repo database** (every earlier phase's demo used a throwaway `/tmp` db):
+      1. `workflow/engine.py`'s `step_id` scheme (`f"{node_id}#{attempt}"`) was unique only per node, not globally - Section 8's `step_id` is a PRIMARY KEY across the whole table, so a second Run of the same workflow collided with the first. Fixed by scoping it to `f"{run_id}:{node_id}#{attempt}"` (also fixed live, during Phase 10's own JSON-RPC validation - see that entry).
+      2. `engine/run.py`'s `create_step` (this phase's fix, above) - resuming re-requests an existing `step_id`.
+    - Two runs got orphaned in `RUNNING` mid-debugging (their worktree directories vanished while iterating on the PTY driver script itself, unrelated to the bugs above) and were administratively marked `FAILED`, then `awf resume` confirmed clean (`[]`) before the deliberate crash-safety demo
+    - `ink-testing-library`'s fake stdin doesn't reliably drive Ink 7's `internal_eventEmitter`-based keypress pipeline in this dependency combination - a synthetic `stdin.write()` of a full string never reaches `ink-text-input`'s `useInput` handler, whereas a real PTY sending one character at a time (matching real keyboard behavior) works perfectly. `App.test.tsx` therefore only smoke-tests the initial static render; the interactive behavior is validated by the PTY demo instead, not left silently unverified.
+    - `npm audit` flags a dev-only `esbuild`/`vite`/`vitest` v2 transitive advisory (dev-server request forgery) - not a runtime risk for local `vitest run` usage; not forced to the breaking `vitest` v4 upgrade this phase
+    - `frontend/gui/` is not created yet (Phase 12); the root `package.json` workspaces list only `shared` and `cli` for the same reason Phase 0 created only `db/`/`events/` under `backend/src/awf/` - no empty stubs for a later phase's module
+
 - Timestamp: 2026-08-02 15:58
   - Host class(es): Linux/WSL AMD64
   - Summary: Completed Phase 10 (AWF core CLI + protocol) of the AWF build sequence — the unified `awf` command wrapping every operation built in Phases 0-9, and the `awf serve --stdio` JSON-RPC 2.0 endpoint over the same operations.

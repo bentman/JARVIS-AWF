@@ -20,6 +20,26 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-02 13:44
+  - Host class(es): Linux/WSL AMD64
+  - Summary: Completed Phase 9 (Handoff pattern) of the AWF build sequence — the `handoff` node's execution semantics wired into the workflow engine, and a real bounded 2-hop producer↔reviewer loop validated on both the success path and the `maxHops` path.
+  - Scope:
+    - `backend/src/awf/workflow/handoff.py` (new — `make_handoff_node_executor`)
+    - `backend/src/awf/workflow/nodes.py` (`handoff`'s required fields extended from just `maxHops` to Section 13.4's full "MUST declare" list: `initiatingAgent`, `receivingAgent`, `payloadSchema`, `maxHops`)
+    - `backend/src/awf/workflow/engine.py` (`handoff` added to `EXECUTABLE_NODE_TYPES`; a new `SELF_STEPPING_NODE_TYPES` concept so the engine doesn't create a redundant outer Step for a node that manages its own per-hop Steps; any node executor can now return `{"waiting_input": True, ...}` to pause a Run without silently continuing)
+    - `config/app_registry/workflows/producer-reviewer-handoff-demo/1.0.0.yaml` (new - the example handoff workflow, repo-default per 9.3)
+    - `backend/tests/test_phase9_handoff.py` (new, 6 tests)
+    - `backend/tests/test_phase7_workflow_{nodes,engine}.py` (updated: the Phase 7 handoff fixture now carries the newly-required fields; the "non-executable node type" test switched from `handoff` - now executable - to `approval`, which still has no execution semantics)
+  - Validation:
+    - `pytest backend/tests/` → 121 passed (115 prior + 6 new)
+    - Real end-to-end success path: the published example workflow ran in a dedicated worktree - Claude Code (initiating) wrote a three-line haiku to `haiku.txt`; Codex (receiving, a different adapter) reviewed it, confirmed the line count, and set `handoff_complete: true` on hop 1. Run reached `SUCCEEDED`; `git log` in the worktree showed the one `handoff: draft_and_review hop 1` commit
+    - Real end-to-end `maxHops` path: a second, adversarial workflow (`maxHops: 2`, both roles explicitly instructed to always report incomplete) ran both hops for real against Claude Code and Codex, never set `handoff_complete`, and the Run moved to `WAITING_INPUT` (not `FAILED`, not silently continuing) with `hops_used: 2`; two `handoff: ... hop N` commits confirmed each hop was a real, separate durable Step. Both worktrees/branches removed afterward with no residue
+  - Notes:
+    - The termination condition and inter-hop payload are structured artifacts, not parsed agent prose: each hop's agent is instructed to write a JSON status file (`handoff_status.json` by default) containing `{"<terminationField>": bool, "summary": str}`; the engine reads that file deterministically. `HandoffError` is raised if an agent completes without writing it.
+    - The first live attempt at the `maxHops` demo used a neutral objective ("append one line") and completed in 1 hop instead of exhausting - the agent reasonably judged its trivial task done and set `handoff_complete: true`. This is expected agent behavior, not a bug: the retry made the "always report incomplete" instruction explicit to deterministically exercise the exhaustion path, same as Phase 7/8's approach of using unambiguous objectives for repeatable validation.
+    - Handoff is locally-invoked adapters only (Section 13.4); the A2A remote-agent extension point is out of scope
+    - `payloadSchema` is parsed and required but not enforced against the actual JSON status file's shape - no JSON Schema validator is wired in yet, consistent with Phase 7's `inputSchema`/`outputSchema` note
+
 - Timestamp: 2026-08-02 13:31
   - Host class(es): Linux/WSL AMD64
   - Summary: Completed Phase 8 (Verification & acceptance gate) of the AWF build sequence — Finding/Verdict schema, deterministic Verdict aggregation, the Verifier and Adversary/Optimizer role obligations, a GPU-utilization sampler, and a Trifecta gate node executor wired into Phase 7's bounded repair loop.

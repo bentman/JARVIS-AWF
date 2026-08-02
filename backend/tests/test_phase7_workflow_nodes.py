@@ -13,7 +13,12 @@ def _required_extra(node_type):
     return {
         "map": {"maxItems": 5, "maxConcurrency": 2},
         "loop": {"maxIterations": 3},
-        "handoff": {"maxHops": 4},
+        "handoff": {
+            "initiatingAgent": {"adapter": "claude-code", "objective": "x"},
+            "receivingAgent": {"adapter": "codex", "objective": "y"},
+            "payloadSchema": {"type": "object"},
+            "maxHops": 4,
+        },
     }.get(node_type, {})
 
 
@@ -46,4 +51,17 @@ def test_loop_requires_max_iterations():
 
 def test_handoff_requires_max_hops():
     with pytest.raises(NodeValidationError):
-        validate_node({"id": "n", "type": "handoff"})
+        validate_node(
+            {
+                "id": "n",
+                "type": "handoff",
+                "initiatingAgent": {"adapter": "claude-code", "objective": "x"},
+                "receivingAgent": {"adapter": "codex", "objective": "y"},
+                "payloadSchema": {"type": "object"},
+            }
+        )
+
+
+def test_handoff_requires_agent_references_and_payload_schema():
+    with pytest.raises(NodeValidationError):
+        validate_node({"id": "n", "type": "handoff", "maxHops": 4})

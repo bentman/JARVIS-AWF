@@ -109,7 +109,7 @@ def test_non_executable_node_type_raises(tmp_path):
             "metadata": {"name": "demo", "version": "1.0.0", "digest": "sha256:abc"},
             "spec": {
                 "inputSchema": {}, "outputSchema": {}, "budgets": {},
-                "nodes": [{"id": "h", "type": "handoff", "maxHops": 2}],
+                "nodes": [{"id": "a", "type": "approval"}],
                 "outputs": {},
             },
         }

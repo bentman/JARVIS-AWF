@@ -1,16 +1,23 @@
 """Workflow engine (Section 12): executes a WorkflowDefinition as durable Steps.
 
-Only enough execution semantics exist here to run the produce -> gate ->
-repair example workflow end to end - Phase 7's stated scope. `activity`,
-`agent`, and `gate` nodes are interpreted; `approval`, `subworkflow`, `map`,
-`loop`, and `handoff` are validated as node shapes (Section 12.2, in
-`workflow.nodes`) but have no execution semantics yet - `handoff` is built in
-Phase 9, full Trifecta `gate` tiering in Phase 8.
+`activity`, `agent`, `gate`, and `handoff` nodes are interpreted; `approval`,
+`subworkflow`, `map`, and `loop` are validated as node shapes (Section 12.2,
+in `workflow.nodes`) but have no execution semantics yet.
 
 Branching is driven by two engine-specific node fields that are NOT part of
 the Section 12.1 spec shape: `next` (the node id to run afterward; absent
 means the workflow completes) and, on `gate` nodes, `onFail` (the node id to
 jump to when the gate fails).
+
+Any node executor MAY return `{"waiting_input": True, ...}` (the `handoff`
+executor does this when it exhausts `maxHops` without its termination
+condition being set, Section 13.4) - the engine stops there and returns
+`status: "WAITING_INPUT"` without advancing to `next`, matching the "MUST
+NOT silently continue or silently succeed" rule.
+
+`handoff` nodes manage their own per-hop Steps internally (Section 13.4:
+"each hop is a normal, durable Step") - the engine does not create a Step
+row for the handoff node itself, only for `activity`/`agent`/`gate`.
 """
 
 import sqlite3
@@ -28,7 +35,11 @@ from awf.workflow.definition import WorkflowDefinition
 NodeExecutor = Callable[[sqlite3.Connection, str, str, dict], dict]
 AdapterFn = Callable[[AgentInvocation], "AgentResult"]
 
-EXECUTABLE_NODE_TYPES = ("activity", "agent", "gate")
+EXECUTABLE_NODE_TYPES = ("activity", "agent", "gate", "handoff")
+
+# Node types that manage their own internal Step rows and should not get a
+# generic outer Step created for them by the engine.
+SELF_STEPPING_NODE_TYPES = ("handoff",)
 
 
 class WorkflowEngineError(RuntimeError):
@@ -106,9 +117,13 @@ def run_workflow_definition(
 
         attempt_counts[current_id] = attempt_counts.get(current_id, 0) + 1
         step_id = f"{current_id}#{attempt_counts[current_id]}"
-        create_step(conn, step_id=step_id, run_id=run_id, node_id=current_id, attempt=attempt_counts[current_id])
+        if node_type not in SELF_STEPPING_NODE_TYPES:
+            create_step(conn, step_id=step_id, run_id=run_id, node_id=current_id, attempt=attempt_counts[current_id])
 
         output = executor(conn, run_id, step_id, node)
+
+        if output.get("waiting_input"):
+            return {"status": "WAITING_INPUT", "repairs_used": repairs_used, **output}
 
         if node_type == "gate":
             if output.get("passed"):

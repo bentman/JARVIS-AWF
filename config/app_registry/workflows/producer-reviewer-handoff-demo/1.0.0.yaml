@@ -1,0 +1,39 @@
+apiVersion: awf/v1
+kind: Workflow
+metadata:
+  name: producer-reviewer-handoff-demo
+  version: 1.0.0
+  digest: "a87a9696da1e065cd3fd14db06759891d3aaac243201c74d72e9e13746eb2bc9"
+spec:
+  inputSchema:
+    type: object
+    properties:
+      topic:
+        type: string
+    required: [topic]
+  outputSchema:
+    type: object
+    properties:
+      hops_used:
+        type: integer
+  budgets:
+    maxRepairIterations: 0
+  nodes:
+    - id: draft_and_review
+      type: handoff
+      initiatingAgent:
+        adapter: claude-code
+        objective: "Write a three-line haiku (5-7-5 syllables) about autumn to a file named haiku.txt."
+      receivingAgent:
+        adapter: codex
+        objective: "Read haiku.txt. If it has exactly three lines, approve it (handoff_complete: true). Otherwise fix the line count yourself and request one more review (handoff_complete: false)."
+      payloadSchema:
+        type: object
+        properties:
+          summary:
+            type: string
+      maxHops: 4
+      terminationField: handoff_complete
+      next: null
+  outputs:
+    hops_used: "{{ engine.hops_used }}"

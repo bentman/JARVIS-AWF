@@ -12,10 +12,13 @@ NODE_TYPES = (
 )
 
 # Fields a node of this type MUST declare, beyond the universal `id`/`type`.
+# handoff's four fields are Section 13.4's explicit "MUST declare" list:
+# the initiating and receiving Agent references, a structured handoff
+# payload schema, and maxHops (required, no default).
 REQUIRED_FIELDS_BY_TYPE = {
     "map": ("maxItems", "maxConcurrency"),
     "loop": ("maxIterations",),
-    "handoff": ("maxHops",),
+    "handoff": ("initiatingAgent", "receivingAgent", "payloadSchema", "maxHops"),
 }
 
 

@@ -20,6 +20,26 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-02 15:58
+  - Host class(es): Linux/WSL AMD64
+  - Summary: Completed Phase 10 (AWF core CLI + protocol) of the AWF build sequence — the unified `awf` command wrapping every operation built in Phases 0-9, and the `awf serve --stdio` JSON-RPC 2.0 endpoint over the same operations.
+  - Scope:
+    - `backend/src/awf/cli/{__init__.py,core_ops.py,main.py}` (new - `core_ops` holds every operation; `main.py` is the argparse dispatcher)
+    - `backend/src/awf/server/{__init__.py,stdio.py}` (new - JSON-RPC 2.0 over stdio, exhaustive Section 16.3 method surface delegating to `core_ops`)
+    - `backend/src/awf/workflow/engine.py` (bug fix: `step_id` is now scoped by `run_id` - `f"{run_id}:{node_id}#{attempt}"` - since `step_id` is a global PRIMARY KEY (Section 8) and the prior per-node scheme collided across separate Runs of the same workflow; every prior phase's demo used a fresh scratch db, so this never surfaced until Phase 10 ran multiple real Runs against the persistent real repo db)
+    - `config/app_registry/workflows/produce-gate-repair-demo/1.0.0.yaml` (added `checkCommand` to the gate node so a generic, workflow-agnostic CLI/server can execute the check without hand-wired Python, per Phase 7/8's demo-only `check_fn`)
+    - `backend/pyproject.toml` (registered the `awf` console script)
+    - `backend/tests/test_phase10_{core_ops,server_stdio,cli_main}.py` (new, 25 tests)
+  - Validation:
+    - `pytest backend/tests/` → 146 passed (121 prior + 25 new)
+    - Real end-to-end run against the actual repo's `data/awf_db/awf.db` via the installed `awf` binary: `awf run produce-gate-repair-demo@1.0.0` (produce → gate fail → repair → gate pass, `SUCCEEDED`), `awf status <run-id>` (all 4 real Steps), `awf artifacts <run-id>` (2 real Verdict + 2 real Finding artifacts), `awf resume` (empty - nothing incomplete), `awf registry validate` (the real workflow file), `awf registry publish` (a capability-record fixture, written to `data/registry/capabilities/read_file/1.0.0.yaml` and indexed in `registry_index` - `registry_index`'s first real row since Phase 0 created the table), `awf secret set`/`list` (real Fernet-encrypted secret), and manually-seeded `approvals` rows exercised via `awf approvals`/`approve`/`reject`
+    - `awf serve --stdio` driven by a real scripted client over a genuine subprocess pipe (not in-process): `awf/run.start` (hit one transient "model at capacity" failure from Codex on the first attempt - a real upstream hiccup, not a bug, resolved by retrying), `awf/run.status`, and `awf/approval.approve` (against a freshly-seeded pending approval) all returned correct JSON-RPC results. All demo worktrees/branches removed afterward (`git worktree list`/`git branch --list "awf/*"` show none left); `git status` shows only real source changes, since all demo state (`data/`, `.env`) is gitignored
+  - Notes:
+    - `awf secret set/list/rotate-key` delegates directly to Phase 2's `awf.secrets.cli.run(argv, repo_root)`, as that phase's own notes anticipated
+    - `registry publish` supports only Workflow and Capability Record objects (self-describing `name`/`version` in their own content); Model Profiles and Skills have no such self-description in their file content (identity comes from the file's path, Section 9.3/11) and are out of scope for this generic publish path
+    - `awf/events.subscribe` is listed in the method surface but returns a method-not-found-shaped error: it's a server-push stream in the spec, which a line-based request/response transport can't express - full ACP shaping (sessions, streamed content blocks, the official SDK) is also not implemented; both are flagged as later work, not hidden gaps
+    - The `approval` workflow node type still has no execution semantics (unchanged from Phase 7's scope note) - `awf approvals`/`approve`/`reject` are real, working CRUD over the `approvals` table, validated here against manually-seeded rows rather than ones a real node produced
+
 - Timestamp: 2026-08-02 13:44
   - Host class(es): Linux/WSL AMD64
   - Summary: Completed Phase 9 (Handoff pattern) of the AWF build sequence — the `handoff` node's execution semantics wired into the workflow engine, and a real bounded 2-hop producer↔reviewer loop validated on both the success path and the `maxHops` path.

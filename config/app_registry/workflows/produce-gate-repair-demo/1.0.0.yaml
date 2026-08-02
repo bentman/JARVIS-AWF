@@ -3,7 +3,7 @@ kind: Workflow
 metadata:
   name: produce-gate-repair-demo
   version: 1.0.0
-  digest: "45042a12e67d43acab63aea9c7598753be000ddb31eaa83db91360044888bf19"
+  digest: "887e7ff8510184b8f07a811f6764ac05d04b7e17cd9441483521b4b323e6c0ee"
 spec:
   inputSchema:
     type: object
@@ -27,6 +27,7 @@ spec:
     - id: check
       type: gate
       check: calc_add_returns_sum
+      checkCommand: "python3.12 -c \"import calc; assert calc.add(2, 3) == 5\""
       next: null
       onFail: repair
     - id: repair

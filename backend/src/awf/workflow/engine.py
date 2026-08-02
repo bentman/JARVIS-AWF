@@ -116,7 +116,10 @@ def run_workflow_definition(
             raise WorkflowEngineError(f"no executor registered for node type '{node_type}'")
 
         attempt_counts[current_id] = attempt_counts.get(current_id, 0) + 1
-        step_id = f"{current_id}#{attempt_counts[current_id]}"
+        # step_id is globally unique (Section 8: PRIMARY KEY) - scoped by
+        # run_id, not just node id, since the same node id recurs across
+        # different Runs of the same workflow.
+        step_id = f"{run_id}:{current_id}#{attempt_counts[current_id]}"
         if node_type not in SELF_STEPPING_NODE_TYPES:
             create_step(conn, step_id=step_id, run_id=run_id, node_id=current_id, attempt=attempt_counts[current_id])
 

@@ -39,8 +39,14 @@ def create_worktree(repo_root: Path, run_id: str, base_ref: str = "HEAD") -> Pat
     return path
 
 
-def commit_all_changes(worktree_path: Path, message: str) -> str:
+def commit_all_changes(worktree_path: Path, message: str) -> str | None:
+    """Commit all changes, or return None if there was nothing to commit."""
     _run_git(["add", "-A"], cwd=worktree_path)
+    staged = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"], cwd=worktree_path
+    )
+    if staged.returncode == 0:
+        return None
     _run_git(["commit", "-m", message], cwd=worktree_path)
     result = _run_git(["rev-parse", "HEAD"], cwd=worktree_path)
     return result.stdout.strip()

@@ -1,0 +1,41 @@
+"""Workflow node types (Section 12.2) - eight, exactly."""
+
+NODE_TYPES = (
+    "activity",
+    "agent",
+    "approval",
+    "gate",
+    "subworkflow",
+    "map",
+    "loop",
+    "handoff",
+)
+
+# Fields a node of this type MUST declare, beyond the universal `id`/`type`.
+REQUIRED_FIELDS_BY_TYPE = {
+    "map": ("maxItems", "maxConcurrency"),
+    "loop": ("maxIterations",),
+    "handoff": ("maxHops",),
+}
+
+
+class NodeValidationError(ValueError):
+    pass
+
+
+def validate_node(node: dict) -> None:
+    if "id" not in node:
+        raise NodeValidationError("node missing required field 'id'")
+    node_id = node["id"]
+
+    if "type" not in node:
+        raise NodeValidationError(f"node '{node_id}': missing required field 'type'")
+    node_type = node["type"]
+    if node_type not in NODE_TYPES:
+        raise NodeValidationError(f"node '{node_id}': type '{node_type}' not in {NODE_TYPES}")
+
+    for field in REQUIRED_FIELDS_BY_TYPE.get(node_type, ()):
+        if field not in node:
+            raise NodeValidationError(
+                f"node '{node_id}' (type={node_type}): missing required field '{field}'"
+            )

@@ -1,0 +1,38 @@
+apiVersion: awf/v1
+kind: Workflow
+metadata:
+  name: produce-gate-repair-demo
+  version: 1.0.0
+  digest: "45042a12e67d43acab63aea9c7598753be000ddb31eaa83db91360044888bf19"
+spec:
+  inputSchema:
+    type: object
+    properties:
+      objective:
+        type: string
+    required: [objective]
+  outputSchema:
+    type: object
+    properties:
+      repairs_used:
+        type: integer
+  budgets:
+    maxRepairIterations: 3
+  nodes:
+    - id: produce
+      type: agent
+      adapter: claude-code
+      objective: "Create a file named calc.py containing a function add(a, b) that returns a - b (an intentional bug: it should return a + b)."
+      next: check
+    - id: check
+      type: gate
+      check: calc_add_returns_sum
+      next: null
+      onFail: repair
+    - id: repair
+      type: agent
+      adapter: codex
+      objective: "Fix calc.py: the add(a, b) function must return a + b, not a - b. Do not change anything else."
+      next: check
+  outputs:
+    repairs_used: "{{ engine.repairs_used }}"

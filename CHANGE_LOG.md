@@ -20,6 +20,23 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-02 13:10
+  - Host class(es): Linux/WSL AMD64
+  - Summary: Completed Phase 7 (Workflow engine) of the AWF build sequence — the Workflow Definition contract, all eight Section 12.2 node type shapes, a data-driven engine for `activity`/`agent`/`gate` nodes, and one worked example workflow (produce → gate → repair) run end to end against two different named adapters.
+  - Scope:
+    - `backend/src/awf/workflow/{__init__.py,nodes.py,definition.py,engine.py}` (new)
+    - `backend/src/awf/isolation/worktree.py` (`commit_all_changes` now returns `None` instead of raising when a node made no changes to commit)
+    - `config/app_registry/workflows/produce-gate-repair-demo/1.0.0.yaml` (new — the example workflow, repo-default per 9.3)
+    - `backend/tests/test_phase7_workflow_{nodes,definition,engine}.py` (new, 19 tests)
+  - Validation:
+    - `pytest backend/tests/` → 86 passed (67 prior + 19 new)
+    - Real end-to-end run of the published example workflow in a dedicated worktree: `produce` (Claude Code adapter) wrote a deliberately buggy `calc.py` (`add` returning `a - b`); `check` (gate) ran a real subprocess assertion and failed; `repair` (Codex adapter - a different adapter from `produce`) fixed the bug; `check` re-ran and passed. Run reached `SUCCEEDED` with `repairs_used: 1`; `git log` in the worktree showed exactly two commits (`workflow: produce`, `workflow: repair` - no commit for the passing gate, which changed nothing); worktree/branch removed afterward with no residue
+  - Notes:
+    - Branching (`next`, and `onFail` on `gate` nodes) is an engine-specific convention layered on top of the node shape, not part of the Section 12.1 spec fields - documented as such in `workflow/engine.py`'s module docstring, to avoid the fields being mistaken for a spec requirement
+    - Only `activity`, `agent`, and `gate` are executable; `approval`, `subworkflow`, `map`, `loop`, and `handoff` validate correctly as node shapes (`workflow/nodes.py`) but raise `WorkflowEngineError` if the engine actually reaches one - `handoff` is Phase 9's job, full Trifecta `gate` tiering (Finding/Verdict, Adversary role) is Phase 8's; this phase's `gate` is a placeholder pass/fail check, not the tiered Eval Suite
+    - `inputSchema`/`outputSchema` are parsed and stored but not enforced against actual input/output values - no JSON Schema validator is wired in yet
+    - The example workflow's `metadata.digest` was computed manually (sha256 over the file with the digest field blanked) since registry publish/digest tooling doesn't exist yet (flagged since Phase 1); no code depends on or verifies this digest yet
+
 - Timestamp: 2026-08-02 12:47
   - Host class(es): Linux/WSL AMD64
   - Summary: Completed Phase 6 (Remaining named adapters) of the AWF build sequence for 3 of the 4 listed adapters — Codex CLI, Antigravity CLI, and GitHub Copilot CLI, all live-validated. Cline CLI is not implemented - blocked by a real CLI limitation, not a decision to skip it.

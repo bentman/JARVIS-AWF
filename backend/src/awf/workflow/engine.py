@@ -82,6 +82,7 @@ def run_workflow_definition(
 ) -> dict:
     max_repairs = workflow.budgets.get("maxRepairIterations", 3)
     repairs_used = 0
+    last_verdict_artifact_id = None
     attempt_counts: dict[str, int] = {}
 
     conn.execute(
@@ -111,19 +112,25 @@ def run_workflow_definition(
 
         if node_type == "gate":
             if output.get("passed"):
+                last_verdict_artifact_id = output.get("verdict_artifact_id")
                 current_id = node.get("next")
             else:
-                if repairs_used >= max_repairs:
+                terminal_failure = output.get("terminal_failure", False)
+                if terminal_failure or repairs_used >= max_repairs:
+                    reason_code = (
+                        "gate_terminal_failure" if terminal_failure else "gate_repair_budget_exhausted"
+                    )
                     conn.execute(
                         "UPDATE runs SET status = 'FAILED', updated_at = ? WHERE run_id = ?",
                         (utc_now_rfc3339(), run_id),
                     )
                     conn.commit()
-                    write_event(
-                        conn, run_id=run_id, new_status="FAILED",
-                        actor="engine", reason_code="gate_repair_budget_exhausted",
-                    )
-                    return {"status": "FAILED", "repairs_used": repairs_used}
+                    write_event(conn, run_id=run_id, new_status="FAILED", actor="engine", reason_code=reason_code)
+                    return {
+                        "status": "FAILED",
+                        "repairs_used": repairs_used,
+                        "verdict_artifact_id": output.get("verdict_artifact_id"),
+                    }
                 repairs_used += 1
                 current_id = node.get("onFail")
                 if current_id is None:
@@ -137,4 +144,8 @@ def run_workflow_definition(
     )
     conn.commit()
     write_event(conn, run_id=run_id, new_status="SUCCEEDED", actor="engine", reason_code="run_completed")
-    return {"status": "SUCCEEDED", "repairs_used": repairs_used}
+    return {
+        "status": "SUCCEEDED",
+        "repairs_used": repairs_used,
+        "verdict_artifact_id": last_verdict_artifact_id,
+    }

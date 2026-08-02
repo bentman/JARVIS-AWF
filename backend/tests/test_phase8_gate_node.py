@@ -1,10 +1,9 @@
-import pytest
-
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.run import create_run
+from awf.gates.gate_node import make_trifecta_gate_executor
 from awf.workflow.definition import parse_workflow
-from awf.workflow.engine import WorkflowEngineError, run_workflow_definition
+from awf.workflow.engine import run_workflow_definition
 
 
 def make_conn(tmp_path):
@@ -36,84 +35,79 @@ def make_workflow(max_repairs=3):
     )
 
 
-def test_straight_pass_no_repair_needed(tmp_path):
+def test_default_tier_gate_produces_verdict_and_finding_artifacts(tmp_path):
     conn = make_conn(tmp_path)
     workflow = make_workflow()
-    calls = []
+    artifacts_root = tmp_path / "artifacts"
 
     def agent_executor(conn, run_id, step_id, node):
-        calls.append(node["id"])
         return {"ok": True}
 
-    def gate_executor(conn, run_id, step_id, node):
-        return {"passed": True}
+    gate_executor = make_trifecta_gate_executor(
+        check_fn=lambda: True, check_summary="demo check", artifacts_root=artifacts_root,
+    )
 
     result = run_workflow_definition(
         conn, run_id="run-1", workflow=workflow,
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
-    assert result == {"status": "SUCCEEDED", "repairs_used": 0, "verdict_artifact_id": None}
-    assert calls == ["produce"]
-    row = conn.execute("SELECT status FROM runs WHERE run_id = 'run-1'").fetchone()
-    assert row["status"] == "SUCCEEDED"
+    assert result["status"] == "SUCCEEDED"
+    assert result["repairs_used"] == 0
+    verdict_row = conn.execute(
+        "SELECT * FROM artifacts WHERE artifact_id = ?", (result["verdict_artifact_id"],)
+    ).fetchone()
+    assert verdict_row["artifact_type"] == "verdict"
+    finding_rows = conn.execute("SELECT * FROM artifacts WHERE artifact_type = 'finding'").fetchall()
+    assert len(finding_rows) == 1
 
 
-def test_gate_fails_once_then_repair_succeeds(tmp_path):
+def test_gate_fails_then_repairs_then_passes_produces_two_verdicts(tmp_path):
     conn = make_conn(tmp_path)
     workflow = make_workflow()
-    gate_calls = []
+    artifacts_root = tmp_path / "artifacts"
+    check_results = iter([False, True])
 
     def agent_executor(conn, run_id, step_id, node):
         return {"ok": True}
 
-    def gate_executor(conn, run_id, step_id, node):
-        gate_calls.append(node["id"])
-        return {"passed": len(gate_calls) > 1}
+    gate_executor = make_trifecta_gate_executor(
+        check_fn=lambda: next(check_results), check_summary="demo check", artifacts_root=artifacts_root,
+    )
 
     result = run_workflow_definition(
         conn, run_id="run-1", workflow=workflow,
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
-    assert result == {"status": "SUCCEEDED", "repairs_used": 1, "verdict_artifact_id": None}
-    assert len(gate_calls) == 2
+    assert result["status"] == "SUCCEEDED"
+    assert result["repairs_used"] == 1
+    verdict_rows = conn.execute("SELECT * FROM artifacts WHERE artifact_type = 'verdict'").fetchall()
+    assert len(verdict_rows) == 2
 
 
-def test_budget_exhausted_marks_run_failed(tmp_path):
+def test_high_risk_tier_safety_gate_bypass_fails_immediately_without_consuming_budget(tmp_path):
     conn = make_conn(tmp_path)
-    workflow = make_workflow(max_repairs=1)
+    workflow = make_workflow(max_repairs=3)
+    artifacts_root = tmp_path / "artifacts"
 
     def agent_executor(conn, run_id, step_id, node):
         return {"ok": True}
 
-    def gate_executor(conn, run_id, step_id, node):
-        return {"passed": False}
+    gate_executor = make_trifecta_gate_executor(
+        check_fn=lambda: True,
+        check_summary="demo check",
+        artifacts_root=artifacts_root,
+        tier="high-risk",
+        guard_bypassed=True,
+    )
 
     result = run_workflow_definition(
         conn, run_id="run-1", workflow=workflow,
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
-    assert result == {"status": "FAILED", "repairs_used": 1, "verdict_artifact_id": None}
+    assert result["status"] == "FAILED"
+    assert result["repairs_used"] == 0  # terminal failure does not consume the budget
     row = conn.execute("SELECT status FROM runs WHERE run_id = 'run-1'").fetchone()
     assert row["status"] == "FAILED"
-
-
-def test_non_executable_node_type_raises(tmp_path):
-    conn = make_conn(tmp_path)
-    workflow = parse_workflow(
-        {
-            "apiVersion": "awf/v1",
-            "kind": "Workflow",
-            "metadata": {"name": "demo", "version": "1.0.0", "digest": "sha256:abc"},
-            "spec": {
-                "inputSchema": {}, "outputSchema": {}, "budgets": {},
-                "nodes": [{"id": "h", "type": "handoff", "maxHops": 2}],
-                "outputs": {},
-            },
-        }
-    )
-
-    with pytest.raises(WorkflowEngineError):
-        run_workflow_definition(conn, run_id="run-1", workflow=workflow, node_executors={})

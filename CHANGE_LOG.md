@@ -20,6 +20,25 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-02 13:31
+  - Host class(es): Linux/WSL AMD64
+  - Summary: Completed Phase 8 (Verification & acceptance gate) of the AWF build sequence — Finding/Verdict schema, deterministic Verdict aggregation, the Verifier and Adversary/Optimizer role obligations, a GPU-utilization sampler, and a Trifecta gate node executor wired into Phase 7's bounded repair loop.
+  - Scope:
+    - `backend/src/awf/gates/{__init__.py,schema.py,verdict.py,artifacts.py,verifier.py,adversary.py,gate_node.py}` (new)
+    - `backend/src/awf/hardware/{__init__.py,gpu_sampler.py}` (new)
+    - `backend/src/awf/workflow/engine.py` (gate handling now carries `verdict_artifact_id` through to the final result, and a `terminal_failure` output flag - e.g. a `safety_gate_bypass` Finding - fails the Run immediately without consuming a repair-budget iteration)
+    - `backend/tests/test_phase7_workflow_engine.py` (updated 3 assertions for the new `verdict_artifact_id` key in the engine's return value)
+    - `backend/tests/test_phase8_{gates_schema,gates_artifacts,gates_verifier_adversary,gpu_sampler,gate_node}.py` (new, 29 tests)
+  - Validation:
+    - `pytest backend/tests/` → 115 passed (86 prior + 29 new)
+    - Real end-to-end run of the Phase 7 example workflow with the placeholder gate replaced by `make_trifecta_gate_executor`, in a dedicated worktree: `produce` (Claude Code) wrote the buggy `calc.py`; `check` ran the Verifier's deterministic regression check, which failed, and persisted a real Verdict artifact (`passed: false`) plus a `high`-severity Finding; `repair` (Codex - a different adapter) fixed the bug; `check` re-ran, passed, and persisted a second Verdict (`passed: true`) with a `low`-severity Finding. Both Verdict/Finding artifacts were read back from their content-addressed files and printed in full. Worktree/branch and scratch db/artifacts root removed afterward with no residue in the repo
+    - `nvidia-smi` is present on this host (WSL2/NVIDIA), so `sample_gpu_utilization()` was exercised against a real GPU reading in addition to its unit tests
+  - Notes:
+    - Findings/Verdicts are persisted as `artifacts` rows (`artifact_type`: `finding`/`verdict`, Section 8's existing enum) at content-addressed paths under an `artifacts_root` - Section 7's `data/artifacts/`. The demo used a scratch root under `/tmp`, matching every prior phase's demo-vs-real-repo-state convention (e.g. Phase 4's crash-recovery db); nothing was written to the real `data/artifacts/`
+    - The Verifier role here is deterministic test-execution only ("runs regression tests ... produces structured Finding records"); an LLM-driven independent code-review pass is not implemented - `gates/verifier.py`'s docstring flags this as a later layer, not a gap being hidden
+    - Only the default tier (Builder + Verifier) was exercised live, per Section 12.3 ("Default tier ... Adversary/Optimizer pass is omitted") - the high-risk tier's three Adversary obligations (resource safety via the GPU sampler, safety-gate bypass, memory contamination) are implemented and unit-tested, including the `safety_gate_bypass` terminal-failure path (fails immediately, does not consume a repair iteration), but weren't run against a real Trifecta invocation since nothing in the example workflow currently trips the Section 12.2 high-risk trigger list
+    - `inputSchema`/`outputSchema` enforcement and the full Section 12.2 high-risk trigger-list wiring (auto-escalating a Run to the high-risk tier) remain open - out of this phase's stated scope
+
 - Timestamp: 2026-08-02 13:10
   - Host class(es): Linux/WSL AMD64
   - Summary: Completed Phase 7 (Workflow engine) of the AWF build sequence — the Workflow Definition contract, all eight Section 12.2 node type shapes, a data-driven engine for `activity`/`agent`/`gate` nodes, and one worked example workflow (produce → gate → repair) run end to end against two different named adapters.

@@ -2,8 +2,8 @@
 an exact action digest - the default gate for anything R2+ under the
 attended model.
 
-The Step for this node deliberately does NOT go through `run_step` while
-still pending: `run_step` marks a Step `SUCCEEDED` as soon as its function
+The Step for this node does not go through `run_step` while still pending:
+`run_step` marks a Step `SUCCEEDED` as soon as its function
 returns, which would permanently cache the "still waiting" result across a
 resume. Instead the Step sits in `WAITING_APPROVAL` (an existing Section 8
 status) until a real decision lands in the `approvals` table, matching the

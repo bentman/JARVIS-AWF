@@ -110,7 +110,7 @@ Thumbs.db
 !/data/registry
 !/data/registry/agents
 !/data/registry/capabilities
-!/data/registry/MCP/
+!/data/registry/mcp/
 !/data/registry/model-profiles/
 !/data/registry/skills/
 !/data/registry/voice-profiles/
@@ -132,9 +132,9 @@ Thumbs.db
 /data/registry/capabilities/*
 !/data/registry/capabilities/.gitkeep
 
-# data/registry/MCP
-/data/registry/MCP/*
-!/data/registry/MCP/.gitkeep
+# data/registry/mcp
+/data/registry/mcp/*
+!/data/registry/mcp/.gitkeep
 
 # data/registry/model-profiles
 /data/registry/model-profiles/*

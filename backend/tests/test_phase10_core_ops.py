@@ -16,6 +16,7 @@ from awf.cli.core_ops import (
     op_registry_publish,
     op_registry_validate,
     op_run_list,
+    op_run_start,
     op_run_status,
     op_secret_list_names,
     op_secret_set,
@@ -179,3 +180,49 @@ def test_secret_set_and_list_names_roundtrip(tmp_path):
     op_secret_set(repo_root, conn, name="api-key", value="sekret")
 
     assert op_secret_list_names(conn) == ["api-key"]
+
+
+def make_git_repo(tmp_path):
+    import subprocess
+
+    repo_root, conn = make_repo(tmp_path)
+    subprocess.run(["git", "init", "-q"], cwd=repo_root, check=True)
+    subprocess.run(["git", "config", "user.email", "t@e.com"], cwd=repo_root, check=True)
+    subprocess.run(["git", "config", "user.name", "T"], cwd=repo_root, check=True)
+    (repo_root / "README.md").write_text("x\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo_root, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=repo_root, check=True)
+    return repo_root, conn
+
+
+def publish_workflow(repo_root, raw: dict) -> None:
+    target = repo_root / "config" / "app_registry" / "workflows" / raw["metadata"]["name"] / f"{raw['metadata']['version']}.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(yaml.safe_dump(raw))
+
+
+def test_op_run_start_fails_cleanly_for_an_unbuilt_node_type(tmp_path):
+    # `subworkflow` validates as a real Section 12.2 node type but has no
+    # executor built - op_run_start MUST NOT let that raise a raw exception;
+    # the Run is marked FAILED and a clean result is returned instead.
+    repo_root, conn = make_git_repo(tmp_path)
+    publish_workflow(
+        repo_root,
+        {
+            "apiVersion": "awf/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "unbuilt-node-demo", "version": "1.0.0", "digest": "sha256:demo"},
+            "spec": {
+                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "nodes": [{"id": "a", "type": "subworkflow", "next": None}],
+                "outputs": {},
+            },
+        },
+    )
+
+    result = op_run_start(repo_root, conn, workflow_ref="unbuilt-node-demo@1.0.0", input_data={})
+
+    assert result["status"] == "FAILED"
+    assert "error" in result
+    row = conn.execute("SELECT status FROM runs WHERE run_id = ?", (result["run_id"],)).fetchone()
+    assert row["status"] == "FAILED"

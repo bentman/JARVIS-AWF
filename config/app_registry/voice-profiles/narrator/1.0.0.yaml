@@ -1,0 +1,10 @@
+persona:
+  name: Narrator
+  description: Default voice for agents with no assigned persona; reads status and events.
+  style_prompt: Calm, neutral, informative. No embellishment.
+tts:
+  candidates:
+    - {engine: kokoro, model: kokoro-v1.0, voice_id: bf_isabella, speed: 1.0, style: {}, priority: 1, enabled: true}
+  fallback: {mode: none, allow_quality_degrade: false}
+privacy: {local_only: true}
+limits: {max_seconds_per_utterance: 30}

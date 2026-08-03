@@ -209,6 +209,8 @@ Thumbs.db
 !/models/stt/.gitkeep
 /models/tts/*
 !/models/tts/.gitkeep
+/models/vad/*
+!/models/vad/.gitkeep
 /models/wake/*
 !/models/wake/.gitkeep
 

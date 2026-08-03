@@ -37,7 +37,9 @@ DEFAULT_STATUS_FILENAME = "handoff_status.json"
 
 
 class HandoffError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, failure_class: str = "TOOL_ERROR"):
+        super().__init__(message)
+        self.failure_class = failure_class
 
 
 def make_handoff_node_executor(

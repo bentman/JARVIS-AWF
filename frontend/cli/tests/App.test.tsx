@@ -13,10 +13,9 @@ function makeFakeClient() {
 
 // Interactive input-driven behavior (typing, submitting a command) is not
 // exercised here: ink-testing-library's fake stdin does not reliably drive
-// Ink 7's internal keypress pipeline (`internal_eventEmitter`) in this
-// dependency combination, so a synthetic stdin.write() never reaches
-// ink-text-input's useInput handler. That behavior is instead validated by
-// a real PTY-driven subprocess run of the compiled CLI (see CHANGE_LOG).
+// Ink 7's internal keypress pipeline (`internal_eventEmitter`), so a
+// synthetic stdin.write() never reaches ink-text-input's useInput handler.
+// Command-dispatch logic is covered directly in commands.test.ts instead.
 describe("App", () => {
   it("renders the ready message and input prompt on first frame", () => {
     const { lastFrame } = render(<App client={makeFakeClient()} settings={DEFAULT_SETTINGS} />);

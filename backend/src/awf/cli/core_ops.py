@@ -24,7 +24,8 @@ from awf.engine.run import create_run
 from awf.envfile import get_env_value
 from awf.gates.gate_node import make_trifecta_gate_executor
 from awf.ids import uuid7
-from awf.isolation.worktree import create_worktree, worktree_path
+from awf.isolation.scratch import create_scratch_dir, remove_scratch_dir, scratch_path
+from awf.isolation.worktree import create_worktree, remove_worktree, worktree_path
 from awf.registry.capability_record import parse_capability_record
 from awf.registry.model_profile import parse_model_profile
 from awf.registry.resolve import CONFIG_ROOT, DATA_ROOT, resolve_registry_object
@@ -61,14 +62,23 @@ def _make_check_fn(node: dict, worktree: Path):
     return check_fn
 
 
-def _build_node_executors(workflow, worktree: Path, artifacts_root: Path) -> dict:
-    executors = {"agent": make_agent_node_executor(ADAPTER_REGISTRY, worktree)}
+def _build_node_executors(
+    workflow, worktree: Path, artifacts_root: Path, repo_root: Path, run_scratch_dir: Path
+) -> dict:
+    executors = {"agent": make_agent_node_executor(ADAPTER_REGISTRY, worktree, repo_root)}
     for node in workflow.nodes:
         if node["type"] == "gate":
+            # A node MAY declare `tier: high-risk` (Section 12.2's trigger
+            # list still has to be checked by the caller/workflow author -
+            # nothing here infers it automatically) to reach the full
+            # Trifecta Adversary pass instead of Builder+Verifier only.
             executors["gate"] = make_trifecta_gate_executor(
                 check_fn=_make_check_fn(node, worktree),
                 check_summary=node.get("check", node["id"]),
                 artifacts_root=artifacts_root,
+                tier=node.get("tier", "default"),
+                cache_sandbox_dir=run_scratch_dir,
+                guard_bypassed=node.get("guardBypassed", False),
             )
         elif node["type"] == "handoff":
             executors["handoff"] = make_handoff_node_executor(ADAPTER_REGISTRY, worktree)
@@ -83,6 +93,31 @@ def _resolve_workflow(repo_root: Path, workflow_ref: str):
     return load_workflow(path)
 
 
+def _cleanup_run_workspace(repo_root: Path, run_id: str, result: dict) -> None:
+    # Cache state is ephemeral by design (Section 7/10.4) - reclaim it once
+    # a Run reaches a terminal state. FAILED keeps its worktree/scratch dir
+    # around for post-mortem inspection; only SUCCEEDED is cleaned up here.
+    if result.get("status") == "SUCCEEDED":
+        remove_worktree(repo_root, run_id)
+        remove_scratch_dir(repo_root, run_id)
+
+
+def _run_workflow_safely(conn: sqlite3.Connection, *, run_id: str, workflow, node_executors: dict) -> dict:
+    # A structural error (an unbuilt node type, a workflow YAML missing a
+    # required field like `onFail`) can be raised before any Step exists to
+    # record it - the Run itself still MUST NOT be left RUNNING forever, so
+    # this is the outermost boundary: no exception reaches the caller.
+    try:
+        return run_workflow_definition(conn, run_id=run_id, workflow=workflow, node_executors=node_executors)
+    except Exception as exc:
+        conn.execute(
+            "UPDATE runs SET status = 'FAILED', updated_at = ? WHERE run_id = ?",
+            (utc_now_rfc3339(), run_id),
+        )
+        conn.commit()
+        return {"status": "FAILED", "error": str(exc)}
+
+
 def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str, input_data: dict) -> dict:
     import json
 
@@ -91,9 +126,11 @@ def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str
     create_run(conn, run_id=run_id, workflow_ref=workflow.ref, input_json=json.dumps(input_data))
 
     worktree = create_worktree(repo_root, run_id)
-    node_executors = _build_node_executors(workflow, worktree, _artifacts_root(repo_root))
+    run_scratch_dir = create_scratch_dir(repo_root, run_id)
+    node_executors = _build_node_executors(workflow, worktree, _artifacts_root(repo_root), repo_root, run_scratch_dir)
 
-    result = run_workflow_definition(conn, run_id=run_id, workflow=workflow, node_executors=node_executors)
+    result = _run_workflow_safely(conn, run_id=run_id, workflow=workflow, node_executors=node_executors)
+    _cleanup_run_workspace(repo_root, run_id, result)
     return {"run_id": run_id, **result}
 
 
@@ -120,8 +157,12 @@ def op_run_resume(repo_root: Path, conn: sqlite3.Connection) -> list[dict]:
         run_row = conn.execute("SELECT workflow_ref FROM runs WHERE run_id = ?", (run_id,)).fetchone()
         workflow = _resolve_workflow(repo_root, run_row["workflow_ref"])
         worktree = worktree_path(repo_root, run_id)
-        node_executors = _build_node_executors(workflow, worktree, _artifacts_root(repo_root))
-        result = run_workflow_definition(conn, run_id=run_id, workflow=workflow, node_executors=node_executors)
+        run_scratch_dir = scratch_path(repo_root, run_id)
+        node_executors = _build_node_executors(
+            workflow, worktree, _artifacts_root(repo_root), repo_root, run_scratch_dir
+        )
+        result = _run_workflow_safely(conn, run_id=run_id, workflow=workflow, node_executors=node_executors)
+        _cleanup_run_workspace(repo_root, run_id, result)
         results.append({"run_id": run_id, **result})
     return results
 
@@ -171,15 +212,22 @@ def op_artifact_read(conn: sqlite3.Connection, *, artifact_id: str, artifacts_ro
 
 
 def op_registry_list(repo_root: Path, *, kind: str) -> list[dict]:
+    # Skills are published as <name>/<version>/SKILL.md (Section 9.3), not
+    # <name>/<version>.yaml like every other kind.
+    is_skill = kind == "skills"
     results = []
     for source_name, root in (("data", repo_root / DATA_ROOT), ("config", repo_root / CONFIG_ROOT)):
         kind_dir = root / kind
         if not kind_dir.is_dir():
             continue
         for name_dir in sorted(p for p in kind_dir.iterdir() if p.is_dir()):
-            for version_file in sorted(name_dir.glob("*.yaml")):
+            if is_skill:
+                versions = sorted(p.name for p in name_dir.iterdir() if (p / "SKILL.md").is_file())
+            else:
+                versions = sorted(p.stem for p in name_dir.glob("*.yaml"))
+            for version in versions:
                 results.append(
-                    {"source": source_name, "kind": kind, "name": name_dir.name, "version": version_file.stem}
+                    {"source": source_name, "kind": kind, "name": name_dir.name, "version": version}
                 )
     return results
 

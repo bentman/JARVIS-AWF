@@ -7,7 +7,16 @@ name = "awf"
 version = "0.1.0"
 description = "Agentic Workflow Fabric core"
 requires-python = ">=3.12,<3.15"
-dependencies = ["PyYAML>=6", "cryptography>=42", "litellm>=1.94"]
+dependencies = [
+  "PyYAML>=6",
+  "cryptography>=42",
+  "litellm>=1.94",
+  "onnxruntime>=1.28",
+  "onnx>=1.22",
+  "openwakeword>=0.4",
+  "faster-whisper>=1.2",
+  "kokoro-onnx>=0.5",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
@@ -16,6 +25,7 @@ dev = ["pytest>=8"]
 awf-setup = "awf.setup:main"
 awf-secret = "awf.secrets.cli:main"
 awf = "awf.cli.main:main"
+awf-speech = "awf.speech.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

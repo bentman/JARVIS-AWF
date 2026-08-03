@@ -18,18 +18,29 @@ NOT silently continue or silently succeed" rule.
 `handoff` nodes manage their own per-hop Steps internally (Section 13.4:
 "each hop is a normal, durable Step") - the engine does not create a Step
 row for the handoff node itself, only for `activity`/`agent`/`gate`.
+
+Every `agent` node passes through the Capability Guard (Section 9.2) before
+its adapter runs: a node MAY declare `capability: {name, version}` to
+resolve a real, published Capability Record; one that doesn't gets a
+conservative synthesized R1/approval-never record instead, so every
+invocation is still authorized and logged, never skipped.
+
+A Step that raises is caught here at the Run level: the Run is marked
+`FAILED` and a clean result dict is returned, rather than letting the
+exception propagate to the caller as an unhandled crash.
 """
 
 import sqlite3
 from pathlib import Path
 from typing import Callable
 
-from awf.adapters.base import AgentInvocation, AgentStatus
+from awf.adapters.base import AgentInvocation
 from awf.clock import utc_now_rfc3339
-from awf.engine.executor import run_step
+from awf.engine.agent_step import run_agent_step
 from awf.engine.run import create_step
 from awf.events.writer import write_event
-from awf.isolation.worktree import commit_all_changes
+from awf.registry.capability_record import CapabilityRecord, Effects, Identity, load_capability_record
+from awf.registry.resolve import resolve_registry_object
 from awf.workflow.definition import WorkflowDefinition
 
 NodeExecutor = Callable[[sqlite3.Connection, str, str, dict], dict]
@@ -46,42 +57,61 @@ class WorkflowEngineError(RuntimeError):
     pass
 
 
+def _synthesized_capability_for_node(node: dict) -> CapabilityRecord:
+    """A conservative stand-in Capability Record for an `agent` node that
+    doesn't declare a real one - still real enough to be evaluated and
+    logged by the Guard, never a rubber stamp."""
+    return CapabilityRecord(
+        identity=Identity(type="cli-adapter-action", provider=node["adapter"], name=f"agent_node_{node['id']}", version="0.0.0"),
+        schema_input="",
+        schema_output="",
+        effects=Effects(operation="update", reversible=True, idempotent=False, external_side_effect=True),
+        risk_class="R1",
+        approval="never",
+    )
+
+
+def _resolve_node_capability(node: dict, repo_root: Path) -> CapabilityRecord:
+    declared = node.get("capability")
+    if not declared:
+        return _synthesized_capability_for_node(node)
+    path, _source = resolve_registry_object(repo_root, "capabilities", declared["name"], declared["version"])
+    return load_capability_record(path)
+
+
 def make_agent_node_executor(
-    adapter_registry: dict[str, AdapterFn], worktree_path: Path
+    adapter_registry: dict[str, AdapterFn], worktree_path: Path, repo_root: Path
 ) -> NodeExecutor:
     def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
-        adapter_fn = adapter_registry[node["adapter"]]
         invocation = AgentInvocation(
             objective=node["objective"],
             inputs={},
             workspace_root=worktree_path,
             constraints=node.get("constraints", {}),
         )
-
-        def fn(_payload: dict) -> dict:
-            result = adapter_fn(invocation)
-            if result.status != AgentStatus.COMPLETED:
-                raise WorkflowEngineError(
-                    f"agent node '{node['id']}' did not complete: "
-                    f"status={result.status.value} reason={result.termination_reason!r}"
-                )
-            return {"status": result.status.value}
-
-        output = run_step(conn, step_id=step_id, run_id=run_id, fn=fn, input_payload={})
-        commit_sha = commit_all_changes(worktree_path, f"workflow: {node['id']}")
-        return {**output, "commit_sha": commit_sha}
-
-    return executor
-
-
-def make_gate_node_executor(check_fn: Callable[[dict], bool]) -> NodeExecutor:
-    def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
-        def fn(_payload: dict) -> dict:
-            return {"passed": bool(check_fn(node))}
-
-        return run_step(conn, step_id=step_id, run_id=run_id, fn=fn, input_payload={})
+        return run_agent_step(
+            conn,
+            step_id=step_id,
+            run_id=run_id,
+            worktree_path=worktree_path,
+            invocation=invocation,
+            adapter_fn=adapter_registry[node["adapter"]],
+            commit_message=f"workflow: {node['id']}",
+            capability=_resolve_node_capability(node, repo_root),
+            role=node.get("role"),
+            actor=node["adapter"],
+        )
 
     return executor
+
+
+def _mark_run_failed(conn: sqlite3.Connection, *, run_id: str, reason_code: str) -> None:
+    conn.execute(
+        "UPDATE runs SET status = 'FAILED', updated_at = ? WHERE run_id = ?",
+        (utc_now_rfc3339(), run_id),
+    )
+    conn.commit()
+    write_event(conn, run_id=run_id, new_status="FAILED", actor="engine", reason_code=reason_code)
 
 
 def run_workflow_definition(
@@ -123,7 +153,14 @@ def run_workflow_definition(
         if node_type not in SELF_STEPPING_NODE_TYPES:
             create_step(conn, step_id=step_id, run_id=run_id, node_id=current_id, attempt=attempt_counts[current_id])
 
-        output = executor(conn, run_id, step_id, node)
+        try:
+            output = executor(conn, run_id, step_id, node)
+        except Exception as exc:
+            # run_step (or the handoff executor's own per-hop run_step calls)
+            # already recorded the Step's FAILED status and failure_class
+            # before this propagated - this is the Run-level consequence.
+            _mark_run_failed(conn, run_id=run_id, reason_code=f"step_failed:{exc}")
+            return {"status": "FAILED", "repairs_used": repairs_used, "error": str(exc)}
 
         if output.get("waiting_input"):
             return {"status": "WAITING_INPUT", "repairs_used": repairs_used, **output}
@@ -138,12 +175,7 @@ def run_workflow_definition(
                     reason_code = (
                         "gate_terminal_failure" if terminal_failure else "gate_repair_budget_exhausted"
                     )
-                    conn.execute(
-                        "UPDATE runs SET status = 'FAILED', updated_at = ? WHERE run_id = ?",
-                        (utc_now_rfc3339(), run_id),
-                    )
-                    conn.commit()
-                    write_event(conn, run_id=run_id, new_status="FAILED", actor="engine", reason_code=reason_code)
+                    _mark_run_failed(conn, run_id=run_id, reason_code=reason_code)
                     return {
                         "status": "FAILED",
                         "repairs_used": repairs_used,

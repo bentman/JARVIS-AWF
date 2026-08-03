@@ -4,13 +4,13 @@ Required default configuration state: non-interactive invocation (`-p`),
 explicit `--allow-tool` entries only. `--allow-all`/`--yolo` MUST NOT be used
 by AWF's default profile. This adapter's permission model is
 application-level and advisory, not OS-enforced (Section 10.3): a
-`preToolUse` hook wired to the Capability Guard is required by the spec but
-not implemented here - a documented gap, not a silent omission.
+`preToolUse` hook wired to the Capability Guard belongs to a future revision
+of this module, not the Guard itself.
 
-Event schema confirmed against a real authenticated session: JSONL events
-typed `session.*`/`user.*`/`assistant.*`, terminated by one `result` event
-carrying `exitCode` and `usage.codeChanges.filesModified`. Success/failure is
-still determined primarily by the process exit code, not event contents.
+JSONL events are typed `session.*`/`user.*`/`assistant.*`, terminated by one
+`result` event carrying `exitCode` and `usage.codeChanges.filesModified`.
+Success/failure is determined primarily by the process exit code, not event
+contents.
 """
 
 import json

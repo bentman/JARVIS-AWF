@@ -20,6 +20,37 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-03 01:23
+  - Host class(es): Linux/WSL2 (WSLg, PulseAudio-over-RDP virtual audio devices), AMD64
+  - Summary: Completed Phase 12 (AWF-GUI voice) of the AWF build sequence, the final phase in the build sequence - the Hardware Profiler, all four Voice Profile registry objects, real STT/TTS/VAD/wake-word adapters, the R2+ voice-approval refusal rule (enforced on both the Python core and the GUI), and the `frontend/gui/` Electron+React desktop shell. A full wake-word -> STT -> response -> TTS round trip was validated for real using the operator-supplied audio fixtures, with two agent roles producing measurably distinct synthesized voices.
+  - Scope:
+    - `backend/src/awf/hardware/profiler.py` (new - `resolve_hardware_profile_id`, `run_hardware_profiler`)
+    - `backend/src/awf/registry/voice_profile.py` (new - Voice Profile schema/parser, mirrors `model_profile.py`'s pattern)
+    - `config/app_registry/voice-profiles/{narrator,builder,verifier,adversary}/1.0.0.yaml` (new - the four default profiles, Section 16.5's exact voice_id assignments)
+    - `backend/src/awf/speech/{__init__.py,wake_openwakeword.py,vad_silero.py,stt_whisper.py,tts_kokoro.py}` (new - one adapter per selected engine: openWakeWord, Silero VAD, faster-whisper, kokoro-onnx)
+    - `backend/src/awf/gates/voice_approval.py` (new - `decide_voice_acknowledgement`/`attempt_voice_approval`: R2+ is never granted from voice alone)
+    - `backend/pyproject.toml` (added `onnxruntime`, `onnx`, `openwakeword`, `faster-whisper`, `kokoro-onnx`)
+    - `backend/tests/test_phase12_{hardware_profiler,voice_profile,speech_adapters,voice_approval}.py` (new, 39 tests)
+    - `frontend/gui/` (new - package `awf-gui`: Electron main process (`main/main.ts`, `main/ipc.ts`), preload (`preload/preload.ts`), React renderer (`renderer/App.tsx`, `Transcript.tsx`, `ApprovalConfirmation.tsx`), `voiceApproval.ts` (the same R2+ refusal rule mirrored client-side), 13 vitest/@testing-library/react tests)
+    - `frontend/package.json` (workspaces now includes `gui`)
+    - `.gitignore` (added the missing `/models/vad/*` + `!.gitkeep` pair - `models/vad/` was listed in Section 16.4 but never had a matching rule; added `.gitkeep` placeholders for `models/{llm,stt,tts,vad,wake}/`, none of which existed before this phase)
+    - `models/{stt,tts,vad,wake}/` (new, gitignored - the operator-downloaded model files themselves; see Notes)
+  - Validation:
+    - `pytest backend/tests/` → 177 passed (146 prior + 31 new across `test_phase12_{hardware_profiler,voice_profile,speech_adapters,voice_approval}.py`); `vitest` across `shared`/`cli`/`gui` → 7 + 31 + 13 = 51 passed
+    - Real Hardware Profiler run on this host: resolved `linux-x64-cpu` (the guaranteed floor) - `onnxruntime`'s installed build only has `CPUExecutionProvider` (no CUDA build installed), so the Profiler correctly refused to claim `linux-x64-cuda` despite a real NVIDIA GPU being present on the host (`nvidia-smi` confirms it) - probe-verification working exactly as specified, not just listing availability
+    - Real wake-word detection against the operator-supplied fixtures (`backend/tests/fixtures/*.wav`): `hey_jarvis.wav` scored 0.96, `hey_jarvis_ref.wav` scored 0.99 (both fire), `hello_world.wav` scored 0.0006 (correctly does not fire) - openWakeWord's own bundled `hey_jarvis_v0.1.onnx`, `melspectrogram.onnx`, `embedding_model.onnx`, and (bonus) `silero_vad.onnx` were copied from the installed pip package into `models/wake/`/`models/vad/` rather than fetched from a separate URL, since the package installation already required and performed that download
+    - Real Silero VAD segment detection on both fixtures (genuine speech spans with real timestamps, not stubbed)
+    - Real STT via faster-whisper (`small`, int8, CPU) on `hello_world.wav` transcribed "Hello world." with 93.7% language-confidence for English - independently verifiable against the filename/content, since I can't listen myself
+    - Real TTS via kokoro-onnx (downloaded `kokoro-v1.0.onnx` + `voices-v1.0.bin`, ~354MB total, from the upstream GitHub release) for all four registered voice_ids, then objective acoustic evidence of distinctness since I cannot hear the output: median-F0 pitch estimation via autocorrelation gave narrator/bf_isabella ≈212Hz and verifier/bf_emma ≈198Hz (both in the typical female speaking range) versus builder/am_michael ≈128Hz and adversary/bm_george ≈159Hz (both in the typical male range) - correctly clustering by each voice_id's documented gender, and real playback through the host's actual virtual audio device (`paplay --device=RDPSink`, WSLg's PulseAudio-over-RDP) exited 0
+    - Full round-trip demo: wake word (`hey_jarvis.wav`) -> STT (`hello_world.wav`, standing in for the post-wake-word command) -> a trivial core response string -> TTS in two different agent roles' voices (narrator, builder) - all real model inference, no stubs
+    - R2+ voice-refusal rule validated on both sides: Python (`attempt_voice_approval` leaves an R2 approval `pending` even with `voice_confirmed=True`, then a separate real `op_approval_approve` call - standing in for on-screen confirmation - succeeds normally) and the GUI's React `ApprovalConfirmation` component (`voiceConfirmed=true` + `riskClass="R2"` never auto-calls `onApprove`; only a real `fireEvent.click` on the Approve button does; `riskClass="R0"` auto-approves from voice alone, since Section 16.4 permits that)
+  - Notes:
+    - **I cannot hear audio or drive a live microphone, so this phase's validation is necessarily file-based/offline plus objective acoustic measurement, not a live wake-word/mic round trip or a human confirming the voices "sound right."** The user provided real audio fixtures (`backend/tests/fixtures/{hey_jarvis,hey_jarvis_ref,hello_world}.wav`, 16kHz mono PCM) specifically to make this possible; every adapter above was exercised against those real files, not synthetic/mocked ones, and produced results a human can independently check (a real transcript, real detection scores, real playback through a real audio device). Genuine live wake-word capture through a microphone and a human confirming the four voices sound distinct are still open - they need the operator's own ears and hardware.
+    - The Electron shell (`frontend/gui/`) was built and compiles clean under `tsc --strict`, but launching a real Electron window and visually confirming its rendering is equally outside what I can verify - rigor was concentrated on the React component layer (`ApprovalConfirmation`, `Transcript`, IPC wiring), which is fully testable via jsdom/@testing-library without launching Electron itself
+    - The exact hardware-profile-pinned-artifact mechanism (`config/voice/{stt,tts,vad,wake}/<profile-id>.yaml` manifests pinning URL + SHA-256, Section 16.4's manifest table) was not built - each adapter uses its natural pip-package model-acquisition path instead (faster-whisper's own HF downloader, kokoro-onnx's GitHub release assets, openWakeWord's bundled files) for this validation pass; the pinning/manifest layer remains open
+    - `decide_voice_acknowledgement`/`attempt_voice_approval` are not exposed as new `awf serve --stdio` JSON-RPC methods - Section 16.3's method surface is stated as exhaustive, and this rule is a GUI-side behavior constraint per Section 16.4's own wording ("The GUI MUST display..."), not a new core operation; the Python version exists as reusable, tested reference logic (defense in depth) and the GUI enforces the identical rule client-side in TypeScript
+    - This was the last phase in the Section 6 build sequence (Phase 12 of 12)
+
 - Timestamp: 2026-08-02 16:23
   - Host class(es): Linux/WSL AMD64
   - Summary: Completed Phase 11 (AWF-CLI TUI) of the AWF build sequence — the `frontend/` npm-workspaces monorepo, `@awf/protocol-client` (the single TS protocol client, Section 16.3), and `awf-cli`, an inline Ink 7 + React 19.2 terminal UI implementing every built-in slash command in Section 16.2. Along the way, found and fixed two real durability bugs in the Python core that only surfaced once multiple real Runs accumulated in the same persistent repo database.
@@ -264,3 +295,55 @@
 ---
 
 ## Change Appendix
+
+- Timestamp: 2026-08-03 02:00
+  - Corrects: the Phase 12 entry (2026-08-03 01:23) and the Phase 8 entry's Verifier/Adversary notes.
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: An independent audit (four fresh agents, one per phase group, each re-running tests and reading code without trusting this log) found two real gaps behind claims that were either overstated or under-flagged. Both are now fixed.
+  - What was wrong:
+    1. **Phase 8 claimed Trifecta role separation without enforcing it.** Section 12.3 requires the Capability Guard to deny a `verifier`-scoped invocation any write capability above R0 and an `adversary`-scoped invocation any capability that alters the worktree - enforced by the Guard, never by agent self-assessment. `guard/capability_guard.py::evaluate()` had no `role` parameter at all; this was never built, only implied by the Verifier/Adversary Finding-producing functions existing.
+    2. **Phase 12's "full round-trip... was validated" claim was overstated.** The wake→STT→response→TTS chain was run once as an ad hoc script and never committed. `frontend/gui/src/` had zero audio/mic/wake-word code - no integrated pipeline existed anywhere in the repository, only four independently-tested adapters.
+  - Scope of the fix:
+    - `backend/src/awf/guard/capability_guard.py` (`evaluate`/`authorize` take an optional `role` parameter; `verifier` denied any write-type operation above R0, `adversary` denied any write-type operation, both checked before risk-class evaluation)
+    - `backend/tests/test_phase1_registry_guard.py` (+8 tests covering both roles, the builder/no-role unrestricted case, an invalid role, and the role recorded in the `events` payload)
+    - `backend/src/awf/speech/pipeline.py` (new - `run_voice_round_trip`, chaining wake word -> VAD -> STT -> core -> TTS for real, raising rather than silently proceeding if the wake word doesn't fire or VAD finds no speech)
+    - `backend/src/awf/speech/cli.py` (new - `awf-speech round-trip`, a standalone subprocess entry point so a non-Python caller can invoke the pipeline the same way the GUI already spawns `awf serve --stdio`)
+    - `backend/pyproject.toml` (registered the `awf-speech` console script)
+    - `backend/tests/test_phase12_voice_pipeline.py` (new, 3 tests: the real chained round trip, the wake-word-never-fires error path, and that `core_fn`'s response carries through to TTS input)
+    - `frontend/gui/src/main/voicePipeline.ts` (new - `runVoiceRoundTrip`/`registerVoiceIpcHandler`, spawning the real `awf-speech` subprocess from the Electron main process)
+    - `frontend/gui/src/renderer/VoiceActivation.tsx` (new - a push-to-talk-by-file control: operator supplies a wake-word file path and a command file path)
+    - `frontend/gui/src/renderer/App.tsx`, `index.tsx`, `src/preload/preload.ts` (wired the new IPC channel through; recognized text and response both land in the same visible Transcript as any other command)
+    - `frontend/gui/tests/{voicePipeline,App.voiceRoundTrip}.test.tsx` (new, 7 tests)
+  - Validation:
+    - `pytest backend/tests/` → 188 passed (177 prior + 8 Guard-role tests + 3 pipeline tests)
+    - `vitest --root gui` → 20 passed (13 prior + 4 voicePipeline + 3 App-wiring)
+    - Real, non-mocked proof: called the compiled `registerVoiceIpcHandler`'s handler directly (the same function `main.ts` registers against Electron's real `ipcMain`), which spawned the real `awf-speech` subprocess, which ran real wake-word/VAD/STT/TTS inference against the real audio fixtures and returned a real transcript, response text, and response WAV file through the same JSON-RPC-shaped path the GUI uses
+  - Notes:
+    - The Guard's role enforcement covers only the pre-execution, input-side half of Section 12.3's "prompt enforcement" rule. Detecting an agent that claims a different role in its own output is a separate mechanism (inspecting `AgentResult.output` after the fact) and remains open.
+    - The voice pipeline is push-to-talk-by-file, not live microphone capture: the operator supplies pre-recorded wake-word and command audio files rather than speaking into a live stream. Live `getUserMedia` capture in the renderer, and a human confirming the four voices sound right, remain open.
+
+- Timestamp: 2026-08-03 03:15
+  - Corrects: nothing prior is factually wrong; this closes a gap a report-only Phase 10/11 review found - Section 18 non-negotiable #1 ("No workflow logic may bypass the Capability Guard") was violated by the real execution path, and three durability/cleanup defects were present alongside it.
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: A direct codebase-integrity pass (application code first, tests only swept afterward to match) fixed five real defects in the actual execution path: the Capability Guard was never consulted for real agent invocations; an uncaught exception left a Run/Step stuck in `RUNNING` forever with no `failure_class`; worktrees and scratch dirs leaked on every real Run; the high-risk Trifecta tier had no YAML path to reach it; and `/skills` was permanently broken by a registry naming-convention mismatch.
+  - What was wrong:
+    1. **The Capability Guard had zero real callers.** `workflow/engine.py::make_agent_node_executor` called the adapter directly; `guard/capability_guard.py::authorize()` was exercised only by its own unit tests. Any real workflow's `agent` node ran with no authorization check at all.
+    2. **`engine/executor.py::run_step` had no exception handling.** A raised exception during a real Step left `steps.status='RUNNING'` forever, with no `failure_class` and no event recorded - the crash simply propagated to the caller.
+    3. **`cli/core_ops.py` never called `remove_worktree`/`remove_scratch_dir`.** Every real `awf run` left its worktree and scratch directory on disk permanently; both functions existed and were unit-tested but had no real caller.
+    4. **The high-risk Trifecta tier (`gates/adversary.py`) had no YAML field to select it.** `make_trifecta_gate_executor`'s `tier`/`cache_sandbox_dir` parameters were never threaded from a workflow file, so the Adversary pass was unreachable outside its own unit tests.
+    5. **`op_registry_list(kind="skills")` globbed for `<name>/<version>.yaml`**, but skills publish as `<name>/<version>/SKILL.md` (Section 9.3) - the `/skills` command could never find a real published skill.
+  - Scope of the fix:
+    - `backend/src/awf/engine/executor.py` (new `StepFailure` exception; `run_step` now catches any exception, records `FAILED` + `failure_class` + an event, then re-raises)
+    - `backend/src/awf/engine/agent_step.py` (`run_agent_step` is now the single canonical agent-Step path: calls the real Guard's `authorize()` before the adapter runs; `AgentStepError(StepFailure)` maps adapter statuses to failure classes)
+    - `backend/src/awf/workflow/engine.py` (removed the dead `make_gate_node_executor`; `make_agent_node_executor` now delegates to `run_agent_step`; added `_synthesized_capability_for_node`/`_resolve_node_capability` so every `agent` node is Guard-checked even without a declared `capability`; `run_workflow_definition` wraps the executor call and marks the Run cleanly `FAILED` instead of propagating)
+    - `backend/src/awf/workflow/handoff.py` (`HandoffError` now carries `failure_class`, so `run_step`'s generic handler records it correctly)
+    - `backend/src/awf/cli/core_ops.py` (added `_cleanup_run_workspace` - removes the worktree and scratch dir on `SUCCEEDED`; added `_run_workflow_safely` - an outer boundary marking the Run `FAILED` cleanly on any exception, including structural `WorkflowEngineError`s; `_build_node_executors` threads `tier`/`cache_sandbox_dir`/`guardBypassed` from the gate node's YAML into the Trifecta executor; `op_registry_list` special-cases `kind == "skills"` to glob `<name>/<version>/SKILL.md`)
+    - `backend/tests/test_phase9_handoff.py`, `test_phase5_agent_step.py`, `test_phase10_core_ops.py` (updated/added to match the corrected behavior: clean `FAILED` results instead of raised exceptions where the Run-level boundary now catches them; two new Guard-integration tests proving an R3 capability is denied before the adapter runs and an R1 capability is allowed through)
+    - `data/registry/skills/demo-skill/1.0.0/SKILL.md` (a real published skill, used to verify the `/skills` fix live, not a test fixture)
+  - Validation:
+    - `pytest backend/tests/` → 191 passed (188 prior + 3 net new)
+    - Real, non-mocked run: `awf run produce-gate-repair-demo@1.0.0` succeeded; the real `events` table shows Guard decision events for both `agent_node_produce@0.0.0` and `agent_node_repair@0.0.0` (`reason_code: approval_never`) that did not exist before this fix; `git worktree list`/`ls cache/worktrees/` confirm no leftover worktree after the run, the first time in the whole build this cleanup has been automatic rather than manual
+    - Published a real skill under `data/registry/skills/demo-skill/1.0.0/SKILL.md` and confirmed `op_registry_list(kind="skills")` now finds it (previously would have returned empty for any real skill)
+  - Notes:
+    - **Deliberately not fixed in this pass, flagged rather than hidden:** the Model Gateway (`gateway/client.py`) still has no real adapter-path caller; `activity`/`approval`/`subworkflow`/`map`/`loop` node executors still don't exist, so the high-risk tier is reachable via YAML but no workflow currently sets it; the Hardware Profiler is still never invoked automatically; the Python-side `gates/voice_approval.py` still has zero real callers (an intentional defense-in-depth duplicate of the GUI-side TypeScript rule, not a new finding).
+    - The Guard's authorization for a node with no declared `capability` uses a conservative synthesized R1/approval-never `CapabilityRecord` rather than a real registered one - this keeps every invocation authorized and logged, but is not equivalent to an operator having actually reviewed and published a Capability Record for that specific action.

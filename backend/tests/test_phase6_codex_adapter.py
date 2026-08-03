@@ -75,7 +75,10 @@ def test_invoke_refuses_danger_full_access_without_escalation():
 
 
 def test_invoke_allows_danger_full_access_with_explicit_escalation(monkeypatch):
+    captured = {}
+
     def fake_run(command, cwd, capture_output, text, timeout, stdin):
+        captured["command"] = command
         return SimpleNamespace(
             returncode=0,
             stdout=jsonl({"type": "turn.completed"}),
@@ -86,3 +89,9 @@ def test_invoke_allows_danger_full_access_with_explicit_escalation(monkeypatch):
 
     result = invoke(make_invocation(sandbox_mode="danger-full-access", container_escalation=True))
     assert result.status == AgentStatus.COMPLETED
+    assert captured["command"] == [
+        "codex", "exec", "do the thing",
+        "-s", "danger-full-access",
+        "-c", "approval_policy=on-request",
+        "--json",
+    ]

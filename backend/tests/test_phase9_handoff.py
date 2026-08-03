@@ -11,7 +11,7 @@ from awf.db.connection import get_connection
 from awf.engine.run import create_run
 from awf.workflow.definition import parse_workflow
 from awf.workflow.engine import run_workflow_definition
-from awf.workflow.handoff import HandoffError, make_handoff_node_executor
+from awf.workflow.handoff import make_handoff_node_executor
 
 
 def run_git(args, cwd):
@@ -147,7 +147,7 @@ def test_handoff_alternates_between_the_two_adapters(worktree, conn):
     assert calls == ["a", "b", "a"]
 
 
-def test_handoff_raises_when_agent_does_not_write_status_file(worktree, conn):
+def test_handoff_missing_status_file_fails_run_cleanly_with_tool_error(worktree, conn):
     def adapter_fn(invocation):
         return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
 
@@ -155,11 +155,24 @@ def test_handoff_raises_when_agent_does_not_write_status_file(worktree, conn):
     executor = make_handoff_node_executor(adapter_registry, worktree)
     workflow = make_handoff_workflow(max_hops=2)
 
-    with pytest.raises(HandoffError):
-        run_workflow_definition(conn, run_id="run-1", workflow=workflow, node_executors={"handoff": executor})
+    # run_workflow_definition catches the raised HandoffError at the Run
+    # level and returns a clean result - it does not propagate a raw
+    # exception to the caller. The hop's own Step already succeeded (the
+    # adapter completed); the missing-file check happens after, at the
+    # handoff executor level, so the Run fails even though that one Step
+    # did not.
+    result = run_workflow_definition(conn, run_id="run-1", workflow=workflow, node_executors={"handoff": executor})
+
+    assert result["status"] == "FAILED"
+    row = conn.execute("SELECT status FROM runs WHERE run_id = 'run-1'").fetchone()
+    assert row["status"] == "FAILED"
+    step_row = conn.execute(
+        "SELECT status FROM steps WHERE step_id = 'run-1:loop#1:hop1'"
+    ).fetchone()
+    assert step_row["status"] == "SUCCEEDED"
 
 
-def test_handoff_raises_when_adapter_does_not_complete(worktree, conn):
+def test_handoff_adapter_failure_fails_run_cleanly_with_tool_error(worktree, conn):
     def failing_adapter(invocation):
         return AgentResult(status=AgentStatus.FAILED, output={}, termination_reason="tool_error")
 
@@ -167,5 +180,11 @@ def test_handoff_raises_when_adapter_does_not_complete(worktree, conn):
     executor = make_handoff_node_executor(adapter_registry, worktree)
     workflow = make_handoff_workflow(max_hops=2)
 
-    with pytest.raises(HandoffError):
-        run_workflow_definition(conn, run_id="run-1", workflow=workflow, node_executors={"handoff": executor})
+    result = run_workflow_definition(conn, run_id="run-1", workflow=workflow, node_executors={"handoff": executor})
+
+    assert result["status"] == "FAILED"
+    step_row = conn.execute(
+        "SELECT status, failure_class FROM steps WHERE step_id = 'run-1:loop#1:hop1'"
+    ).fetchone()
+    assert step_row["status"] == "FAILED"
+    assert step_row["failure_class"] == "TOOL_ERROR"

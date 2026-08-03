@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "workspaces": [
     "shared",
-    "cli"
+    "cli",
+    "gui"
   ],
   "engines": {
     "node": ">=22"

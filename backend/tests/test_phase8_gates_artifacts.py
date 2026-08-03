@@ -1,3 +1,6 @@
+import hashlib
+import json
+
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.run import create_run, create_step
@@ -28,7 +31,11 @@ def test_write_finding_artifact_persists_row_and_content_addressed_file(tmp_path
     assert row["complete"] == 1
     target = artifacts_root / row["relative_path"]
     assert target.is_file()
-    assert row["sha256"] in row["relative_path"]
+
+    content = target.read_bytes()
+    assert hashlib.sha256(content).hexdigest() == row["sha256"]
+    decoded = json.loads(content)
+    assert decoded == finding.to_dict()
 
 
 def test_write_verdict_artifact_persists_row(tmp_path):
@@ -45,6 +52,10 @@ def test_write_verdict_artifact_persists_row(tmp_path):
     target = artifacts_root / row["relative_path"]
     assert target.is_file()
 
+    content = target.read_bytes()
+    assert hashlib.sha256(content).hexdigest() == row["sha256"]
+    assert json.loads(content) == verdict.to_dict()
+
 
 def test_identical_findings_produce_identical_content_hash(tmp_path):
     conn = make_conn(tmp_path)
@@ -54,6 +65,9 @@ def test_identical_findings_produce_identical_content_hash(tmp_path):
     id1 = write_finding_artifact(conn, artifacts_root=artifacts_root, run_id="run-1", step_id="step-1", finding=finding)
     id2 = write_finding_artifact(conn, artifacts_root=artifacts_root, run_id="run-1", step_id="step-1", finding=finding)
 
-    row1 = conn.execute("SELECT sha256 FROM artifacts WHERE artifact_id = ?", (id1,)).fetchone()
-    row2 = conn.execute("SELECT sha256 FROM artifacts WHERE artifact_id = ?", (id2,)).fetchone()
+    assert id1 != id2  # independently generated rows, not the same insert
+
+    row1 = conn.execute("SELECT sha256, relative_path FROM artifacts WHERE artifact_id = ?", (id1,)).fetchone()
+    row2 = conn.execute("SELECT sha256, relative_path FROM artifacts WHERE artifact_id = ?", (id2,)).fetchone()
     assert row1["sha256"] == row2["sha256"]
+    assert row1["relative_path"] == row2["relative_path"]  # same content-addressed path

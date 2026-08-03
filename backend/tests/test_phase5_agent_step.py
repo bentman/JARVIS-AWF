@@ -9,6 +9,7 @@ from awf.db.connection import get_connection
 from awf.engine.agent_step import AgentStepError, run_agent_step
 from awf.engine.run import create_run, create_step
 from awf.isolation.worktree import create_worktree
+from awf.registry.capability_record import CapabilityRecord, Effects, Identity
 
 
 def run_git(args, cwd):
@@ -105,7 +106,68 @@ def test_no_commit_when_adapter_does_not_complete(repo_and_worktree, conn, monke
         )
 
     assert commit_calls == []
-    row = conn.execute("SELECT status FROM steps WHERE step_id = 'step-1'").fetchone()
-    assert row["status"] == "RUNNING"
+    row = conn.execute("SELECT status, failure_class FROM steps WHERE step_id = 'step-1'").fetchone()
+    assert row["status"] == "FAILED"
+    assert row["failure_class"] == "TOOL_ERROR"
     status = run_git(["status", "--porcelain"], cwd=worktree).stdout
     assert "partial.txt" in status  # written by the adapter, left uncommitted
+
+
+def _capability(risk_class: str, approval: str) -> CapabilityRecord:
+    return CapabilityRecord(
+        identity=Identity(type="cli-adapter-action", provider="claude-code", name="demo_action", version="1.0.0"),
+        schema_input="", schema_output="",
+        effects=Effects(operation="update", reversible=True, idempotent=False, external_side_effect=True),
+        risk_class=risk_class,
+        approval=approval,
+    )
+
+
+def test_capability_guard_denies_r3_capability_before_adapter_runs(repo_and_worktree, conn):
+    _repo_root, worktree = repo_and_worktree
+    adapter_calls = []
+
+    def adapter_fn(invocation: AgentInvocation) -> AgentResult:
+        adapter_calls.append(invocation)
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    invocation = AgentInvocation(objective="do something forbidden", inputs={}, workspace_root=worktree)
+    with pytest.raises(AgentStepError):
+        run_agent_step(
+            conn,
+            step_id="step-1",
+            run_id="run-1",
+            worktree_path=worktree,
+            invocation=invocation,
+            adapter_fn=adapter_fn,
+            commit_message="should never be used",
+            capability=_capability("R3", "never"),
+        )
+
+    assert adapter_calls == []  # the Guard blocked it before the adapter ever ran
+    row = conn.execute("SELECT status, failure_class FROM steps WHERE step_id = 'step-1'").fetchone()
+    assert row["status"] == "FAILED"
+    assert row["failure_class"] == "POLICY_DENIED"
+
+
+def test_capability_guard_allows_r1_capability_and_adapter_runs(repo_and_worktree, conn):
+    _repo_root, worktree = repo_and_worktree
+
+    def adapter_fn(invocation: AgentInvocation) -> AgentResult:
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    invocation = AgentInvocation(objective="do something safe", inputs={}, workspace_root=worktree)
+    output = run_agent_step(
+        conn,
+        step_id="step-1",
+        run_id="run-1",
+        worktree_path=worktree,
+        invocation=invocation,
+        adapter_fn=adapter_fn,
+        commit_message="agent: safe action",
+        capability=_capability("R1", "never"),
+    )
+
+    assert output["status"] == "COMPLETED"
+    row = conn.execute("SELECT status FROM steps WHERE step_id = 'step-1'").fetchone()
+    assert row["status"] == "SUCCEEDED"

@@ -1,0 +1,10 @@
+persona:
+  name: Verifier
+  description: Performs independent code review and regression tests against candidate artifacts.
+  style_prompt: Precise and dispassionate, reporting findings without editorializing.
+tts:
+  candidates:
+    - {engine: kokoro, model: kokoro-v1.0, voice_id: bf_emma, speed: 1.0, style: {}, priority: 1, enabled: true}
+  fallback: {mode: none, allow_quality_degrade: false}
+privacy: {local_only: true}
+limits: {max_seconds_per_utterance: 30}

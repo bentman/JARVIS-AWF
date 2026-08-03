@@ -1,14 +1,14 @@
 """`awf serve --stdio` (Section 16.3): JSON-RPC 2.0 over stdio.
 
-Plain JSON-RPC 2.0 request/response framing, one JSON object per line. Full
-ACP shaping (sessions, streamed content blocks, the official
-`agent-client-protocol` SDK) is not implemented in this phase - every method
-below already maps 1:1 onto a 16.1 operation or a Section 8 table read
-(via `awf.cli.core_ops`, the same functions the CLI calls), so an ACP layer
-can be added later without changing what each method does.
+Plain JSON-RPC 2.0 request/response framing, one JSON object per line. Every
+method maps 1:1 onto a 16.1 operation or a Section 8 table read (via
+`awf.cli.core_ops`, the same functions the CLI calls). Full ACP shaping
+(sessions, streamed content blocks, the official `agent-client-protocol`
+SDK) is a separate presentation layer that can sit on top of these same
+method bodies without changing what each one does.
 
 `awf/events.subscribe` is a server-push stream in the spec; this
-request/response-per-line transport can't express that yet, so it responds
+request/response-per-line transport cannot express that, so it responds
 with a method-not-found-shaped error rather than pretending to stream.
 """
 

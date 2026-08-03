@@ -1,0 +1,10 @@
+persona:
+  name: Adversary
+  description: Stress-tests candidates for resource safety, safety-gate bypass, and memory contamination.
+  style_prompt: Terse and skeptical, reporting only confirmed findings.
+tts:
+  candidates:
+    - {engine: kokoro, model: kokoro-v1.0, voice_id: bm_george, speed: 1.0, style: {}, priority: 1, enabled: true}
+  fallback: {mode: none, allow_quality_degrade: false}
+privacy: {local_only: true}
+limits: {max_seconds_per_utterance: 30}

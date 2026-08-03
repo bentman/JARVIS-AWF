@@ -3,6 +3,10 @@
 A Step's input/output persist to the `steps` table before workflow logic
 proceeds past it. A Step already `SUCCEEDED` is never re-invoked - resuming a
 Run re-walks the same ordered Step list and skips anything already done.
+
+When `fn` raises, the Step is recorded `FAILED` with a Section 13.3 failure
+class before the exception propagates - a Step MUST NOT be left `RUNNING`
+forever just because nothing above this function caught the error.
 """
 
 import json
@@ -13,6 +17,17 @@ from awf.clock import utc_now_rfc3339
 from awf.events.writer import write_event
 
 StepFn = Callable[[dict], dict]
+
+DEFAULT_FAILURE_CLASS = "INTERNAL"
+
+
+class StepFailure(RuntimeError):
+    """Raise with `failure_class` set to record a specific Section 13.3
+    class; any other exception is recorded as INTERNAL."""
+
+    def __init__(self, message: str, *, failure_class: str = DEFAULT_FAILURE_CLASS):
+        super().__init__(message)
+        self.failure_class = failure_class
 
 
 def run_step(
@@ -39,7 +54,21 @@ def run_step(
         actor="engine", reason_code="step_started",
     )
 
-    output = fn(input_payload)
+    try:
+        output = fn(input_payload)
+    except Exception as exc:
+        failure_class = getattr(exc, "failure_class", DEFAULT_FAILURE_CLASS)
+        conn.execute(
+            "UPDATE steps SET status = 'FAILED', failure_class = ?, ended_at = ? WHERE step_id = ?",
+            (failure_class, utc_now_rfc3339(), step_id),
+        )
+        conn.commit()
+        write_event(
+            conn, run_id=run_id, step_id=step_id, new_status="FAILED",
+            actor="engine", reason_code=failure_class.lower(),
+            payload_json=json.dumps({"error": str(exc)}),
+        )
+        raise
 
     conn.execute(
         "UPDATE steps SET status = 'SUCCEEDED', output_json = ?, ended_at = ? WHERE step_id = ?",

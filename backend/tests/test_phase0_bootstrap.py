@@ -31,7 +31,25 @@ def test_init_db_creates_all_tables(tmp_path):
 def test_init_db_is_idempotent(tmp_path):
     db_path = tmp_path / "awf.db"
     init_db(db_path)
-    init_db(db_path)  # must not raise
+
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            "INSERT INTO runs (run_id, workflow_ref, status, input_json, budget_json, created_at, updated_at) "
+            "VALUES ('run-1', 'wf@1.0.0#sha256:abc', 'CREATED', '{}', '{}', 't', 't')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    init_db(db_path)  # must not raise, and must not touch existing data
+
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute("SELECT run_id, status FROM runs WHERE run_id = 'run-1'").fetchone()
+    finally:
+        conn.close()
+    assert row == ("run-1", "CREATED")
 
 
 def test_uuid7_has_correct_version_and_variant():

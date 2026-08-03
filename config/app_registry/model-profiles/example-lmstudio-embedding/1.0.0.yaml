@@ -1,0 +1,12 @@
+# Example Model Profile (Section 11) - a reference shape, not an operator's
+# real registry entry. Never resolved for a real Run (registry/resolve.py::
+# DATA_ONLY_KINDS); see docs/adr/0001-example-model-profiles-location.md.
+# `lm_studio` is LiteLLM's provider id for a local LM Studio server; like
+# llamafile, it has no fixed model catalog - `model` is a label for whatever
+# the operator has loaded, not a lookup key.
+purpose: embedding
+privacy: {maximum_data_class: internal, local_only: true}
+candidates:
+  - {provider: lm_studio, model: local-embedding-model, priority: 1, enabled: true, api_base: "http://localhost:1234/v1"}
+fallback: {mode: none, allow_quality_degrade: false}
+limits: {max_input_tokens_per_call: 8192, max_output_tokens_per_call: 1, max_cost_usd_per_call: 0.0}

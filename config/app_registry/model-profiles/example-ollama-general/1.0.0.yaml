@@ -1,0 +1,9 @@
+# Example Model Profile (Section 11) - a reference shape, not an operator's
+# real registry entry. Never resolved for a real Run (registry/resolve.py::
+# DATA_ONLY_KINDS); see docs/adr/0001-example-model-profiles-location.md.
+purpose: general-reasoning
+privacy: {maximum_data_class: internal, local_only: true}
+candidates:
+  - {provider: ollama, model: phi4-mini:latest, priority: 1, enabled: true, api_base: "http://localhost:11434"}
+fallback: {mode: none, allow_quality_degrade: false}
+limits: {max_input_tokens_per_call: 4096, max_output_tokens_per_call: 256, max_cost_usd_per_call: 0.0}

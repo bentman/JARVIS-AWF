@@ -4,8 +4,8 @@ Invoked as a subprocess (not imported) so "start" can genuinely terminate the
 process via os._exit before Step 2 persists - a real crash, not a simulated one.
 
 Usage:
-    python crash_runner.py start  <db_path> <counter_path>
-    python crash_runner.py resume <db_path> <counter_path>
+    python test_phase4_mid_run_crash_runner.py start  <db_path> <counter_path>
+    python test_phase4_mid_run_crash_runner.py resume <db_path> <counter_path>
 """
 
 import os

@@ -1,0 +1,12 @@
+# Example Model Profile (Section 11) - a reference shape, not an operator's
+# real registry entry. Never resolved for a real Run (registry/resolve.py::
+# DATA_ONLY_KINDS); see docs/adr/0001-example-model-profiles-location.md.
+# `gpt-4o-mini` is a real, currently-recognized model in LiteLLM's own
+# bundled model registry as of authoring - re-verify against
+# `litellm.model_cost` whenever the pinned litellm version changes.
+purpose: adversary
+privacy: {maximum_data_class: internal, local_only: false}
+candidates:
+  - {provider: openai, model: gpt-4o-mini, priority: 1, enabled: true, api_key_secret_name: openai-api-key}
+fallback: {mode: none, allow_quality_degrade: false}
+limits: {max_input_tokens_per_call: 8192, max_output_tokens_per_call: 512, max_cost_usd_per_call: 0.05}

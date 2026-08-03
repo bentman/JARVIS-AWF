@@ -20,6 +20,23 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-03 08:15
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Added ADR-0001, relocating example Model Profiles off `backend/tests/fixtures/` and onto `config/app_registry/model-profiles/` as clearly-labeled, non-operational references spanning all five `purpose` values and both local and cloud providers; fixed a related `op_registry_list` gap that would have listed them as real.
+  - Scope:
+    - `docs/adr/0001-example-model-profiles-location.md` (new)
+    - `config/app_registry/model-profiles/example-{ollama-general,llamacpp-coding,lmstudio-embedding,anthropic-judge,openai-adversary}/1.0.0.yaml` (new)
+    - `backend/tests/fixtures/model_profiles/local_ollama_r0.yaml` (removed, superseded)
+    - `backend/tests/test_phase3_model_gateway.py` (retargeted at the new location; tests labeled `test_*_example_*`)
+    - `backend/src/awf/cli/core_ops.py` (`op_registry_list` now honors `registry.resolve.DATA_ONLY_KINDS`, matching `resolve_registry_object`/`op_registry_get`)
+    - `backend/tests/test_phase10_core_ops.py` (+1 regression test)
+  - Validation:
+    - `pytest backend/tests/` → 228 passed (227 prior + 1 net new)
+    - Real, non-mocked checks: `resolve_registry_object` confirmed to still refuse these files for a real Run; `example-ollama-general` and `example-llamacpp-coding` each completed a genuine round trip through the Model Gateway against real local Ollama/llama-server instances; the two cloud examples' model ids confirmed present in LiteLLM's own bundled model registry and reachable (real `AuthenticationError`, not "model not found") against the live OpenAI/Anthropic APIs, no credentials being available in this environment to go further
+  - Notes:
+    - `registry/resolve.py::DATA_ONLY_KINDS` itself is unchanged - these examples are still never resolvable by a real Run, only listable-until-this-fix and loadable directly by path in tests.
+    - `example-lmstudio-embedding`'s model name remains a placeholder label - no LM Studio instance was available to verify against.
+
 - Timestamp: 2026-08-03 01:23
   - Host class(es): Linux/WSL2 (WSLg, PulseAudio-over-RDP virtual audio devices), AMD64
   - Summary: Completed Phase 12 (AWF-GUI voice) of the AWF build sequence, the final phase in the build sequence - the Hardware Profiler, all four Voice Profile registry objects, real STT/TTS/VAD/wake-word adapters, the R2+ voice-approval refusal rule (enforced on both the Python core and the GUI), and the `frontend/gui/` Electron+React desktop shell. A full wake-word -> STT -> response -> TTS round trip was validated for real using the operator-supplied audio fixtures, with two agent roles producing measurably distinct synthesized voices.

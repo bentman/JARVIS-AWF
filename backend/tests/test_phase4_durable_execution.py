@@ -8,7 +8,7 @@ from awf.engine.executor import run_step, run_workflow
 from awf.engine.recovery import scan_incomplete_runs
 from awf.engine.run import create_run, create_step
 
-CRASH_RUNNER = Path(__file__).resolve().parent / "fixtures" / "engine" / "crash_runner.py"
+CRASH_RUNNER = Path(__file__).resolve().parent / "scripts" / "test_phase4_mid_run_crash_runner.py"
 
 
 def make_db(tmp_path):

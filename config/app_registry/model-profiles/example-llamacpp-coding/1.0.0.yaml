@@ -1,0 +1,15 @@
+# Example Model Profile (Section 11) - a reference shape, not an operator's
+# real registry entry. Never resolved for a real Run (registry/resolve.py::
+# DATA_ONLY_KINDS); see docs/adr/0001-example-model-profiles-location.md.
+# `llamafile` is LiteLLM's provider id for a local llama.cpp-compatible
+# server; a server's loaded GGUF (and therefore `model`) is whatever the
+# operator started it with, not a fixed catalog entry - verified live
+# against a real llama-server instance at authoring time (`/v1/models`),
+# not assumed. Qwen3 reasons before answering, so `max_output_tokens_per_call`
+# must be large enough to reach the final answer, not just the reasoning.
+purpose: coding
+privacy: {maximum_data_class: internal, local_only: true}
+candidates:
+  - {provider: llamafile, model: Qwen3-8B-Q5_K_M.gguf, priority: 1, enabled: true, api_base: "http://127.0.0.1:8080/v1"}
+fallback: {mode: none, allow_quality_degrade: false}
+limits: {max_input_tokens_per_call: 8192, max_output_tokens_per_call: 1024, max_cost_usd_per_call: 0.0}

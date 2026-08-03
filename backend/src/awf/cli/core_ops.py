@@ -28,7 +28,7 @@ from awf.isolation.scratch import create_scratch_dir, remove_scratch_dir, scratc
 from awf.isolation.worktree import create_worktree, remove_worktree, worktree_path
 from awf.registry.capability_record import parse_capability_record
 from awf.registry.model_profile import load_model_profile, parse_model_profile
-from awf.registry.resolve import CONFIG_ROOT, DATA_ROOT, resolve_registry_object
+from awf.registry.resolve import CONFIG_ROOT, DATA_ONLY_KINDS, DATA_ROOT, resolve_registry_object
 from awf.secrets.store import list_secret_names, set_secret
 from awf.workflow.approval import make_approval_node_executor
 from awf.workflow.definition import load_workflow, parse_workflow
@@ -305,8 +305,15 @@ def op_registry_list(repo_root: Path, *, kind: str) -> list[dict]:
     # Skills are published as <name>/<version>/SKILL.md (Section 9.3), not
     # <name>/<version>.yaml like every other kind.
     is_skill = kind == "skills"
+    roots = (("data", repo_root / DATA_ROOT), ("config", repo_root / CONFIG_ROOT))
+    if kind in DATA_ONLY_KINDS:
+        # Section 9.3: this kind has no config/app_registry/ counterpart -
+        # anything under config/app_registry/<kind>/ (e.g. reference examples,
+        # ADR-0001) is never a real, resolvable registry object and MUST NOT
+        # be listed as if it were one.
+        roots = roots[:1]
     results = []
-    for source_name, root in (("data", repo_root / DATA_ROOT), ("config", repo_root / CONFIG_ROOT)):
+    for source_name, root in roots:
         kind_dir = root / kind
         if not kind_dir.is_dir():
             continue

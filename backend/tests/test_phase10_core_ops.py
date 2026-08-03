@@ -172,6 +172,18 @@ def test_registry_publish_then_list_and_get_find_it(tmp_path):
     assert fetched["source"] == "data"
 
 
+def test_registry_list_never_shows_config_side_model_profiles(tmp_path):
+    # Section 9.3: model-profiles has no config/app_registry/ counterpart -
+    # ADR-0001's reference examples under config/app_registry/model-profiles/
+    # MUST NOT appear in a listing as if they were real, resolvable objects.
+    repo_root, conn = make_repo(tmp_path)
+    example_dir = repo_root / "config" / "app_registry" / "model-profiles" / "example-demo"
+    example_dir.mkdir(parents=True)
+    (example_dir / "1.0.0.yaml").write_text("purpose: coding\n")
+
+    assert op_registry_list(repo_root, kind="model-profiles") == []
+
+
 def test_secret_set_and_list_names_roundtrip(tmp_path):
     repo_root, conn = make_repo(tmp_path)
     key = Fernet.generate_key().decode("ascii")

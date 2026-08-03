@@ -14,19 +14,46 @@ from awf.registry.model_profile import (
 )
 from awf.secrets.store import set_secret
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures" / "model_profiles"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+EXAMPLE_PROFILES_ROOT = REPO_ROOT / "config" / "app_registry" / "model-profiles"
+
+# ADR-0001: these are reference examples, never resolved by a real Run
+# (registry/resolve.py::DATA_ONLY_KINDS) - tests load them directly by path.
+EXAMPLE_PROFILE_NAMES = (
+    "example-ollama-general",
+    "example-llamacpp-coding",
+    "example-lmstudio-embedding",
+    "example-anthropic-judge",
+    "example-openai-adversary",
+)
 
 
-def load_fixture(name: str):
-    return load_model_profile(FIXTURES / name)
+def load_example_profile(name: str, version: str = "1.0.0"):
+    return load_model_profile(EXAMPLE_PROFILES_ROOT / name / f"{version}.yaml")
 
 
-def test_load_local_ollama_profile():
-    profile = load_fixture("local_ollama_r0.yaml")
+@pytest.mark.parametrize("name", EXAMPLE_PROFILE_NAMES)
+def test_every_example_profile_parses(name):
+    profile = load_example_profile(name)
+    assert profile.enabled_candidates_by_priority()
+
+
+def test_load_example_ollama_general_reasoning_profile():
+    profile = load_example_profile("example-ollama-general")
     assert profile.purpose == "general-reasoning"
     candidate = profile.enabled_candidates_by_priority()[0]
     assert candidate.litellm_model == "ollama/phi4-mini:latest"
-    assert candidate.api_base == "http://172.31.96.1:11434"
+    assert candidate.api_base == "http://localhost:11434"
+
+
+def test_example_judge_and_adversary_profiles_use_different_provider_families():
+    # Section 12.3: Adversary MUST resolve to a different model family than
+    # the Builder; these two examples demonstrate that pairing.
+    judge = load_example_profile("example-anthropic-judge")
+    adversary = load_example_profile("example-openai-adversary")
+    judge_candidate = judge.enabled_candidates_by_priority()[0]
+    adversary_candidate = adversary.enabled_candidates_by_priority()[0]
+    assert judge_candidate.provider != adversary_candidate.provider
 
 
 def test_parse_rejects_missing_field():
@@ -52,7 +79,7 @@ def _fake_response(text: str):
 
 
 def test_complete_calls_litellm_with_candidate_fields(monkeypatch):
-    profile = load_fixture("local_ollama_r0.yaml")
+    profile = load_example_profile("example-ollama-general")
     captured = {}
 
     def fake_completion(**kwargs):
@@ -65,7 +92,7 @@ def test_complete_calls_litellm_with_candidate_fields(monkeypatch):
 
     assert result == "pong"
     assert captured["model"] == "ollama/phi4-mini:latest"
-    assert captured["api_base"] == "http://172.31.96.1:11434"
+    assert captured["api_base"] == "http://localhost:11434"
     assert captured["max_tokens"] == 256
     assert "api_key" not in captured
 

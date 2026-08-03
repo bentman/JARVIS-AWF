@@ -86,3 +86,29 @@ def test_approval_approve_over_jsonrpc(tmp_path):
     )
 
     assert response["result"]["status"] == "approved"
+
+
+def test_approval_approve_over_jsonrpc_refuses_r2_from_voice_channel(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+    create_run(conn, run_id="run-1", workflow_ref="demo@1.0.0")
+    from awf.engine.run import create_step
+
+    create_step(conn, step_id="s1", run_id="run-1", node_id="n1")
+    conn.execute(
+        "INSERT INTO approvals (approval_id, run_id, step_id, action_digest, status, requested_at) "
+        "VALUES ('ap-1', 'run-1', 's1', 'sha256:x', 'pending', '2026-01-01T00:00:00Z')"
+    )
+    conn.commit()
+
+    response = send(
+        repo_root, conn,
+        {
+            "jsonrpc": "2.0", "id": 6, "method": "awf/approval.approve",
+            "params": {"approvalId": "ap-1", "channel": "voice", "riskClass": "R2"},
+        },
+    )
+
+    assert response["result"]["status"] == "pending"
+    assert response["result"]["requires_on_screen_confirmation"] is True
+    row = conn.execute("SELECT status FROM approvals WHERE approval_id = 'ap-1'").fetchone()
+    assert row["status"] == "pending"

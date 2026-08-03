@@ -24,7 +24,8 @@ from awf.gates.adversary import (
 from awf.gates.artifacts import write_finding_artifact, write_verdict_artifact
 from awf.gates.schema import Finding
 from awf.gates.verdict import build_verdict
-from awf.gates.verifier import run_verifier_check
+from awf.gates.verifier import run_llm_review, run_verifier_check
+from awf.registry.model_profile import ModelProfile
 
 
 def make_trifecta_gate_executor(
@@ -35,10 +36,21 @@ def make_trifecta_gate_executor(
     tier: str = "default",
     cache_sandbox_dir: Path | None = None,
     guard_bypassed: bool = False,
+    review_profile: ModelProfile | None = None,
+    review_secret_key: bytes | None = None,
 ):
     def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
         def fn(_payload: dict) -> dict:
             findings: list[Finding] = [run_verifier_check(check_fn, summary=check_summary)]
+            if review_profile is not None:
+                findings.append(
+                    run_llm_review(
+                        review_profile,
+                        candidate_summary=check_summary,
+                        conn=conn,
+                        secret_key=review_secret_key,
+                    )
+                )
             terminal_failure = False
 
             if tier == "high-risk":

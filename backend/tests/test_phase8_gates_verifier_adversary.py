@@ -8,8 +8,9 @@ from awf.gates.adversary import (
     check_resource_safety,
     check_safety_gate_bypass,
 )
-from awf.gates.verifier import run_verifier_check
+from awf.gates.verifier import run_llm_review, run_verifier_check
 from awf.hardware.gpu_sampler import GpuSamplerUnavailable
+from awf.registry.model_profile import parse_model_profile
 
 
 def test_verifier_check_pass_yields_low_severity_finding():
@@ -23,6 +24,55 @@ def test_verifier_check_fail_yields_high_severity_finding():
     finding = run_verifier_check(lambda: False, summary="add(2,3)==5")
     assert finding.severity == "high"
     assert "FAILED" in finding.summary
+
+
+def _judge_profile():
+    return parse_model_profile(
+        {
+            "purpose": "judge",
+            "privacy": {"maximum_data_class": "internal", "local_only": True},
+            "candidates": [{"provider": "ollama", "model": "phi4-mini:latest", "priority": 1, "enabled": True}],
+            "fallback": {"mode": "none", "allow_quality_degrade": False},
+            "limits": {"max_input_tokens_per_call": 512, "max_output_tokens_per_call": 64, "max_cost_usd_per_call": 0},
+        }
+    )
+
+
+def test_llm_review_pass_response_yields_low_severity_finding(monkeypatch):
+    monkeypatch.setattr("awf.gates.verifier.complete", lambda *a, **k: "PASS: looks correct")
+    finding = run_llm_review(_judge_profile(), candidate_summary="add(a, b) returns a + b")
+
+    assert finding.role == "verifier"
+    assert finding.category == "correctness"
+    assert finding.severity == "low"
+    assert finding.details["passed"] is True
+    assert finding.details["model"] == "ollama/phi4-mini:latest"
+
+
+def test_llm_review_fail_response_yields_high_severity_finding(monkeypatch):
+    monkeypatch.setattr("awf.gates.verifier.complete", lambda *a, **k: "FAIL: off-by-one in the loop bound")
+    finding = run_llm_review(_judge_profile(), candidate_summary="for i in range(n): ...")
+
+    assert finding.severity == "high"
+    assert finding.details["passed"] is False
+    assert "off-by-one" in finding.summary
+
+
+def test_llm_review_routes_through_the_model_gateway(monkeypatch):
+    captured = {}
+
+    def fake_complete(profile, messages, *, conn=None, secret_key=None):
+        captured["profile"] = profile
+        captured["messages"] = messages
+        return "PASS: fine"
+
+    monkeypatch.setattr("awf.gates.verifier.complete", fake_complete)
+    profile = _judge_profile()
+
+    run_llm_review(profile, candidate_summary="the candidate diff")
+
+    assert captured["profile"] is profile
+    assert captured["messages"][-1] == {"role": "user", "content": "the candidate diff"}
 
 
 def test_safety_gate_bypass_none_when_not_bypassed():

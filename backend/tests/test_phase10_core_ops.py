@@ -202,7 +202,7 @@ def publish_workflow(repo_root, raw: dict) -> None:
 
 
 def test_op_run_start_fails_cleanly_for_an_unbuilt_node_type(tmp_path):
-    # `subworkflow` validates as a real Section 12.2 node type but has no
+    # `activity` validates as a real Section 12.2 node type but has no
     # executor built - op_run_start MUST NOT let that raise a raw exception;
     # the Run is marked FAILED and a clean result is returned instead.
     repo_root, conn = make_git_repo(tmp_path)
@@ -214,7 +214,7 @@ def test_op_run_start_fails_cleanly_for_an_unbuilt_node_type(tmp_path):
             "metadata": {"name": "unbuilt-node-demo", "version": "1.0.0", "digest": "sha256:demo"},
             "spec": {
                 "inputSchema": {}, "outputSchema": {}, "budgets": {},
-                "nodes": [{"id": "a", "type": "subworkflow", "next": None}],
+                "nodes": [{"id": "a", "type": "activity", "next": None}],
                 "outputs": {},
             },
         },
@@ -226,3 +226,115 @@ def test_op_run_start_fails_cleanly_for_an_unbuilt_node_type(tmp_path):
     assert "error" in result
     row = conn.execute("SELECT status FROM runs WHERE run_id = ?", (result["run_id"],)).fetchone()
     assert row["status"] == "FAILED"
+
+
+def publish_trivial_gate_workflow(repo_root, *, name: str, version: str = "1.0.0") -> None:
+    publish_workflow(
+        repo_root,
+        {
+            "apiVersion": "awf/v1",
+            "kind": "Workflow",
+            "metadata": {"name": name, "version": version, "digest": "sha256:demo"},
+            "spec": {
+                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "nodes": [{"id": "check", "type": "gate", "checkCommand": "true", "next": None}],
+                "outputs": {},
+            },
+        },
+    )
+
+
+def test_op_run_start_runs_a_real_subworkflow_node_to_completion(tmp_path):
+    repo_root, conn = make_git_repo(tmp_path)
+    publish_trivial_gate_workflow(repo_root, name="child-ok")
+    publish_workflow(
+        repo_root,
+        {
+            "apiVersion": "awf/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "delegates-to-child", "version": "1.0.0", "digest": "sha256:demo"},
+            "spec": {
+                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "nodes": [{"id": "delegate", "type": "subworkflow", "workflowRef": "child-ok@1.0.0", "next": None}],
+                "outputs": {},
+            },
+        },
+    )
+
+    result = op_run_start(repo_root, conn, workflow_ref="delegates-to-child@1.0.0", input_data={})
+
+    assert result["status"] == "SUCCEEDED"
+    # A real, independent child `runs` row was created and completed.
+    child_runs = conn.execute(
+        "SELECT run_id, status FROM runs WHERE workflow_ref = 'child-ok@1.0.0'"
+    ).fetchall()
+    assert len(child_runs) == 1
+    assert child_runs[0]["status"] == "SUCCEEDED"
+
+
+def test_op_run_start_runs_a_real_map_node_fanning_out_to_three_children(tmp_path):
+    repo_root, conn = make_git_repo(tmp_path)
+    publish_trivial_gate_workflow(repo_root, name="child-ok")
+    publish_workflow(
+        repo_root,
+        {
+            "apiVersion": "awf/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "fan-out-demo", "version": "1.0.0", "digest": "sha256:demo"},
+            "spec": {
+                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "nodes": [
+                    {
+                        "id": "fan-out", "type": "map", "workflowRef": "child-ok@1.0.0",
+                        "items": ["a", "b", "c"], "maxItems": 5, "maxConcurrency": 2, "next": None,
+                    }
+                ],
+                "outputs": {},
+            },
+        },
+    )
+
+    result = op_run_start(repo_root, conn, workflow_ref="fan-out-demo@1.0.0", input_data={})
+
+    assert result["status"] == "SUCCEEDED"
+    child_runs = conn.execute(
+        "SELECT run_id, status FROM runs WHERE workflow_ref = 'child-ok@1.0.0'"
+    ).fetchall()
+    assert len(child_runs) == 3
+    assert all(row["status"] == "SUCCEEDED" for row in child_runs)
+
+
+def test_op_run_start_runs_a_real_loop_node_until_max_iterations(tmp_path):
+    # The trivial gate child always passes, so `conditionField: "passed"`
+    # never goes false - proving the loop genuinely re-runs a real child
+    # Run each iteration and correctly waits for operator disposition
+    # instead of looping forever or silently succeeding.
+    repo_root, conn = make_git_repo(tmp_path)
+    publish_trivial_gate_workflow(repo_root, name="child-ok")
+    publish_workflow(
+        repo_root,
+        {
+            "apiVersion": "awf/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "retry-loop-demo", "version": "1.0.0", "digest": "sha256:demo"},
+            "spec": {
+                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "nodes": [
+                    {
+                        "id": "retry", "type": "loop", "workflowRef": "child-ok@1.0.0",
+                        "maxIterations": 2, "conditionField": "passed", "next": None,
+                    }
+                ],
+                "outputs": {},
+            },
+        },
+    )
+
+    result = op_run_start(repo_root, conn, workflow_ref="retry-loop-demo@1.0.0", input_data={})
+
+    assert result["status"] == "WAITING_INPUT"
+    child_runs = conn.execute(
+        "SELECT run_id, status FROM runs WHERE workflow_ref = 'child-ok@1.0.0'"
+    ).fetchall()
+    assert len(child_runs) == 2
+    assert all(row["status"] == "SUCCEEDED" for row in child_runs)

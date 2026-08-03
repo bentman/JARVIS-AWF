@@ -1,5 +1,6 @@
 import pytest
 
+from awf.cli.core_ops import CoreOpError, op_approval_approve
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.run import create_run, create_step
@@ -71,3 +72,42 @@ def test_r2_approval_can_still_be_approved_via_the_real_non_voice_path(tmp_path)
     # A real on-screen (click/keypress) confirmation still works normally.
     screen_result = op_approval_approve(conn, approval_id="ap-1")
     assert screen_result["status"] == "approved"
+
+
+def test_core_op_approve_with_voice_channel_and_r2_risk_stays_pending(tmp_path):
+    # The real caller this closes: op_approval_approve itself now enforces
+    # the R2+ voice-only refusal rule (Section 16.4), not just the GUI's own
+    # separate TypeScript copy of it.
+    conn = make_conn(tmp_path)
+
+    result = op_approval_approve(conn, approval_id="ap-1", channel="voice", risk_class="R2")
+
+    assert result["status"] == "pending"
+    assert result["requires_on_screen_confirmation"] is True
+    row = conn.execute("SELECT status FROM approvals WHERE approval_id = 'ap-1'").fetchone()
+    assert row["status"] == "pending"
+
+
+def test_core_op_approve_with_voice_channel_and_r0_risk_actually_approves(tmp_path):
+    conn = make_conn(tmp_path)
+
+    result = op_approval_approve(conn, approval_id="ap-1", channel="voice", risk_class="R0")
+
+    assert result["status"] == "approved"
+    row = conn.execute("SELECT status FROM approvals WHERE approval_id = 'ap-1'").fetchone()
+    assert row["status"] == "approved"
+
+
+def test_core_op_approve_with_voice_channel_requires_risk_class(tmp_path):
+    conn = make_conn(tmp_path)
+
+    with pytest.raises(CoreOpError):
+        op_approval_approve(conn, approval_id="ap-1", channel="voice")
+
+
+def test_core_op_approve_default_channel_is_unaffected(tmp_path):
+    conn = make_conn(tmp_path)
+
+    result = op_approval_approve(conn, approval_id="ap-1")
+
+    assert result["status"] == "approved"

@@ -1,8 +1,9 @@
 """Workflow engine (Section 12): executes a WorkflowDefinition as durable Steps.
 
-`activity`, `agent`, `gate`, and `handoff` nodes are interpreted; `approval`,
-`subworkflow`, `map`, and `loop` are validated as node shapes (Section 12.2,
-in `workflow.nodes`) but have no execution semantics yet.
+`agent`, `gate`, `handoff`, `approval`, `subworkflow`, `map`, and `loop`
+nodes are interpreted; `activity` is validated as a node shape (Section
+12.2, in `workflow.nodes`) but has no execution semantics yet - no
+executor is registered for it anywhere the engine is actually invoked.
 
 Branching is driven by two engine-specific node fields that are NOT part of
 the Section 12.1 spec shape: `next` (the node id to run afterward; absent
@@ -11,13 +12,17 @@ jump to when the gate fails).
 
 Any node executor MAY return `{"waiting_input": True, ...}` (the `handoff`
 executor does this when it exhausts `maxHops` without its termination
-condition being set, Section 13.4) - the engine stops there and returns
-`status: "WAITING_INPUT"` without advancing to `next`, matching the "MUST
-NOT silently continue or silently succeed" rule.
+condition being set, Section 13.4; `approval` does this while a decision is
+still pending; `loop` does this when it exhausts `maxIterations` while its
+condition still holds) - the engine stops there and returns `status:
+"WAITING_INPUT"` without advancing to `next`, matching the "MUST NOT
+silently continue or silently succeed" rule.
 
-`handoff` nodes manage their own per-hop Steps internally (Section 13.4:
-"each hop is a normal, durable Step") - the engine does not create a Step
-row for the handoff node itself, only for `activity`/`agent`/`gate`.
+`handoff` and `loop` nodes manage their own internal Step/Run state
+(Section 13.4: "each hop is a normal, durable Step"; each `loop` iteration
+is itself a fully durable child Run) - the engine does not create an outer
+Step row for either node type itself, only for `agent`/`gate`/`approval`/
+`subworkflow`/`map`.
 
 Every `agent` node passes through the Capability Guard (Section 9.2) before
 its adapter runs: a node MAY declare `capability: {name, version}` to
@@ -46,11 +51,11 @@ from awf.workflow.definition import WorkflowDefinition
 NodeExecutor = Callable[[sqlite3.Connection, str, str, dict], dict]
 AdapterFn = Callable[[AgentInvocation], "AgentResult"]
 
-EXECUTABLE_NODE_TYPES = ("activity", "agent", "gate", "handoff")
+EXECUTABLE_NODE_TYPES = ("activity", "agent", "gate", "handoff", "approval", "subworkflow", "map", "loop")
 
 # Node types that manage their own internal Step rows and should not get a
 # generic outer Step created for them by the engine.
-SELF_STEPPING_NODE_TYPES = ("handoff",)
+SELF_STEPPING_NODE_TYPES = ("handoff", "loop")
 
 
 class WorkflowEngineError(RuntimeError):

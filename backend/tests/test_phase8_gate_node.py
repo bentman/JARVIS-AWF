@@ -4,6 +4,7 @@ from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.run import create_run
 from awf.gates.gate_node import make_trifecta_gate_executor
+from awf.registry.model_profile import parse_model_profile
 from awf.workflow.definition import parse_workflow
 from awf.workflow.engine import run_workflow_definition
 
@@ -74,6 +75,44 @@ def test_default_tier_gate_produces_verdict_and_finding_artifacts(tmp_path):
     finding_content = read_artifact_json(conn, artifacts_root, finding_rows[0]["artifact_id"])
     assert finding_content["severity"] == "low"
     assert finding_content["category"] == "correctness"
+
+
+def test_gate_with_review_profile_adds_a_real_llm_review_finding_via_the_gateway(tmp_path, monkeypatch):
+    monkeypatch.setattr("awf.gates.verifier.complete", lambda *a, **k: "PASS: reviewed, looks correct")
+
+    conn = make_conn(tmp_path)
+    workflow = make_workflow()
+    artifacts_root = tmp_path / "artifacts"
+
+    def agent_executor(conn, run_id, step_id, node):
+        return {"ok": True}
+
+    review_profile = parse_model_profile(
+        {
+            "purpose": "judge",
+            "privacy": {"maximum_data_class": "internal", "local_only": True},
+            "candidates": [{"provider": "ollama", "model": "phi4-mini:latest", "priority": 1, "enabled": True}],
+            "fallback": {"mode": "none", "allow_quality_degrade": False},
+            "limits": {"max_input_tokens_per_call": 512, "max_output_tokens_per_call": 64, "max_cost_usd_per_call": 0},
+        }
+    )
+    gate_executor = make_trifecta_gate_executor(
+        check_fn=lambda: True, check_summary="demo check", artifacts_root=artifacts_root,
+        review_profile=review_profile,
+    )
+
+    result = run_workflow_definition(
+        conn, run_id="run-1", workflow=workflow,
+        node_executors={"agent": agent_executor, "gate": gate_executor},
+    )
+
+    assert result["status"] == "SUCCEEDED"
+    finding_rows = conn.execute(
+        "SELECT * FROM artifacts WHERE artifact_type = 'finding' ORDER BY created_at"
+    ).fetchall()
+    assert len(finding_rows) == 2  # deterministic check + the real LLM review
+    contents = [read_artifact_json(conn, artifacts_root, row["artifact_id"]) for row in finding_rows]
+    assert any("reviewed, looks correct" in c["summary"] for c in contents)
 
 
 def test_gate_fails_then_repairs_then_passes_produces_two_verdicts(tmp_path):

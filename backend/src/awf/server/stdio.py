@@ -63,7 +63,12 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
     if method == "awf/approval.list":
         return ops.op_approval_list(conn)
     if method == "awf/approval.approve":
-        return ops.op_approval_approve(conn, approval_id=params["approvalId"])
+        return ops.op_approval_approve(
+            conn,
+            approval_id=params["approvalId"],
+            channel=params.get("channel", "manual"),
+            risk_class=params.get("riskClass"),
+        )
     if method == "awf/approval.reject":
         return ops.op_approval_reject(conn, approval_id=params["approvalId"], reason=params.get("reason", ""))
     if method == "awf/artifact.list":

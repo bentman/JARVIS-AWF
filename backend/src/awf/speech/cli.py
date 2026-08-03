@@ -12,6 +12,8 @@ import json
 import sys
 from pathlib import Path
 
+from awf.db.bootstrap import init_db
+from awf.db.connection import get_connection
 from awf.speech.pipeline import VoicePipelineError, run_voice_round_trip
 
 
@@ -41,8 +43,13 @@ def run(argv: list[str], repo_root: Path) -> int:
     args = build_parser().parse_args(argv)
     models = repo_root / "models"
 
+    db_path = repo_root / "data" / "awf_db" / "awf.db"
+    init_db(db_path)
+    conn = get_connection(db_path)
+
     try:
         result = run_voice_round_trip(
+            conn,
             wake_audio_path=Path(args.wake_audio_path),
             command_audio_path=Path(args.command_audio_path),
             wake_model_path=models / "wake" / "hey_jarvis_v0.1.onnx",
@@ -56,6 +63,8 @@ def run(argv: list[str], repo_root: Path) -> int:
     except VoicePipelineError as exc:
         print(json.dumps({"error": str(exc)}))
         return 1
+    finally:
+        conn.close()
 
     from awf.speech.tts_kokoro import write_wav
 
@@ -65,6 +74,7 @@ def run(argv: list[str], repo_root: Path) -> int:
     print(
         json.dumps(
             {
+                "hardware_profile_id": result.hardware_profile_id,
                 "wake_detected": result.wake_detected,
                 "wake_score": result.wake_score,
                 "speech_segments": result.speech_segments,

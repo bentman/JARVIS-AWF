@@ -11,8 +11,9 @@ def test_all_eight_types_recognized():
 
 def _required_extra(node_type):
     return {
-        "map": {"maxItems": 5, "maxConcurrency": 2},
-        "loop": {"maxIterations": 3},
+        "subworkflow": {"workflowRef": "child@1.0.0"},
+        "map": {"maxItems": 5, "maxConcurrency": 2, "workflowRef": "child@1.0.0", "items": [1, 2]},
+        "loop": {"maxIterations": 3, "workflowRef": "child@1.0.0"},
         "handoff": {
             "initiatingAgent": {"adapter": "claude-code", "objective": "x"},
             "receivingAgent": {"adapter": "codex", "objective": "y"},

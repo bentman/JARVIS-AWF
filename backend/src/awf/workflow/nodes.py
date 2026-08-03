@@ -16,8 +16,9 @@ NODE_TYPES = (
 # the initiating and receiving Agent references, a structured handoff
 # payload schema, and maxHops (required, no default).
 REQUIRED_FIELDS_BY_TYPE = {
-    "map": ("maxItems", "maxConcurrency"),
-    "loop": ("maxIterations",),
+    "subworkflow": ("workflowRef",),
+    "map": ("maxItems", "maxConcurrency", "workflowRef", "items"),
+    "loop": ("maxIterations", "workflowRef"),
     "handoff": ("initiatingAgent", "receivingAgent", "payloadSchema", "maxHops"),
 }
 

@@ -17,6 +17,7 @@ these same values non-interactively.
 """
 
 import json
+import os
 import subprocess
 import tomllib
 from pathlib import Path
@@ -78,6 +79,7 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
         "-c", f"approval_policy={approval_policy}",
         "--json",
     ]
+    command += list(invocation.constraints.get("mcp_extra_args", []))
 
     try:
         result = subprocess.run(
@@ -87,6 +89,7 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
             text=True,
             timeout=timeout_seconds,
             stdin=subprocess.DEVNULL,
+            env={**os.environ, **invocation.constraints.get("mcp_env_overlay", {})},
         )
     except subprocess.TimeoutExpired:
         return AgentResult(

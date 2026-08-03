@@ -24,7 +24,7 @@ def jsonl(*events) -> str:
 def test_invoke_builds_workspace_write_on_request_command(monkeypatch):
     captured = {}
 
-    def fake_run(command, cwd, capture_output, text, timeout, stdin):
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
         captured["command"] = command
         return SimpleNamespace(
             returncode=0,
@@ -51,7 +51,7 @@ def test_invoke_builds_workspace_write_on_request_command(monkeypatch):
 
 
 def test_invoke_maps_turn_failed_to_failed(monkeypatch):
-    def fake_run(command, cwd, capture_output, text, timeout, stdin):
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
         return SimpleNamespace(
             returncode=1,
             stdout=jsonl(
@@ -80,7 +80,7 @@ def test_default_profile_is_committed_to_the_repo_not_the_operators_home_dir():
 def test_invoke_sources_sandbox_defaults_from_the_committed_profile(monkeypatch, tmp_path):
     captured = {}
 
-    def fake_run(command, cwd, capture_output, text, timeout, stdin):
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
         captured["command"] = command
         return SimpleNamespace(returncode=0, stdout=jsonl({"type": "turn.completed"}), stderr="")
 
@@ -108,7 +108,7 @@ def test_invoke_refuses_danger_full_access_without_escalation():
 def test_invoke_allows_danger_full_access_with_explicit_escalation(monkeypatch):
     captured = {}
 
-    def fake_run(command, cwd, capture_output, text, timeout, stdin):
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
         captured["command"] = command
         return SimpleNamespace(
             returncode=0,

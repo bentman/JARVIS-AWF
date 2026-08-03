@@ -28,6 +28,7 @@ from awf.isolation.scratch import create_scratch_dir, remove_scratch_dir, scratc
 from awf.isolation.worktree import create_worktree, remove_worktree, worktree_path
 from awf.registry.agent_manifest import load_agent_manifest
 from awf.registry.capability_record import parse_capability_record
+from awf.registry.mcp_server import parse_mcp_server
 from awf.registry.model_profile import load_model_profile, parse_model_profile
 from awf.registry.resolve import CONFIG_ROOT, DATA_ONLY_KINDS, DATA_ROOT, resolve_registry_object
 from awf.secrets.store import list_secret_names, set_secret
@@ -354,6 +355,9 @@ def op_registry_validate(path: Path) -> dict:
     if "identity" in raw and "risk_class" in raw:
         record = parse_capability_record(raw)
         return {"kind": "CapabilityRecord", "ref": record.ref, "valid": True}
+    if "type" in raw and raw.get("type") in ("stdio", "http"):
+        server = parse_mcp_server(raw)
+        return {"kind": "McpServer", "ref": server.ref, "valid": True}
     if "candidates" in raw and "privacy" in raw:
         parse_model_profile(raw)
         return {"kind": "ModelProfile", "valid": True}
@@ -375,10 +379,14 @@ def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path
         elif "identity" in raw and "risk_class" in raw:
             record = parse_capability_record(raw)
             kind, name, version = "capabilities", record.identity.name, record.identity.version
+        elif "type" in raw and raw.get("type") in ("stdio", "http"):
+            server = parse_mcp_server(raw)
+            kind, name, version = "mcp", server.name, server.version
         else:
             raise CoreOpError(
-                f"{path}: registry publish only supports Workflow, Capability Record, and "
-                "Agent Manifest objects (kinds with self-describing name/version) in this phase"
+                f"{path}: registry publish only supports Workflow, Capability Record, "
+                "MCP Server, and Agent Manifest objects (kinds with self-describing "
+                "name/version) in this phase"
             )
         extension = "yaml"
 

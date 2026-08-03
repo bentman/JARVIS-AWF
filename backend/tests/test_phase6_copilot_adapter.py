@@ -20,7 +20,7 @@ def make_invocation(**constraints) -> AgentInvocation:
 def test_invoke_builds_explicit_allow_tool_command_no_yolo(monkeypatch):
     captured = {}
 
-    def fake_run(command, cwd, capture_output, text, timeout, stdin):
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
         captured["command"] = command
         return SimpleNamespace(returncode=0, stdout='{"type":"done"}', stderr="")
 
@@ -45,7 +45,7 @@ def test_invoke_extracts_final_assistant_message(monkeypatch):
     ]
     stdout = "\n".join(json.dumps(e) for e in events)
 
-    def fake_run(command, cwd, capture_output, text, timeout, stdin):
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
         return SimpleNamespace(returncode=0, stdout=stdout, stderr="")
 
     monkeypatch.setattr("awf.adapters.copilot_cli.subprocess.run", fake_run)
@@ -56,7 +56,7 @@ def test_invoke_extracts_final_assistant_message(monkeypatch):
 
 
 def test_invoke_maps_nonzero_exit_to_failed(monkeypatch):
-    def fake_run(command, cwd, capture_output, text, timeout, stdin):
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
         return SimpleNamespace(returncode=1, stdout="", stderr="Error: No authentication information found.")
 
     monkeypatch.setattr("awf.adapters.copilot_cli.subprocess.run", fake_run)

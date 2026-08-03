@@ -213,6 +213,41 @@ def test_registry_list_agents_finds_the_real_shipped_config_defaults():
     assert {"builder", "verifier", "adversary"} <= names
 
 
+REAL_MCP_SERVER = REPO_ROOT / "config" / "app_registry" / "mcp" / "context7" / "1.0.0.yaml"
+
+
+def test_registry_validate_recognizes_mcp_server():
+    result = op_registry_validate(REAL_MCP_SERVER)
+    assert result["kind"] == "McpServer"
+    assert result["ref"] == "context7@1.0.0"
+    assert result["valid"] is True
+
+
+def test_registry_publish_mcp_server_writes_data_registry_and_index(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+
+    result = op_registry_publish(repo_root, conn, path=REAL_MCP_SERVER)
+
+    assert result["kind"] == "mcp"
+    assert result["name"] == "context7"
+    published_path = Path(result["path"])
+    assert published_path.read_bytes() == REAL_MCP_SERVER.read_bytes()
+
+    row = conn.execute(
+        "SELECT * FROM registry_index WHERE kind = ? AND name = ? AND version = ?",
+        (result["kind"], result["name"], result["version"]),
+    ).fetchone()
+    assert row["source"] == "data"
+    assert row["digest"] == result["digest"]
+
+
+def test_registry_list_mcp_finds_the_real_shipped_config_defaults():
+    listed = op_registry_list(REPO_ROOT, kind="mcp")
+
+    names = {row["name"] for row in listed if row["source"] == "config"}
+    assert {"context7"} <= names
+
+
 def test_registry_list_never_shows_config_side_model_profiles(tmp_path):
     # Section 9.3: model-profiles has no config/app_registry/ counterpart -
     # ADR-0001's reference examples under config/app_registry/model-profiles/

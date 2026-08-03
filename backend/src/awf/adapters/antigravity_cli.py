@@ -12,6 +12,7 @@ scratch project unless `--add-dir <workspace_root> --new-project` is passed
 """
 
 import json
+import os
 import subprocess
 
 from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
@@ -40,6 +41,7 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
         "--add-dir", str(invocation.workspace_root),
         "--new-project",
     ]
+    command += list(invocation.constraints.get("mcp_extra_args", []))
 
     try:
         result = subprocess.run(
@@ -49,6 +51,7 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
             text=True,
             timeout=timeout_seconds,
             stdin=subprocess.DEVNULL,
+            env={**os.environ, **invocation.constraints.get("mcp_env_overlay", {})},
         )
     except subprocess.TimeoutExpired:
         return AgentResult(

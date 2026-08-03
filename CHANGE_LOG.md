@@ -322,6 +322,22 @@
   - Validation:
     - `cat CHANGE_LOG.md` output `# CHANGE_LOG.md`...
 
+- Timestamp: 2026-08-03 14:49
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: ADR-0003 implemented - MCP servers are rendered into each adapter's own config format at Run time and connected by the adapter itself; AWF still has no MCP client. Details, mechanism, and schema: `docs/adr/0003-mcp-server-registry-schema.md`.
+  - Scope:
+    - `backend/src/awf/registry/mcp_server.py` (new), `backend/src/awf/mcp/render.py` (new)
+    - `backend/src/awf/engine/agent_step.py`, `backend/src/awf/workflow/engine.py` (resolve/trust-gate/render/event wiring)
+    - `backend/src/awf/adapters/{claude_code,codex_cli,antigravity_cli,copilot_cli}.py` (consume rendered extra args + env overlay)
+    - `backend/src/awf/cli/core_ops.py` (`mcp` publish/validate branch)
+    - `config/app_registry/mcp/context7/1.0.0.yaml` (shipped default)
+    - `backend/tests/test_baseline_mcp_{server,render}.py`, `test_baseline_agent_step_mcp.py`, plus additions to `test_baseline_agent_manifest_wiring.py` and `test_phase10_core_ops.py`
+  - Validation:
+    - `pytest backend/tests/` → 268 passed
+    - Real, non-mocked run: a real `context7@1.0.0` manifest ref drove the actual Claude Code adapter through the real `run_agent_step` path - rendered `mcp/claude-code.mcp.json`, a real `mcp_rendered` event, and a genuine `resolve-library-id("react")` tool call returning `/reactjs/react.dev`, with the API key never touching any file. Demo run/step/event rows and worktree removed afterward.
+  - Notes:
+    - The `fetch` default drafted during design used a nonexistent npm package (`@modelcontextprotocol/server-fetch` 404s - the real reference server is the Python package `mcp-server-fetch` via `uvx`). Dropped rather than shipped, to avoid adding a second per-invocation runtime; only `context7` ships this pass.
+
 ---
 
 ## Change Appendix

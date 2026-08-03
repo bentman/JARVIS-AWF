@@ -119,6 +119,32 @@ def test_agent_ref_voice_is_attached_to_the_step_output(tmp_path, conn):
     assert output["voice"] == "builder@1.0.0"
 
 
+def test_agent_ref_mcp_list_is_threaded_through_to_the_adapter(tmp_path, conn):
+    publish_manifest(
+        tmp_path,
+        "fetch-user",
+        "name: fetch-user\nversion: 1.0.0\ndescription: x\nadapter: claude-code\nmcp: [fetch@1.0.0]\n",
+    )
+    fetch_dir = tmp_path / "config" / "app_registry" / "mcp" / "fetch"
+    fetch_dir.mkdir(parents=True)
+    (fetch_dir / "1.0.0.yaml").write_text(
+        "name: fetch\nversion: 1.0.0\ntype: stdio\ncommand: npx\n"
+        "args: ['-y', '@modelcontextprotocol/server-fetch']\n"
+    )
+    captured = {}
+
+    def fake_adapter(invocation: AgentInvocation) -> AgentResult:
+        captured["invocation"] = invocation
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    executor = make_agent_node_executor({"claude-code": fake_adapter}, tmp_path, tmp_path)
+    node = {"id": "build", "type": "agent", "agentRef": "fetch-user@1.0.0", "objective": "fetch a page"}
+
+    executor(conn, "run-1", "step-1", node)
+
+    assert "--mcp-config" in captured["invocation"].constraints["mcp_extra_args"]
+
+
 def test_node_without_agent_ref_is_unaffected(tmp_path, conn):
     # Additive, not breaking: a node with no agentRef keeps today's
     # behavior exactly - raw `adapter`/`role` fields, self-permitting

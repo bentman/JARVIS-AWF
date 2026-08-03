@@ -7,6 +7,7 @@ escalation - this adapter never passes it.
 """
 
 import json
+import os
 import subprocess
 
 from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
@@ -34,6 +35,7 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
         "--permission-mode", permission_mode,
         "--output-format", "json",
     ]
+    command += list(invocation.constraints.get("mcp_extra_args", []))
 
     try:
         result = subprocess.run(
@@ -42,6 +44,7 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
+            env={**os.environ, **invocation.constraints.get("mcp_env_overlay", {})},
         )
     except subprocess.TimeoutExpired:
         return AgentResult(

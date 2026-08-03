@@ -87,14 +87,17 @@ column: config-root objects carry none (inclusion in the repository is the
 review, Section 9.3); `data/registry/` objects carry `local`/`trusted`/
 `quarantined`/`blocked`, and step 2 above is what actually acts on it.
 
-Two default servers ship under `config/app_registry/mcp/`: `fetch` (stdio,
-the official MCP reference server, no secret needed) and `context7` (http,
-`https://mcp.context7.com/mcp`, API key via `header_secrets`). `github`
-(remote hosted endpoint, plain PAT, no Docker or local process) and
-`playwright` (`npx @playwright/mcp@latest`, Microsoft's official package -
-distinct from the similarly-named third-party
-`@executeautomation/playwright-mcp-server`) remain real, documented
-options for a later addition.
+One default server ships under `config/app_registry/mcp/`: `context7`
+(http, `https://mcp.context7.com/mcp`, API key via `header_secrets`). The
+official MCP reference `fetch` server (`mcp-server-fetch`, run via `uvx`)
+is Python-tooling-only - no npm package exists for it - and is not shipped
+this pass, to avoid introducing a second per-invocation runtime (`uvx`
+alongside `npx`) for one example server; nothing prevents a `data/registry/`
+entry for it later using the real command. `github` (remote hosted
+endpoint, plain PAT, no Docker or local process) and `playwright` (`npx
+@playwright/mcp@latest`, Microsoft's official package - distinct from the
+similarly-named third-party `@executeautomation/playwright-mcp-server`)
+remain real, documented options for a later addition.
 
 ## The tradeoff accepted
 
@@ -121,7 +124,7 @@ Copilot CLI's `preToolUse` hook (Section 10.2, still unbuilt) is the seam
 5. `cli/core_ops.py` - `op_registry_publish`/`op_registry_validate` gain
    an `mcp` branch (`op_registry_list` already works generically for this
    kind).
-6. Ship the `fetch` and `context7` default definitions.
+6. Ship the `context7` default definition.
 7. Check each adapter's current config target against its own docs before
    writing that adapter's renderer - Section 10.2 already warns these
    move. Codex is the awkward one: it reads `~/.codex/config.toml` by
@@ -133,7 +136,7 @@ Copilot CLI's `preToolUse` hook (Section 10.2, still unbuilt) is the seam
 
 ## Acceptance
 
-A manifest with `mcp: [fetch@1.0.0]` drives a real Run where the adapter
+A manifest with `mcp: [context7@1.0.0]` drives a real Run where the adapter
 actually calls a tool from it. The same workflow with the field omitted
 renders nothing. A quarantined ref is refused before the adapter starts.
 `events` shows the rendered set. No secret exists on disk anywhere.

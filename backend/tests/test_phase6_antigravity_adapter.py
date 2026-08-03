@@ -20,7 +20,7 @@ def make_invocation(**constraints) -> AgentInvocation:
 def test_invoke_builds_sandboxed_accept_edits_command_bound_to_workspace(monkeypatch):
     captured = {}
 
-    def fake_run(command, cwd, capture_output, text, timeout, stdin):
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
         captured["command"] = command
         return SimpleNamespace(
             returncode=0,
@@ -45,7 +45,7 @@ def test_invoke_builds_sandboxed_accept_edits_command_bound_to_workspace(monkeyp
 
 
 def test_invoke_maps_error_status_to_failed(monkeypatch):
-    def fake_run(command, cwd, capture_output, text, timeout, stdin):
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
         return SimpleNamespace(
             returncode=1,
             stdout=json.dumps({"status": "ERROR", "error": "invalid model"}),

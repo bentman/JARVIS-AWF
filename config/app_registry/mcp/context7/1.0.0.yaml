@@ -1,0 +1,7 @@
+name: context7
+version: 1.0.0
+type: http
+url: https://mcp.context7.com/mcp
+header_secrets:
+  CONTEXT7_API_KEY: context7-api-key
+tools: ["resolve-library-id", "get-library-docs"]

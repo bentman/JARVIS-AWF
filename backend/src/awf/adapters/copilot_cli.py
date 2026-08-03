@@ -14,6 +14,7 @@ contents.
 """
 
 import json
+import os
 import subprocess
 
 from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
@@ -59,6 +60,7 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
     command = ["copilot", "-p", invocation.objective, "--output-format", "json", "--no-color"]
     for tool in allowed_tools:
         command += ["--allow-tool", tool]
+    command += list(invocation.constraints.get("mcp_extra_args", []))
 
     try:
         result = subprocess.run(
@@ -68,6 +70,7 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
             text=True,
             timeout=timeout_seconds,
             stdin=subprocess.DEVNULL,
+            env={**os.environ, **invocation.constraints.get("mcp_env_overlay", {})},
         )
     except subprocess.TimeoutExpired:
         return AgentResult(

@@ -20,6 +20,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-03 08:40
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Aligned `backend/tests/fixtures/` naming to the test that owns each fixture (`test_phaseN/test_phaseN_<name>`), establishing a consistent pattern for future fixture placement.
+  - Scope: `backend/tests/fixtures/capabilities/*.yaml` renamed and relocated under `backend/tests/fixtures/test_phase1/`; the three test files referencing them updated to match.
+  - Validation: `pytest backend/tests/` → 228 passed, no change in count.
+  - Notes: Scoped to the capability-record fixtures only, per explicit instruction; audio fixtures under `test_phase12` and their tests were left untouched.
+
 - Timestamp: 2026-08-03 08:15
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Added ADR-0001, relocating example Model Profiles off `backend/tests/fixtures/` and onto `config/app_registry/model-profiles/` as clearly-labeled, non-operational references spanning all five `purpose` values and both local and cloud providers; fixed a related `op_registry_list` gap that would have listed them as real.

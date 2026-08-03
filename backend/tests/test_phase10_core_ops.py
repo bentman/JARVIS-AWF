@@ -128,7 +128,7 @@ def test_artifact_list_and_read(tmp_path):
 
 
 def test_registry_validate_recognizes_capability_record():
-    result = op_registry_validate(FIXTURES / "capabilities" / "read_file_r0.yaml")
+    result = op_registry_validate(FIXTURES / "test_phase1" / "test_phase1_read_file_r0.yaml")
     assert result["kind"] == "CapabilityRecord"
     assert result["valid"] is True
 
@@ -142,7 +142,7 @@ def test_registry_validate_rejects_garbage(tmp_path):
 
 def test_registry_publish_capability_record_writes_data_registry_and_index(tmp_path):
     repo_root, conn = make_repo(tmp_path)
-    source = FIXTURES / "capabilities" / "read_file_r0.yaml"
+    source = FIXTURES / "test_phase1" / "test_phase1_read_file_r0.yaml"
 
     result = op_registry_publish(repo_root, conn, path=source)
 
@@ -162,7 +162,7 @@ def test_registry_publish_capability_record_writes_data_registry_and_index(tmp_p
 
 def test_registry_publish_then_list_and_get_find_it(tmp_path):
     repo_root, conn = make_repo(tmp_path)
-    source = FIXTURES / "capabilities" / "read_file_r0.yaml"
+    source = FIXTURES / "test_phase1" / "test_phase1_read_file_r0.yaml"
     published = op_registry_publish(repo_root, conn, path=source)
 
     listed = op_registry_list(repo_root, kind="capabilities")

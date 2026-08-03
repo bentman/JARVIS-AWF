@@ -106,7 +106,7 @@ def test_registry_validate_command(tmp_path, capsys):
     from pathlib import Path
 
     repo_root = make_repo(tmp_path)
-    fixture = Path(__file__).resolve().parent / "fixtures" / "capabilities" / "read_file_r0.yaml"
+    fixture = Path(__file__).resolve().parent / "fixtures" / "test_phase1" / "test_phase1_read_file_r0.yaml"
 
     exit_code = cli_main.run(["registry", "validate", str(fixture)], repo_root)
 

@@ -421,3 +421,23 @@
   - Notes:
     - This closes the last item from the original deferred-items list (Model Gateway, Hardware Profiler, node executors, voice_approval.py) - all four have now been given real callers and live-verified, except `activity`, which remains explicitly unbuilt and flagged (2026-08-03 06:10 entry).
     - The GUI's own TypeScript enforcement (`frontend/gui/src/renderer/ApprovalConfirmation.tsx`) is unchanged and still independently correct - this fix adds a second, authoritative enforcement point in the core, it doesn't replace the GUI-side one (defense in depth, per the original Phase 12 design intent).
+
+- Timestamp: 2026-08-03 07:05
+  - Corrects: the note in the 2026-08-03 06:10 entry flagging "`activity` is the one Section 12.2 node type still with no executor anywhere."
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: `activity` now has a real executor - all eight Section 12.2 node types have working execution semantics for the first time in the build.
+  - What was wrong: `activity` was listed in `workflow/engine.py::EXECUTABLE_NODE_TYPES` since the original Phase 7 build (a pre-existing mis-categorization, not introduced by any prior fix in this series), but `cli/core_ops.py` never registered an executor for it - a real workflow reaching an `activity` node failed with "no executor registered," caught cleanly by the existing safety net but never actually running anything.
+  - Scope of the fix:
+    - `backend/src/awf/workflow/nodes.py` (`activity` now requires a `function` field)
+    - `backend/src/awf/workflow/activities.py` (new - `ACTIVITY_REGISTRY`: `hardware_probe` wraps `run_hardware_profiler` - the R0 hardware-probe activity Section 12.3's Adversary resource-safety obligation describes, now invocable mid-Run, not just at voice setup; `gpu_utilization_sample` wraps `sample_gpu_utilization`)
+    - `backend/src/awf/workflow/engine.py` (new `make_activity_node_executor`: looks up `node["function"]` in the registry and runs it through the normal `run_step` durability path inside the Step's own `fn`, so an unregistered name is recorded as a real `FAILED`/`INVALID_INPUT` Step, not raised before any Step exists to record it)
+    - `backend/src/awf/cli/core_ops.py` (`_build_node_executors` registers `"activity"` unconditionally, same as `agent`)
+    - `backend/tests/test_baseline_activity_node.py` (new, 3 tests: a real hardware-probe run persists correctly, an unregistered name fails the Step cleanly, and a replay after `SUCCEEDED` returns the cached output without re-probing)
+    - `backend/tests/test_phase7_workflow_nodes.py`, `test_phase10_core_ops.py` (updated for the new required field; the pre-existing "unbuilt node type" test switched to a real runtime error - an unregistered activity name - since no node type is unbuilt anymore)
+    - `backend/tests/test_phase7_workflow_definition.py` (fixture regression caught and fixed: two tests used a bare `{"type": "activity"}` node with no `function`, which no longer parses now that the field is required)
+  - Validation:
+    - `pytest backend/tests/` → 223 passed (219 prior + 4 net new)
+    - Real, non-mocked run against the actual repo: published a real `activity` workflow calling `hardware_probe`, ran it via `awf run`, confirmed `SUCCEEDED`, and - by querying the real `data/awf_db/awf.db` directly - the Step's `output_json` contained a genuine `"profile_id": "linux-x64-cpu"` from the real Hardware Profiler, not a stub. Demo workflow file and DB rows removed afterward; `git status` shows no residue.
+  - Notes:
+    - **All eight Section 12.2 node types now have real execution semantics.** This closes the entire deferred-items list first flagged in the 2026-08-03 03:15 entry (Model Gateway, Hardware Profiler, node executors x5, voice_approval.py).
+    - `gpu_utilization_sample` is registered but has no workflow currently calling it - available, not yet exercised end to end.

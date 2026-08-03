@@ -32,7 +32,7 @@ from awf.registry.resolve import CONFIG_ROOT, DATA_ROOT, resolve_registry_object
 from awf.secrets.store import list_secret_names, set_secret
 from awf.workflow.approval import make_approval_node_executor
 from awf.workflow.definition import load_workflow, parse_workflow
-from awf.workflow.engine import make_agent_node_executor, run_workflow_definition
+from awf.workflow.engine import make_activity_node_executor, make_agent_node_executor, run_workflow_definition
 from awf.workflow.handoff import make_handoff_node_executor
 from awf.workflow.loop_node import make_loop_node_executor
 from awf.workflow.map_node import make_map_node_executor
@@ -125,6 +125,7 @@ def _build_node_executors(
     run_child = _make_run_child(worktree, artifacts_root, repo_root)
     executors = {
         "agent": make_agent_node_executor(ADAPTER_REGISTRY, worktree, repo_root),
+        "activity": make_activity_node_executor(),
         "approval": make_approval_node_executor(),
         "subworkflow": make_subworkflow_node_executor(run_child),
         "map": make_map_node_executor(run_child),

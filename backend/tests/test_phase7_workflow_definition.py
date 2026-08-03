@@ -23,7 +23,7 @@ def minimal_raw(**overrides):
             "inputSchema": {},
             "outputSchema": {},
             "budgets": {},
-            "nodes": [{"id": "a", "type": "activity"}],
+            "nodes": [{"id": "a", "type": "activity", "function": "hardware_probe"}],
             "outputs": {},
         },
     }
@@ -61,8 +61,8 @@ def test_parse_rejects_empty_nodes():
 def test_parse_rejects_duplicate_node_ids():
     raw = minimal_raw()
     raw["spec"]["nodes"] = [
-        {"id": "a", "type": "activity"},
-        {"id": "a", "type": "activity"},
+        {"id": "a", "type": "activity", "function": "hardware_probe"},
+        {"id": "a", "type": "activity", "function": "hardware_probe"},
     ]
     with pytest.raises(WorkflowValidationError):
         parse_workflow(raw)

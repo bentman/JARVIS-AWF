@@ -201,10 +201,12 @@ def publish_workflow(repo_root, raw: dict) -> None:
     target.write_text(yaml.safe_dump(raw))
 
 
-def test_op_run_start_fails_cleanly_for_an_unbuilt_node_type(tmp_path):
-    # `activity` validates as a real Section 12.2 node type but has no
-    # executor built - op_run_start MUST NOT let that raise a raw exception;
-    # the Run is marked FAILED and a clean result is returned instead.
+def test_op_run_start_fails_cleanly_for_an_unknown_activity_name(tmp_path):
+    # All eight Section 12.2 node types now have a real executor - this
+    # exercises the same "MUST NOT let an exception escape uncaught" safety
+    # net via a genuine runtime error instead (an `activity` node naming a
+    # function that isn't registered): op_run_start still marks the Run
+    # FAILED cleanly rather than propagating the raw exception.
     repo_root, conn = make_git_repo(tmp_path)
     publish_workflow(
         repo_root,
@@ -214,7 +216,7 @@ def test_op_run_start_fails_cleanly_for_an_unbuilt_node_type(tmp_path):
             "metadata": {"name": "unbuilt-node-demo", "version": "1.0.0", "digest": "sha256:demo"},
             "spec": {
                 "inputSchema": {}, "outputSchema": {}, "budgets": {},
-                "nodes": [{"id": "a", "type": "activity", "next": None}],
+                "nodes": [{"id": "a", "type": "activity", "function": "not-a-real-activity", "next": None}],
                 "outputs": {},
             },
         },

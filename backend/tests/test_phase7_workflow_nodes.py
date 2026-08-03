@@ -11,6 +11,7 @@ def test_all_eight_types_recognized():
 
 def _required_extra(node_type):
     return {
+        "activity": {"function": "hardware_probe"},
         "subworkflow": {"workflowRef": "child@1.0.0"},
         "map": {"maxItems": 5, "maxConcurrency": 2, "workflowRef": "child@1.0.0", "items": [1, 2]},
         "loop": {"maxIterations": 3, "workflowRef": "child@1.0.0"},
@@ -36,6 +37,11 @@ def test_rejects_missing_type():
 def test_rejects_unknown_type():
     with pytest.raises(NodeValidationError):
         validate_node({"id": "n", "type": "not-a-real-type"})
+
+
+def test_activity_requires_function():
+    with pytest.raises(NodeValidationError):
+        validate_node({"id": "n", "type": "activity"})
 
 
 def test_map_requires_max_items_and_concurrency():

@@ -1,9 +1,7 @@
 """Workflow engine (Section 12): executes a WorkflowDefinition as durable Steps.
 
-`agent`, `gate`, `handoff`, `approval`, `subworkflow`, `map`, and `loop`
-nodes are interpreted; `activity` is validated as a node shape (Section
-12.2, in `workflow.nodes`) but has no execution semantics yet - no
-executor is registered for it anywhere the engine is actually invoked.
+All eight Section 12.2 node types are interpreted: `activity`, `agent`,
+`gate`, `handoff`, `approval`, `subworkflow`, `map`, and `loop`.
 
 Branching is driven by two engine-specific node fields that are NOT part of
 the Section 12.1 spec shape: `next` (the node id to run afterward; absent
@@ -42,10 +40,12 @@ from typing import Callable
 from awf.adapters.base import AgentInvocation
 from awf.clock import utc_now_rfc3339
 from awf.engine.agent_step import run_agent_step
+from awf.engine.executor import run_step
 from awf.engine.run import create_step
 from awf.events.writer import write_event
 from awf.registry.capability_record import CapabilityRecord, Effects, Identity, load_capability_record
 from awf.registry.resolve import resolve_registry_object
+from awf.workflow.activities import ACTIVITY_REGISTRY, UnknownActivityError
 from awf.workflow.definition import WorkflowDefinition
 
 NodeExecutor = Callable[[sqlite3.Connection, str, str, dict], dict]
@@ -106,6 +106,21 @@ def make_agent_node_executor(
             role=node.get("role"),
             actor=node["adapter"],
         )
+
+    return executor
+
+
+def make_activity_node_executor(activity_registry: dict = ACTIVITY_REGISTRY) -> NodeExecutor:
+    def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
+        def fn(_payload: dict) -> dict:
+            activity_fn = activity_registry.get(node["function"])
+            if activity_fn is None:
+                raise UnknownActivityError(
+                    f"node '{node['id']}': no registered activity named '{node['function']}'"
+                )
+            return activity_fn(conn, node.get("args", {}))
+
+        return run_step(conn, step_id=step_id, run_id=run_id, fn=fn, input_payload={})
 
     return executor
 

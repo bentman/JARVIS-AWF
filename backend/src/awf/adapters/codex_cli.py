@@ -2,22 +2,39 @@
 
 Required default configuration state: non-interactive invocation (`codex
 exec`), `sandbox_mode` equivalent to `workspace-write`, `approval_policy`
-equivalent to `on-request`. `--dangerously-bypass-approvals-and-sandbox` and
-`danger-full-access` MUST NOT be used outside an explicit container/VM
+equivalent to `on-request`, sourced from a named profile committed to the
+repository (`config/codex/awf-default.toml`) rather than the operator's home
+directory, so it travels with `config/`. `--dangerously-bypass-approvals-and-sandbox`
+and `danger-full-access` MUST NOT be used outside an explicit container/VM
 escalation.
+
+Codex's own `--profile` flag layers a file from `$CODEX_HOME` (where auth
+also lives, confirmed via `codex exec --help`) - it cannot point at an
+arbitrary repo path without also relocating auth. This adapter instead loads
+the repo-committed TOML file directly and applies its keys as `-c
+key=value` overrides, which is the mechanism Codex documents for setting
+these same values non-interactively.
 """
 
 import json
 import subprocess
+import tomllib
+from pathlib import Path
 
 from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
 
 DEFAULT_TIMEOUT_SECONDS = 300
 DANGER_SANDBOX_MODE = "danger-full-access"
+DEFAULT_PROFILE_PATH = Path(__file__).resolve().parents[4] / "config" / "codex" / "awf-default.toml"
 
 
 class CodexAdapterError(RuntimeError):
     pass
+
+
+def _load_profile(path: Path) -> dict:
+    with path.open("rb") as profile_file:
+        return tomllib.load(profile_file)
 
 
 def _parse_events(stdout: str) -> list[dict]:
@@ -42,12 +59,17 @@ def _final_agent_message(events: list[dict]) -> str | None:
 
 
 def invoke(invocation: AgentInvocation) -> AgentResult:
-    sandbox_mode = invocation.constraints.get("sandbox_mode", "workspace-write")
+    profile_path = invocation.constraints.get("profile_path", DEFAULT_PROFILE_PATH)
+    profile = _load_profile(profile_path)
+
+    sandbox_mode = invocation.constraints.get("sandbox_mode", profile.get("sandbox_mode", "workspace-write"))
     if sandbox_mode == DANGER_SANDBOX_MODE and not invocation.constraints.get("container_escalation"):
         raise CodexAdapterError(
             "danger-full-access sandbox_mode MUST NOT be used outside an explicit container/VM escalation"
         )
-    approval_policy = invocation.constraints.get("approval_policy", "on-request")
+    approval_policy = invocation.constraints.get(
+        "approval_policy", profile.get("approval_policy", "on-request")
+    )
     timeout_seconds = invocation.constraints.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
 
     command = [

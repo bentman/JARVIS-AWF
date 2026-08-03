@@ -1,0 +1,8 @@
+# AWF default Codex CLI profile (Section 10.2): non-interactive `codex exec`
+# invocation, workspace-write sandbox, on-request approvals. Committed here
+# rather than $CODEX_HOME so it travels with the repo, not the operator's
+# home directory - codex_cli.py loads it directly and applies its keys as
+# `-c key=value` overrides, since Codex's own `--profile` mechanism layers
+# files from $CODEX_HOME (where auth also lives), not an arbitrary repo path.
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"

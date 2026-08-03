@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from awf.adapters.base import AgentInvocation, AgentStatus
-from awf.adapters.codex_cli import CodexAdapterError, invoke
+from awf.adapters.codex_cli import DEFAULT_PROFILE_PATH, CodexAdapterError, invoke
 
 
 def make_invocation(**constraints) -> AgentInvocation:
@@ -67,6 +67,37 @@ def test_invoke_maps_turn_failed_to_failed(monkeypatch):
 
     assert result.status == AgentStatus.FAILED
     assert result.termination_reason == "boom"
+
+
+def test_default_profile_is_committed_to_the_repo_not_the_operators_home_dir():
+    # Section 10.2: "a named profile committed to the repository (not the
+    # operator's home directory) so it travels with config/".
+    assert DEFAULT_PROFILE_PATH.is_file()
+    assert "config/codex" in str(DEFAULT_PROFILE_PATH)
+    assert ".codex" not in DEFAULT_PROFILE_PATH.parts  # not $CODEX_HOME
+
+
+def test_invoke_sources_sandbox_defaults_from_the_committed_profile(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_run(command, cwd, capture_output, text, timeout, stdin):
+        captured["command"] = command
+        return SimpleNamespace(returncode=0, stdout=jsonl({"type": "turn.completed"}), stderr="")
+
+    monkeypatch.setattr("awf.adapters.codex_cli.subprocess.run", fake_run)
+
+    custom_profile = tmp_path / "custom.toml"
+    custom_profile.write_text('sandbox_mode = "read-only"\napproval_policy = "never"\n')
+
+    result = invoke(make_invocation(profile_path=custom_profile))
+
+    assert result.status == AgentStatus.COMPLETED
+    assert captured["command"] == [
+        "codex", "exec", "do the thing",
+        "-s", "read-only",
+        "-c", "approval_policy=never",
+        "--json",
+    ]
 
 
 def test_invoke_refuses_danger_full_access_without_escalation():

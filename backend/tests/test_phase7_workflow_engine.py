@@ -100,7 +100,10 @@ def test_budget_exhausted_marks_run_failed(tmp_path):
     assert row["status"] == "FAILED"
 
 
-def test_non_executable_node_type_raises(tmp_path):
+def test_node_type_with_no_registered_executor_raises(tmp_path):
+    # All eight Section 12.2 node types are executable now; this exercises
+    # the other half of the engine's guard - a validated, executable node
+    # type for which the caller (`node_executors={}`) registered nothing.
     conn = make_conn(tmp_path)
     workflow = parse_workflow(
         {

@@ -100,9 +100,30 @@ def test_round_trip_raises_when_wake_word_does_not_fire(tmp_path):
         )
 
 
-def test_round_trip_carries_core_fn_response_verbatim_into_tts_input(tmp_path):
+def test_round_trip_carries_core_fn_response_verbatim_into_tts_input(tmp_path, monkeypatch):
+    # The full real chain (wake -> VAD -> STT -> TTS) is already proven once,
+    # for real, by test_full_round_trip_wake_stt_response_tts above - this
+    # test only needs to prove core_fn's response is what reaches synthesize,
+    # so the four heavy model calls are faked rather than loaded a second
+    # time (this alone was ~40% of the whole suite's runtime).
     conn = make_conn(tmp_path)
     seen_text = {}
+    synthesize_args = {}
+
+    monkeypatch.setattr(
+        "awf.speech.pipeline.detect_wake_word", lambda *a, **k: {"detected": True, "score": 0.99}
+    )
+    monkeypatch.setattr("awf.speech.pipeline.speech_segments", lambda *a, **k: [(0.0, 1.0)])
+    monkeypatch.setattr(
+        "awf.speech.pipeline.transcribe",
+        lambda *a, **k: {"text": "hello world", "language": "en"},
+    )
+
+    def fake_synthesize(text, voice_id, **kwargs):
+        synthesize_args["text"] = text
+        return ([0.0, 0.0], 16000)
+
+    monkeypatch.setattr("awf.speech.pipeline.synthesize", fake_synthesize)
 
     def core_fn(command_text: str) -> str:
         seen_text["value"] = command_text
@@ -123,3 +144,4 @@ def test_round_trip_carries_core_fn_response_verbatim_into_tts_input(tmp_path):
 
     assert "hello" in seen_text["value"].lower()
     assert result.response_text == "A distinctive, checkable response string."
+    assert synthesize_args["text"] == "A distinctive, checkable response string."

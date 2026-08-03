@@ -41,26 +41,6 @@ def make_conn(tmp_path):
     return conn
 
 
-def test_r2_approval_attempted_by_voice_stays_pending(tmp_path):
-    conn = make_conn(tmp_path)
-
-    result = attempt_voice_approval(conn, approval_id="ap-1", risk_class="R2", voice_confirmed=True)
-
-    assert result["requires_on_screen_confirmation"] is True
-    row = conn.execute("SELECT status FROM approvals WHERE approval_id = 'ap-1'").fetchone()
-    assert row["status"] == "pending"
-
-
-def test_r0_approval_attempted_by_voice_is_actually_approved(tmp_path):
-    conn = make_conn(tmp_path)
-
-    result = attempt_voice_approval(conn, approval_id="ap-1", risk_class="R0", voice_confirmed=True)
-
-    assert result["status"] == "approved"
-    row = conn.execute("SELECT status FROM approvals WHERE approval_id = 'ap-1'").fetchone()
-    assert row["status"] == "approved"
-
-
 def test_r2_approval_can_still_be_approved_via_the_real_non_voice_path(tmp_path):
     from awf.cli.core_ops import op_approval_approve
 

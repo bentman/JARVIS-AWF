@@ -90,7 +90,7 @@ describe("dispatchCommand", () => {
     ["/skills", "skills"],
     ["/workflows", "workflows"],
     ["/capabilities", "capabilities"],
-    ["/mcp", "MCP"],
+    ["/mcp", "mcp"],
     ["/model", "model-profiles"],
     ["/voices", "voice-profiles"],
   ])("%s calls registryList(%s)", async (command, kind) => {

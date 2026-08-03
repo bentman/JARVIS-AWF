@@ -13,7 +13,7 @@ counterpart (Section 9.3), and carries at least `adapter`, `capabilities`
 defines the manifest's actual field shape the way Section 9.1 defines a
 Capability Record or Section 11 defines a Model Profile.
 
-Inspecting the codebase found the gap is real, not just undocumented:
+The gap is real, not just undocumented:
 
 - `config/app_registry/agents/` and `data/registry/agents/` are empty
   placeholder directories (`.gitkeep` only) — no schema module exists
@@ -33,9 +33,8 @@ Inspecting the codebase found the gap is real, not just undocumented:
   literal (`"bf_isabella"`) rather than resolving anything through the
   registry.
 
-A survey of the CLI tools AWF already wraps (Claude Code, GitHub Copilot
-CLI, Antigravity/`agy`) found all three independently converged on the same
-local subagent shape: a Markdown file with YAML frontmatter — `name`,
+The CLI tools AWF already wraps (Claude Code, GitHub Copilot CLI,
+Antigravity/`agy`) converge on the same local subagent shape: a Markdown file with YAML frontmatter — `name`,
 `description` (both required), an explicit tool/capability allowlist
 (`tools`), a model choice, MCP server access, and a Markdown body used as
 the system prompt. Codex CLI's custom agents use TOML instead of
@@ -98,13 +97,12 @@ node with no `agentRef` — this is additive, not a breaking change to
    every non-Skill kind otherwise.
 6. Shipped real default manifests: `builder` (adapter `claude-code`),
    `verifier` (adapter `codex`), `adversary` (adapter `antigravity`), each
-   with `role` set and `voice: <same-name>@1.0.0`. **`narrator` was
-   deliberately not shipped as an Agent Manifest** - it doesn't invoke any
-   adapter (it's Section 16.5's fallback identity for voice output with no
-   assigned role, not an agent that runs anything), so forcing a fake
-   `adapter` field onto it would misrepresent it. It remains exactly what
-   it already was: a real Voice Profile with no corresponding Agent
-   Manifest.
+   with `role` set and `voice: <same-name>@1.0.0`. `narrator` has no Agent
+   Manifest: it doesn't invoke any adapter - it's Section 16.5's fallback
+   identity for voice output with no assigned role, not an agent that runs
+   anything, so an `adapter` field on it would misrepresent it. It remains
+   exactly what it already was: a real Voice Profile with no corresponding
+   Agent Manifest.
 
 ## Consequences
 
@@ -122,10 +120,9 @@ node with no `agentRef` — this is additive, not a breaking change to
   for the first time - verified live over the actual JSON-RPC transport.
 - `modelProfile` on a manifest and `reviewProfile` on a gate node (see the
   Model Gateway fix in `CHANGE_LOG.md`, 2026-08-03 04:20) overlap in
-  purpose. Not unified in this pass: `modelProfile` is parsed and stored on
-  `AgentManifest` but has no consumer yet, same as `mcp` (AWF has no MCP
-  client implementation anywhere in `backend/src` at all). Whether to
-  unify `modelProfile`/`reviewProfile` remains open for whoever wires the
-  Model Gateway into the Guard/Gate-adjacent roles next.
-- `mcp` is likewise parsed but unconsumed - there's nothing to wire it to
-  yet.
+  purpose and are not unified: `modelProfile` is parsed and stored on
+  `AgentManifest` but has no consumer, same as `mcp` (AWF has no MCP
+  client implementation anywhere in `backend/src`). Whether to unify
+  `modelProfile`/`reviewProfile` is open for whoever wires the Model
+  Gateway into the Guard/Gate-adjacent roles next.
+- `mcp` is likewise parsed but unconsumed - there's nothing to wire it to.

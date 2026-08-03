@@ -56,7 +56,7 @@ const REGISTRY_KIND_BY_COMMAND: Record<string, string> = {
   skills: "skills",
   workflows: "workflows",
   capabilities: "capabilities",
-  mcp: "MCP",
+  mcp: "mcp",
   model: "model-profiles",
   voices: "voice-profiles",
 };

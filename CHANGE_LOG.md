@@ -20,6 +20,12 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-03 09:10
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0002 (Agent Manifest schema and wiring) - `agents` is a real registry kind now, workflow `agent` nodes gain an `agentRef` field, and the Capability Guard's allowlist check is real for the first time.
+  - Scope: see `docs/adr/0002-agent-manifest-schema.md` for full detail.
+  - Validation: `pytest backend/tests/` → 247 passed; live-verified over the real JSON-RPC transport and a real `awf run` against the actual repo.
+
 - Timestamp: 2026-08-03 08:40
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Aligned `backend/tests/fixtures/` naming to the test that owns each fixture (`test_phaseN/test_phaseN_<name>`), establishing a consistent pattern for future fixture placement.

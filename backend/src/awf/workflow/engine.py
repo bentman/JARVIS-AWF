@@ -28,6 +28,15 @@ resolve a real, published Capability Record; one that doesn't gets a
 conservative synthesized R1/approval-never record instead, so every
 invocation is still authorized and logged, never skipped.
 
+A node MAY also declare `agentRef: name@version` (ADR-0002) resolving a
+real Agent Manifest, whose `adapter`/`capabilities`/`role`/`voice` become
+this invocation's defaults - the node's own `adapter`/`role` fields still
+win if present, and the node's `objective` is the per-invocation task,
+layered under (never replacing) the manifest's default instructions. A
+manifest's `capabilities` list becomes the Guard's real allowlist for this
+invocation, replacing the self-permitting singleton used when no manifest
+is resolved.
+
 A Step that raises is caught here at the Run level: the Run is marked
 `FAILED` and a clean result dict is returned, rather than letting the
 exception propagate to the caller as an unhandled crash.
@@ -43,6 +52,7 @@ from awf.engine.agent_step import run_agent_step
 from awf.engine.executor import run_step
 from awf.engine.run import create_step
 from awf.events.writer import write_event
+from awf.registry.agent_manifest import AgentManifest, load_agent_manifest
 from awf.registry.capability_record import CapabilityRecord, Effects, Identity, load_capability_record
 from awf.registry.resolve import resolve_registry_object
 from awf.workflow.activities import ACTIVITY_REGISTRY, UnknownActivityError
@@ -62,12 +72,12 @@ class WorkflowEngineError(RuntimeError):
     pass
 
 
-def _synthesized_capability_for_node(node: dict) -> CapabilityRecord:
+def _synthesized_capability_for_node(node: dict, adapter_name: str) -> CapabilityRecord:
     """A conservative stand-in Capability Record for an `agent` node that
     doesn't declare a real one - still real enough to be evaluated and
     logged by the Guard, never a rubber stamp."""
     return CapabilityRecord(
-        identity=Identity(type="cli-adapter-action", provider=node["adapter"], name=f"agent_node_{node['id']}", version="0.0.0"),
+        identity=Identity(type="cli-adapter-action", provider=adapter_name, name=f"agent_node_{node['id']}", version="0.0.0"),
         schema_input="",
         schema_output="",
         effects=Effects(operation="update", reversible=True, idempotent=False, external_side_effect=True),
@@ -76,36 +86,64 @@ def _synthesized_capability_for_node(node: dict) -> CapabilityRecord:
     )
 
 
-def _resolve_node_capability(node: dict, repo_root: Path) -> CapabilityRecord:
+def _resolve_node_capability(node: dict, repo_root: Path, adapter_name: str) -> CapabilityRecord:
     declared = node.get("capability")
     if not declared:
-        return _synthesized_capability_for_node(node)
+        return _synthesized_capability_for_node(node, adapter_name)
     path, _source = resolve_registry_object(repo_root, "capabilities", declared["name"], declared["version"])
     return load_capability_record(path)
+
+
+def _resolve_agent_manifest(node: dict, repo_root: Path) -> AgentManifest | None:
+    agent_ref = node.get("agentRef")
+    if not agent_ref:
+        return None
+    name, _, version = agent_ref.partition("@")
+    path, _source = resolve_registry_object(repo_root, "agents", name, version)
+    return load_agent_manifest(path)
 
 
 def make_agent_node_executor(
     adapter_registry: dict[str, AdapterFn], worktree_path: Path, repo_root: Path
 ) -> NodeExecutor:
     def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
+        manifest = _resolve_agent_manifest(node, repo_root)
+        adapter_name = node.get("adapter") or (manifest.adapter if manifest else None)
+        if not adapter_name:
+            raise WorkflowEngineError(
+                f"agent node '{node['id']}': no adapter - declare 'adapter' or 'agentRef'"
+            )
+
+        objective = node["objective"]
+        if manifest and manifest.instructions:
+            objective = f"{manifest.instructions}\n\n{objective}"
+
         invocation = AgentInvocation(
-            objective=node["objective"],
+            objective=objective,
             inputs={},
             workspace_root=worktree_path,
             constraints=node.get("constraints", {}),
         )
-        return run_agent_step(
+        output = run_agent_step(
             conn,
             step_id=step_id,
             run_id=run_id,
             worktree_path=worktree_path,
             invocation=invocation,
-            adapter_fn=adapter_registry[node["adapter"]],
+            adapter_fn=adapter_registry[adapter_name],
             commit_message=f"workflow: {node['id']}",
-            capability=_resolve_node_capability(node, repo_root),
-            role=node.get("role"),
-            actor=node["adapter"],
+            capability=_resolve_node_capability(node, repo_root, adapter_name),
+            # An empty/undeclared `capabilities` list means this manifest
+            # hasn't scoped an allowlist yet, not "allow nothing" - it falls
+            # back to the same self-permitting default as no manifest at
+            # all, matching Section 9.2's "a maximum, never a grant" framing
+            # (a maximum only constrains once it's actually declared).
+            agent_allowlist=list(manifest.capabilities) if manifest and manifest.capabilities else None,
+            role=node.get("role") or (manifest.role if manifest else None),
+            actor=adapter_name,
+            voice=manifest.voice if manifest else None,
         )
+        return output
 
     return executor
 

@@ -171,3 +171,59 @@ def test_capability_guard_allows_r1_capability_and_adapter_runs(repo_and_worktre
     assert output["status"] == "COMPLETED"
     row = conn.execute("SELECT status FROM steps WHERE step_id = 'step-1'").fetchone()
     assert row["status"] == "SUCCEEDED"
+
+
+def test_real_agent_allowlist_denies_a_capability_not_listed(repo_and_worktree, conn):
+    # ADR-0002: a real (non-singleton) allowlist must actually be able to
+    # fail - the pre-ADR-0002 default (agent_allowlist=None) fell back to a
+    # self-permitting singleton that could never deny anything.
+    _repo_root, worktree = repo_and_worktree
+    adapter_calls = []
+
+    def adapter_fn(invocation: AgentInvocation) -> AgentResult:
+        adapter_calls.append(invocation)
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    invocation = AgentInvocation(objective="do something not on the list", inputs={}, workspace_root=worktree)
+    with pytest.raises(AgentStepError):
+        run_agent_step(
+            conn,
+            step_id="step-1",
+            run_id="run-1",
+            worktree_path=worktree,
+            invocation=invocation,
+            adapter_fn=adapter_fn,
+            commit_message="should never be used",
+            capability=_capability("R1", "never"),
+            agent_allowlist=["some_other_capability@1.0.0"],
+        )
+
+    assert adapter_calls == []
+    row = conn.execute("SELECT status, failure_class FROM steps WHERE step_id = 'step-1'").fetchone()
+    assert row["status"] == "FAILED"
+    assert row["failure_class"] == "POLICY_DENIED"
+
+
+def test_real_agent_allowlist_allows_a_listed_capability(repo_and_worktree, conn):
+    _repo_root, worktree = repo_and_worktree
+
+    def adapter_fn(invocation: AgentInvocation) -> AgentResult:
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    capability = _capability("R1", "never")
+    invocation = AgentInvocation(objective="do something on the list", inputs={}, workspace_root=worktree)
+    output = run_agent_step(
+        conn,
+        step_id="step-1",
+        run_id="run-1",
+        worktree_path=worktree,
+        invocation=invocation,
+        adapter_fn=adapter_fn,
+        commit_message="agent: listed action",
+        capability=capability,
+        agent_allowlist=[capability.ref],
+    )
+
+    assert output["status"] == "COMPLETED"
+    row = conn.execute("SELECT status FROM steps WHERE step_id = 'step-1'").fetchone()
+    assert row["status"] == "SUCCEEDED"

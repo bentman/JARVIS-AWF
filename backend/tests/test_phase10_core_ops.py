@@ -29,6 +29,7 @@ from awf.gates.schema import Finding
 from awf.ids import uuid7
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def make_repo(tmp_path):
@@ -170,6 +171,46 @@ def test_registry_publish_then_list_and_get_find_it(tmp_path):
 
     fetched = op_registry_get(repo_root, kind="capabilities", name=published["name"], version=published["version"])
     assert fetched["source"] == "data"
+
+
+REAL_AGENT_MANIFEST = REPO_ROOT / "config" / "app_registry" / "agents" / "builder" / "1.0.0.md"
+
+
+def test_registry_validate_recognizes_agent_manifest():
+    result = op_registry_validate(REAL_AGENT_MANIFEST)
+    assert result["kind"] == "AgentManifest"
+    assert result["ref"] == "builder@1.0.0"
+    assert result["valid"] is True
+
+
+def test_registry_publish_agent_manifest_writes_data_registry_and_index(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+
+    result = op_registry_publish(repo_root, conn, path=REAL_AGENT_MANIFEST)
+
+    assert result["kind"] == "agents"
+    assert result["name"] == "builder"
+    published_path = Path(result["path"])
+    assert published_path.suffix == ".md"
+    assert published_path.read_bytes() == REAL_AGENT_MANIFEST.read_bytes()
+
+    row = conn.execute(
+        "SELECT * FROM registry_index WHERE kind = ? AND name = ? AND version = ?",
+        (result["kind"], result["name"], result["version"]),
+    ).fetchone()
+    assert row["source"] == "data"
+    assert row["digest"] == result["digest"]
+
+    fetched = op_registry_get(repo_root, kind="agents", name="builder", version="1.0.0")
+    assert fetched["source"] == "data"
+
+
+def test_registry_list_agents_finds_the_real_shipped_config_defaults():
+    # ADR-0002: closes /agents' previously-permanent empty state.
+    listed = op_registry_list(REPO_ROOT, kind="agents")
+
+    names = {row["name"] for row in listed if row["source"] == "config"}
+    assert {"builder", "verifier", "adversary"} <= names
 
 
 def test_registry_list_never_shows_config_side_model_profiles(tmp_path):

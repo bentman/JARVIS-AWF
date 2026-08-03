@@ -5,6 +5,11 @@ persisted to `steps` - never before, and never if the adapter didn't
 complete. When `capability` is supplied, the Capability Guard (Section 9.2)
 authorizes the action before the adapter runs; a DENY/APPROVAL_REQUIRED
 decision fails the Step with `POLICY_DENIED` rather than proceeding.
+
+`voice` (an Agent Manifest's `voice` ref, ADR-0002), when given, is folded
+into the Step's own persisted output - not just the in-memory return value -
+so a later `awf status`/`op_run_status` query can actually see which voice
+a Step's output should be spoken in.
 """
 
 import sqlite3
@@ -39,15 +44,21 @@ def run_agent_step(
     adapter_fn: AdapterFn,
     commit_message: str,
     capability: CapabilityRecord | None = None,
+    agent_allowlist: list[str] | None = None,
     role: str | None = None,
     actor: str = "agent",
+    voice: str | None = None,
 ) -> dict:
     def fn(_payload: dict) -> dict:
         if capability is not None:
+            # A real Agent Manifest's declared `capabilities` (ADR-0002) is
+            # the caller-supplied allowlist; a caller with no manifest to
+            # resolve (no `agentRef` on the node) falls back to a
+            # self-permitting singleton, matching pre-ADR-0002 behavior.
             decision = authorize(
                 conn,
                 capability=capability,
-                agent_allowlist=[capability.ref],
+                agent_allowlist=agent_allowlist if agent_allowlist is not None else [capability.ref],
                 run_id=run_id,
                 actor=actor,
                 step_id=step_id,
@@ -66,7 +77,10 @@ def run_agent_step(
                 f"reason={result.termination_reason!r}",
                 failure_class=AGENT_STATUS_FAILURE_CLASSES.get(result.status, "INTERNAL"),
             )
-        return {"status": result.status.value, "termination_reason": result.termination_reason}
+        output = {"status": result.status.value, "termination_reason": result.termination_reason}
+        if voice is not None:
+            output["voice"] = voice
+        return output
 
     output = run_step(conn, step_id=step_id, run_id=run_id, fn=fn, input_payload={})
     # Reached only when `fn` returned without raising, meaning the Step's

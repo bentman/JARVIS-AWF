@@ -26,6 +26,7 @@ from awf.gates.gate_node import make_trifecta_gate_executor
 from awf.ids import uuid7
 from awf.isolation.scratch import create_scratch_dir, remove_scratch_dir, scratch_path
 from awf.isolation.worktree import create_worktree, remove_worktree, worktree_path
+from awf.registry.agent_manifest import load_agent_manifest
 from awf.registry.capability_record import parse_capability_record
 from awf.registry.model_profile import load_model_profile, parse_model_profile
 from awf.registry.resolve import CONFIG_ROOT, DATA_ONLY_KINDS, DATA_ROOT, resolve_registry_object
@@ -303,8 +304,10 @@ def op_artifact_read(conn: sqlite3.Connection, *, artifact_id: str, artifacts_ro
 
 def op_registry_list(repo_root: Path, *, kind: str) -> list[dict]:
     # Skills are published as <name>/<version>/SKILL.md (Section 9.3), not
-    # <name>/<version>.yaml like every other kind.
+    # <name>/<version>.yaml like every other kind; Agent Manifests (ADR-0002)
+    # are <name>/<version>.md - flat like most kinds, but Markdown not YAML.
     is_skill = kind == "skills"
+    is_agent = kind == "agents"
     roots = (("data", repo_root / DATA_ROOT), ("config", repo_root / CONFIG_ROOT))
     if kind in DATA_ONLY_KINDS:
         # Section 9.3: this kind has no config/app_registry/ counterpart -
@@ -320,6 +323,8 @@ def op_registry_list(repo_root: Path, *, kind: str) -> list[dict]:
         for name_dir in sorted(p for p in kind_dir.iterdir() if p.is_dir()):
             if is_skill:
                 versions = sorted(p.name for p in name_dir.iterdir() if (p / "SKILL.md").is_file())
+            elif is_agent:
+                versions = sorted(p.stem for p in name_dir.glob("*.md"))
             else:
                 versions = sorted(p.stem for p in name_dir.glob("*.yaml"))
             for version in versions:
@@ -335,6 +340,10 @@ def op_registry_get(repo_root: Path, *, kind: str, name: str, version: str) -> d
 
 
 def op_registry_validate(path: Path) -> dict:
+    if path.suffix == ".md":
+        manifest = load_agent_manifest(path)
+        return {"kind": "AgentManifest", "ref": manifest.ref, "valid": True}
+
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise CoreOpError(f"{path}: must be a YAML mapping")
@@ -352,27 +361,32 @@ def op_registry_validate(path: Path) -> dict:
 
 
 def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path) -> dict:
-    raw = yaml.safe_load(path.read_text())
-    if not isinstance(raw, dict):
-        raise CoreOpError(f"{path}: must be a YAML mapping")
-
-    if raw.get("kind") == "Workflow":
-        workflow = parse_workflow(raw)
-        kind, name, version = "workflows", workflow.metadata.name, workflow.metadata.version
-    elif "identity" in raw and "risk_class" in raw:
-        record = parse_capability_record(raw)
-        kind, name, version = "capabilities", record.identity.name, record.identity.version
+    if path.suffix == ".md":
+        manifest = load_agent_manifest(path)
+        kind, name, version, extension = "agents", manifest.name, manifest.version, "md"
     else:
-        raise CoreOpError(
-            f"{path}: registry publish only supports Workflow and Capability Record objects "
-            "(kinds with self-describing name/version) in this phase"
-        )
+        raw = yaml.safe_load(path.read_text())
+        if not isinstance(raw, dict):
+            raise CoreOpError(f"{path}: must be a YAML mapping")
+
+        if raw.get("kind") == "Workflow":
+            workflow = parse_workflow(raw)
+            kind, name, version = "workflows", workflow.metadata.name, workflow.metadata.version
+        elif "identity" in raw and "risk_class" in raw:
+            record = parse_capability_record(raw)
+            kind, name, version = "capabilities", record.identity.name, record.identity.version
+        else:
+            raise CoreOpError(
+                f"{path}: registry publish only supports Workflow, Capability Record, and "
+                "Agent Manifest objects (kinds with self-describing name/version) in this phase"
+            )
+        extension = "yaml"
 
     payload = path.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     target_dir = repo_root / DATA_ROOT / kind / name
     target_dir.mkdir(parents=True, exist_ok=True)
-    target_path = target_dir / f"{version}.yaml"
+    target_path = target_dir / f"{version}.{extension}"
     target_path.write_bytes(payload)
 
     conn.execute(

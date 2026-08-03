@@ -24,6 +24,8 @@ class RegistryObjectNotFoundError(FileNotFoundError):
 def _object_path(base_dir: Path, kind: str, version: str) -> Path:
     if kind == "skills":
         return base_dir / version / "SKILL.md"
+    if kind == "agents":
+        return base_dir / f"{version}.md"
     return base_dir / f"{version}.yaml"
 
 

@@ -11,6 +11,9 @@ JSONL events are typed `session.*`/`user.*`/`assistant.*`, terminated by one
 `result` event carrying `exitCode` and `usage.codeChanges.filesModified`.
 Success/failure is determined primarily by the process exit code, not event
 contents.
+
+`constraints["model_override"]` (ADR-0005), when set, is passed through
+`--model` - confirmed real and live-tested against the installed CLI.
 """
 
 import json
@@ -60,6 +63,9 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
     command = ["copilot", "-p", invocation.objective, "--output-format", "json", "--no-color"]
     for tool in allowed_tools:
         command += ["--allow-tool", tool]
+    model_override = invocation.constraints.get("model_override")
+    if model_override:
+        command += ["--model", model_override]
     command += list(invocation.constraints.get("mcp_extra_args", []))
 
     try:

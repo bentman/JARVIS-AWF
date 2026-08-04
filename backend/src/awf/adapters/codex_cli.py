@@ -14,6 +14,18 @@ arbitrary repo path without also relocating auth. This adapter instead loads
 the repo-committed TOML file directly and applies its keys as `-c
 key=value` overrides, which is the mechanism Codex documents for setting
 these same values non-interactively.
+
+`constraints["model_override"]` (ADR-0005), when set, is passed through
+`-m/--model` - confirmed real and live-tested. Codex's `--local-provider`
+flag (paired with `--oss`, confirmed via `codex exec --help`) only accepts
+`lmstudio`/`ollama`, not an arbitrary OpenAI-compatible `api_base` - so when
+the winning candidate's `provider` is `ollama`
+(`constraints["model_override_provider"]`), this adapter also passes `--oss
+--local-provider ollama` to force Codex's own reasoning through that local
+backend; any other provider (including a custom local `api_base`, e.g.
+`llama-server`) gets plain `-m <model>` only, since Codex has no flag to
+point `--local-provider` at an arbitrary endpoint - a known, named
+limitation, not silently assumed to work.
 """
 
 import json
@@ -79,6 +91,11 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
         "-c", f"approval_policy={approval_policy}",
         "--json",
     ]
+    model_override = invocation.constraints.get("model_override")
+    if model_override:
+        if invocation.constraints.get("model_override_provider") == "ollama":
+            command += ["--oss", "--local-provider", "ollama"]
+        command += ["-m", model_override]
     command += list(invocation.constraints.get("mcp_extra_args", []))
 
     try:

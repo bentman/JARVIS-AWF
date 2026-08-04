@@ -37,6 +37,21 @@ def test_invoke_builds_explicit_allow_tool_command_no_yolo(monkeypatch):
     assert result.status == AgentStatus.COMPLETED
 
 
+def test_invoke_appends_model_override(monkeypatch):
+    captured = {}
+
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
+        captured["command"] = command
+        return SimpleNamespace(returncode=0, stdout='{"type":"done"}', stderr="")
+
+    monkeypatch.setattr("awf.adapters.copilot_cli.subprocess.run", fake_run)
+
+    invoke(make_invocation(model_override="gpt-5.4"))
+
+    assert "--model" in captured["command"]
+    assert captured["command"][captured["command"].index("--model") + 1] == "gpt-5.4"
+
+
 def test_invoke_extracts_final_assistant_message(monkeypatch):
     events = [
         {"type": "assistant.message", "data": {"content": "first"}},

@@ -4,6 +4,9 @@ Required default configuration state: non-interactive invocation (`--print`),
 permission mode equivalent to `acceptEdits`. `--dangerously-skip-permissions`
 / `bypassPermissions` MUST NOT be used outside an explicit container/VM
 escalation - this adapter never passes it.
+
+`constraints["model_override"]` (ADR-0005), when set, is passed through
+`--model` - confirmed real and live-tested against the installed CLI.
 """
 
 import json
@@ -35,6 +38,9 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
         "--permission-mode", permission_mode,
         "--output-format", "json",
     ]
+    model_override = invocation.constraints.get("model_override")
+    if model_override:
+        command += ["--model", model_override]
     command += list(invocation.constraints.get("mcp_extra_args", []))
 
     try:

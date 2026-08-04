@@ -35,7 +35,9 @@ win if present, and the node's `objective` is the per-invocation task,
 layered under (never replacing) the manifest's default instructions. A
 manifest's `capabilities` list becomes the Guard's real allowlist for this
 invocation, replacing the self-permitting singleton used when no manifest
-is resolved.
+is resolved. A manifest's `model_profile` (ADR-0005), when set, is resolved
+and threaded through so the adapter runs with that profile's winning
+candidate's model, via its own `--model`/`-m` flag.
 
 A Step that raises is caught here at the Run level: the Run is marked
 `FAILED` and a clean result dict is returned, rather than letting the
@@ -142,6 +144,7 @@ def make_agent_node_executor(
             instructions=manifest.instructions if manifest else "",
             mcp_refs=list(manifest.mcp) if manifest and manifest.mcp else [],
             skill_refs=list(manifest.skills) if manifest and manifest.skills else [],
+            model_profile_ref=manifest.model_profile if manifest else None,
             repo_root=repo_root,
         )
         return output

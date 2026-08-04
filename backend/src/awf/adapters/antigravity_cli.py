@@ -17,6 +17,9 @@ real, visible window. `JETSKI_BROWSER_HEADLESS=true` (confirmed via the
 installed CLI's own self-inspection) forces headless without disabling the
 tool outright - set unconditionally here, since a Run's adapter subprocess
 must never surface a visible UI element on the operator's desktop.
+
+`constraints["model_override"]` (ADR-0005), when set, is passed through
+`--model` - confirmed real and live-tested against the installed CLI.
 """
 
 import json
@@ -50,6 +53,9 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
         "--add-dir", str(invocation.workspace_root),
         "--new-project",
     ]
+    model_override = invocation.constraints.get("model_override")
+    if model_override:
+        command += ["--model", model_override]
     command += list(invocation.constraints.get("mcp_extra_args", []))
 
     try:

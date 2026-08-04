@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-04 10:24
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0005 (AgentManifest.model_profile wiring) - a manifest's `modelProfile` field now resolves to a real Model Profile, picks its winning enabled candidate, and threads the candidate's model name into the adapter's own real `--model`/`-m` flag; Codex additionally gets `--oss --local-provider ollama` when the winning candidate's provider is `ollama`.
+  - Scope: see `docs/adr/0005-agent-manifest-model-profile-wiring.md` for full detail.
+  - Validation: `pytest backend/tests/` → 341 passed (up from 331 baseline); live-verified through the real `run_agent_step` → `codex_cli.invoke` path - a real Model Profile drove a real `codex exec` subprocess with `-m gpt-5.5`, which genuinely responded with a probe token.
+  - Notes: the `ollama`-provider branch's command construction is verified by mocked-subprocess unit tests only, not a live run - this host's real Ollama server listens on the WSL host-gateway IP, not `localhost`, and Codex's `--local-provider ollama` hardcodes `localhost:11434`. A real, named environment/network constraint, not a defect in the implementation.
+
 - Timestamp: 2026-08-04 09:23
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Implemented ADR-0004 (Skills registry schema) - `skills` is a real registry kind now, Agent Manifests gain a `skills` list with a per-reference `share` opt-in, and the default injection tier folds resolved SKILL.md bodies into the objective while the shared tier materializes a skill directory for Claude Code/Copilot CLI/Antigravity/Codex.

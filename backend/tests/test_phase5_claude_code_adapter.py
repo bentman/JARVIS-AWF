@@ -43,6 +43,25 @@ def test_invoke_builds_non_interactive_acceptedits_command(monkeypatch):
     assert result.termination_reason == "success"
 
 
+def test_invoke_appends_model_override(monkeypatch):
+    captured = {}
+
+    def fake_run(command, cwd, capture_output, text, timeout, env):
+        captured["command"] = command
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({"is_error": False, "result": "done", "subtype": "success"}),
+            stderr="",
+        )
+
+    monkeypatch.setattr("awf.adapters.claude_code.subprocess.run", fake_run)
+
+    invoke(make_invocation(model_override="claude-opus-5"))
+
+    assert "--model" in captured["command"]
+    assert captured["command"][captured["command"].index("--model") + 1] == "claude-opus-5"
+
+
 def test_invoke_maps_is_error_to_failed(monkeypatch):
     def fake_run(command, cwd, capture_output, text, timeout, env):
         return SimpleNamespace(

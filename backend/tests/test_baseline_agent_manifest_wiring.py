@@ -176,6 +176,37 @@ def test_agent_ref_skills_list_is_threaded_through_to_the_objective(tmp_path, co
     assert captured["invocation"].skills == ("demo-skill@1.0.0",)
 
 
+def test_agent_ref_model_profile_is_threaded_through_to_the_adapter(tmp_path, conn):
+    publish_manifest(
+        tmp_path,
+        "local-builder",
+        "name: local-builder\nversion: 1.0.0\ndescription: x\nadapter: claude-code\n"
+        "modelProfile: local-model@1.0.0\n",
+    )
+    profile_dir = tmp_path / "data" / "registry" / "model-profiles" / "local-model"
+    profile_dir.mkdir(parents=True)
+    (profile_dir / "1.0.0.yaml").write_text(
+        "purpose: general-reasoning\n"
+        "privacy: {maximum_data_class: internal, local_only: true}\n"
+        "candidates:\n  - {provider: ollama, model: qwen3-vl:8b, priority: 1, enabled: true}\n"
+        "fallback: {mode: ordered, allow_quality_degrade: true}\n"
+        "limits: {max_input_tokens_per_call: 8192, max_output_tokens_per_call: 2048, max_cost_usd_per_call: 0.0}\n"
+    )
+    captured = {}
+
+    def fake_adapter(invocation: AgentInvocation) -> AgentResult:
+        captured["invocation"] = invocation
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    executor = make_agent_node_executor({"claude-code": fake_adapter}, tmp_path, tmp_path)
+    node = {"id": "build", "type": "agent", "agentRef": "local-builder@1.0.0", "objective": "add a feature"}
+
+    output = executor(conn, "run-1", "step-1", node)
+
+    assert output["status"] == "COMPLETED"
+    assert captured["invocation"].constraints["model_override"] == "qwen3-vl:8b"
+
+
 def test_node_without_agent_ref_is_unaffected(tmp_path, conn):
     # Additive, not breaking: a node with no agentRef keeps today's
     # behavior exactly - raw `adapter`/`role` fields, self-permitting

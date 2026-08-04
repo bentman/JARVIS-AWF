@@ -47,6 +47,25 @@ def test_invoke_builds_sandboxed_accept_edits_command_bound_to_workspace(monkeyp
     assert captured["env"]["JETSKI_BROWSER_HEADLESS"] == "true"
 
 
+def test_invoke_appends_model_override(monkeypatch):
+    captured = {}
+
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
+        captured["command"] = command
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({"status": "SUCCESS", "response": "done", "usage": {}}),
+            stderr="",
+        )
+
+    monkeypatch.setattr("awf.adapters.antigravity_cli.subprocess.run", fake_run)
+
+    invoke(make_invocation(model_override="gemini-3-pro"))
+
+    assert "--model" in captured["command"]
+    assert captured["command"][captured["command"].index("--model") + 1] == "gemini-3-pro"
+
+
 def test_invoke_forces_headless_browser_even_if_constraints_try_to_override(monkeypatch):
     env_capture = {}
 

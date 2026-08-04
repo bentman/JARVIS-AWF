@@ -1,9 +1,8 @@
-# ADR-0005 (draft): give AgentManifest.model_profile a real consumer
+# ADR-0005: give AgentManifest.model_profile a real consumer
 
 ## Status
 
-Proposed. Not implemented. Captured for later - do not build against this
-until it is revisited and moved to Accepted.
+Implemented.
 
 ## Context
 
@@ -44,8 +43,8 @@ role-level flexibility already exists. `model_profile` would add a second,
 finer axis: which *model* a given adapter invocation runs as, independent
 of which adapter it is.
 
-This draft is intentionally narrow. A broader question was raised and left
-open during the same conversation this draft came out of: whether AWF
+This ADR is intentionally narrow. A broader question was raised and left
+open during the same conversation this ADR came out of: whether AWF
 itself, or any of the four adapters, can act as the "entry point"
 orchestrator for an ad hoc (e.g. voice-composed) chain of roles, and how
 that would stay inside AWF's durable/replayable model. That question is
@@ -53,7 +52,7 @@ NOT addressed here - this draft only covers wiring an existing, narrow,
 already-scaffolded field. See project memory/prior discussion before
 picking that back up.
 
-## Decision (proposed)
+## Decision
 
 At each `agent` node, resolve `manifest.model_profile` (if set) to a real
 Model Profile object, pick its winning candidate (same
@@ -96,7 +95,7 @@ list today.
 4. Decide the Codex `--oss --local-provider` question above before
    writing that adapter's branch, not after.
 
-## Acceptance (proposed)
+## Acceptance
 
 A manifest with `modelProfile: qwen3-8b-local@1.0.0` drives a real Run
 where the adapter's own subprocess command includes the resolved model

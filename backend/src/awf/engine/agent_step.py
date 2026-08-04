@@ -31,6 +31,18 @@ into the worktree's `.claude/skills/`/`.agents/skills/` (read natively by
 Claude Code, Copilot CLI, and Antigravity) and, for Codex specifically,
 into a scratch `$CODEX_HOME` (mirroring the MCP scratch-home mechanism
 above) since Codex only discovers skills under its own home directory.
+
+`model_profile_ref` (an Agent Manifest's `model_profile` field, ADR-0005),
+when given, resolves the named Model Profile, picks its winning candidate
+(the same `enabled_candidates_by_priority()` + fallback posture the Model
+Gateway itself uses), and merges the candidate's `model`/`provider` into
+`invocation.constraints` as `model_override`/`model_override_provider` -
+each adapter appends its own real `--model`/`-m` flag from these, the same
+shape `mcp_extra_args` already uses. This is a separate path from the
+Model Gateway: it picks what model an adapter's own agentic loop runs as,
+not what AWF itself calls directly. A profile with no enabled candidates
+fails the Step before the adapter runs, the same posture as an empty
+Capability Guard allowlist.
 """
 
 import hashlib
@@ -51,6 +63,7 @@ from awf.mcp.render import RENDERERS
 from awf.registry.agent_manifest import SkillRef
 from awf.registry.capability_record import CapabilityRecord
 from awf.registry.mcp_server import load_mcp_server
+from awf.registry.model_profile import load_model_profile
 from awf.registry.resolve import resolve_registry_object
 from awf.registry.skill import Skill, directory_digest, load_skill
 from awf.secrets.store import get_secret
@@ -291,6 +304,41 @@ def _apply_skills(
     )
 
 
+def _apply_model_profile(
+    *,
+    repo_root: Path | None,
+    model_profile_ref: str | None,
+    invocation: AgentInvocation,
+) -> AgentInvocation:
+    if not model_profile_ref or repo_root is None:
+        return invocation
+
+    name, _, version = model_profile_ref.partition("@")
+    path, _source = resolve_registry_object(repo_root, "model-profiles", name, version)
+    profile = load_model_profile(path)
+    candidates = profile.enabled_candidates_by_priority()
+    if not candidates:
+        raise AgentStepError(
+            f"model profile '{model_profile_ref}' has no enabled candidates",
+            failure_class="INVALID_INPUT",
+        )
+    winner = candidates[0]
+
+    constraints = dict(invocation.constraints)
+    constraints["model_override"] = winner.model
+    constraints["model_override_provider"] = winner.provider
+    return AgentInvocation(
+        objective=invocation.objective,
+        inputs=invocation.inputs,
+        workspace_root=invocation.workspace_root,
+        capabilities=invocation.capabilities,
+        skills=invocation.skills,
+        constraints=constraints,
+        completion_contract=invocation.completion_contract,
+        trace_context=invocation.trace_context,
+    )
+
+
 def run_agent_step(
     conn: sqlite3.Connection,
     *,
@@ -308,6 +356,7 @@ def run_agent_step(
     instructions: str = "",
     mcp_refs: list[str] | None = None,
     skill_refs: list[SkillRef] | None = None,
+    model_profile_ref: str | None = None,
     repo_root: Path | None = None,
 ) -> dict:
     def fn(_payload: dict) -> dict:
@@ -354,7 +403,13 @@ def run_agent_step(
             invocation=skilled_invocation,
         )
 
-        result = adapter_fn(effective_invocation)
+        modeled_invocation = _apply_model_profile(
+            repo_root=repo_root,
+            model_profile_ref=model_profile_ref,
+            invocation=effective_invocation,
+        )
+
+        result = adapter_fn(modeled_invocation)
         if result.status != AgentStatus.COMPLETED:
             raise AgentStepError(
                 f"adapter did not complete: status={result.status.value} "

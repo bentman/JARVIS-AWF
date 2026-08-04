@@ -50,6 +50,52 @@ def test_invoke_builds_workspace_write_on_request_command(monkeypatch):
     assert result.output["result"] == "done"
 
 
+def test_invoke_appends_plain_model_override_for_non_ollama_provider(monkeypatch):
+    captured = {}
+
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
+        captured["command"] = command
+        return SimpleNamespace(
+            returncode=0,
+            stdout=jsonl(
+                {"type": "item.completed", "item": {"type": "agent_message", "text": "done"}},
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr("awf.adapters.codex_cli.subprocess.run", fake_run)
+
+    invoke(make_invocation(model_override="Qwen3-8B-Q5_K_M.gguf", model_override_provider="openai"))
+
+    assert "-m" in captured["command"]
+    assert captured["command"][captured["command"].index("-m") + 1] == "Qwen3-8B-Q5_K_M.gguf"
+    assert "--oss" not in captured["command"]
+    assert "--local-provider" not in captured["command"]
+
+
+def test_invoke_forces_oss_local_provider_for_ollama(monkeypatch):
+    captured = {}
+
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
+        captured["command"] = command
+        return SimpleNamespace(
+            returncode=0,
+            stdout=jsonl(
+                {"type": "item.completed", "item": {"type": "agent_message", "text": "done"}},
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr("awf.adapters.codex_cli.subprocess.run", fake_run)
+
+    invoke(make_invocation(model_override="qwen3-vl:8b", model_override_provider="ollama"))
+
+    assert "--oss" in captured["command"]
+    assert captured["command"][captured["command"].index("--local-provider") + 1] == "ollama"
+    assert "-m" in captured["command"]
+    assert captured["command"][captured["command"].index("-m") + 1] == "qwen3-vl:8b"
+
+
 def test_invoke_maps_turn_failed_to_failed(monkeypatch):
     def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
         return SimpleNamespace(

@@ -20,10 +20,22 @@ render's resolved-secret environment overlay into the adapter subprocess's
 environment via `invocation.constraints` - AWF never runs an MCP client of
 its own; the adapter connects. An empty or absent `mcp_refs` renders
 nothing and the adapter runs exactly as it would have.
+
+`skill_refs`/`instructions` (an Agent Manifest's `skills` list and Markdown
+body, ADR-0004): each resolved, trust-passing Skill's `SKILL.md` body is
+folded into the objective text, after `instructions` and before the node's
+own per-invocation objective - AWF is the one applying the procedure, by
+default the adapter never sees a discoverable skill directory. A ref
+explicitly marked `share: true` additionally copies the skill's directory
+into the worktree's `.claude/skills/`/`.agents/skills/` (read natively by
+Claude Code, Copilot CLI, and Antigravity) and, for Codex specifically,
+into a scratch `$CODEX_HOME` (mirroring the MCP scratch-home mechanism
+above) since Codex only discovers skills under its own home directory.
 """
 
 import hashlib
 import json
+import shutil
 import sqlite3
 from pathlib import Path
 from typing import Callable
@@ -36,9 +48,11 @@ from awf.guard.capability_guard import Decision, authorize
 from awf.isolation.scratch import scratch_path
 from awf.isolation.worktree import commit_all_changes
 from awf.mcp.render import RENDERERS
+from awf.registry.agent_manifest import SkillRef
 from awf.registry.capability_record import CapabilityRecord
 from awf.registry.mcp_server import load_mcp_server
 from awf.registry.resolve import resolve_registry_object
+from awf.registry.skill import Skill, directory_digest, load_skill
 from awf.secrets.store import get_secret
 
 AdapterFn = Callable[[AgentInvocation], AgentResult]
@@ -53,14 +67,14 @@ class AgentStepError(StepFailure):
     pass
 
 
-def _is_trusted(conn: sqlite3.Connection, name: str, version: str, source: str) -> bool:
+def _is_trusted(conn: sqlite3.Connection, kind: str, name: str, version: str, source: str) -> bool:
     if source != "data":
         # config/app_registry/ objects carry no trust field - inclusion in
         # the repository is the review (Section 9.3).
         return True
     row = conn.execute(
-        "SELECT trust_status FROM registry_index WHERE kind = 'mcp' AND name = ? AND version = ?",
-        (name, version),
+        "SELECT trust_status FROM registry_index WHERE kind = ? AND name = ? AND version = ?",
+        (kind, name, version),
     ).fetchone()
     if row is None:
         return True
@@ -74,7 +88,7 @@ def _resolve_mcp_servers(conn: sqlite3.Connection, repo_root: Path, mcp_refs: li
     for ref in mcp_refs:
         name, _, version = ref.partition("@")
         path, source = resolve_registry_object(repo_root, "mcp", name, version)
-        if not _is_trusted(conn, name, version, source):
+        if not _is_trusted(conn, "mcp", name, version, source):
             continue
         servers.append(load_mcp_server(path))
         refs_with_digest.append({"ref": ref, "digest": hashlib.sha256(path.read_bytes()).hexdigest()})
@@ -168,6 +182,115 @@ def _apply_mcp(
     )
 
 
+# Read natively by Claude Code and GitHub Copilot CLI (`.claude/skills/`)
+# and by Antigravity (`.agents/skills/`), given flags each adapter already
+# passes on every invocation (ADR-0004) - no adapter-specific flag needed
+# for either path.
+SKILL_SHARE_RELATIVE_DIRS = (".claude/skills", ".agents/skills")
+
+
+def _resolve_skills(conn: sqlite3.Connection, repo_root: Path, skill_refs: list[SkillRef]):
+    """Returns (skill_ref, skill, digest, skill_dir) for refs that pass the trust gate."""
+    resolved = []
+    for skill_ref in skill_refs:
+        name, _, version = skill_ref.ref.partition("@")
+        path, source = resolve_registry_object(repo_root, "skills", name, version)
+        if not _is_trusted(conn, "skills", name, version, source):
+            continue
+        skill = load_skill(path)
+        skill_dir = path.parent
+        resolved.append((skill_ref, skill, directory_digest(skill_dir), skill_dir))
+    return resolved
+
+
+def _share_skill(worktree_path: Path, skill: Skill, skill_dir: Path) -> None:
+    for relative_dir in SKILL_SHARE_RELATIVE_DIRS:
+        target = worktree_path / relative_dir / skill.name
+        if target.is_dir():
+            shutil.rmtree(target)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(skill_dir, target)
+
+
+def _codex_scratch_home_for_skills(
+    repo_root: Path, run_id: str, actor: str, worktree_path: Path, skills: list[Skill]
+) -> Path:
+    # Codex only discovers skills under its own `$CODEX_HOME/skills/` - the
+    # same scratch-home shape ADR-0003 established for Antigravity's MCP
+    # fix, never the operator's real `~/.codex/`. Symlinks to the copy
+    # already written into the worktree by `_share_skill` (the single real
+    # copy) rather than a second real copy on disk.
+    home_dir = scratch_path(repo_root, run_id) / "codex_home" / actor
+    (home_dir / "skills").mkdir(parents=True, exist_ok=True)
+    for skill in skills:
+        link_path = home_dir / "skills" / skill.name
+        if not link_path.exists():
+            link_path.symlink_to(worktree_path / ".claude" / "skills" / skill.name)
+    real_auth = Path.home() / ".codex" / "auth.json"
+    if real_auth.is_file():
+        (home_dir / "auth.json").write_bytes(real_auth.read_bytes())
+    return home_dir
+
+
+def _apply_skills(
+    conn: sqlite3.Connection,
+    *,
+    run_id: str,
+    step_id: str,
+    worktree_path: Path,
+    repo_root: Path | None,
+    skill_refs: list[SkillRef],
+    actor: str,
+    instructions: str,
+    invocation: AgentInvocation,
+) -> AgentInvocation:
+    resolved = _resolve_skills(conn, repo_root, skill_refs) if (repo_root is not None and skill_refs) else []
+
+    objective_parts = [instructions] if instructions else []
+    objective_parts += [skill.body for _ref, skill, _digest, _dir in resolved if skill.body]
+    objective_parts.append(invocation.objective)
+    objective = "\n\n".join(part for part in objective_parts if part)
+
+    constraints = dict(invocation.constraints)
+    resolved_skill_refs: tuple[str, ...] = invocation.skills
+
+    if resolved:
+        shared = [(ref, skill, skill_dir) for ref, skill, _digest, skill_dir in resolved if ref.share]
+        for _ref, skill, skill_dir in shared:
+            _share_skill(worktree_path, skill, skill_dir)
+
+        if shared and actor == "codex":
+            home_dir = _codex_scratch_home_for_skills(
+                repo_root, run_id, actor, worktree_path, [skill for _r, skill, _d in shared]
+            )
+            env_overlay = dict(constraints.get("skill_env_overlay", {}))
+            env_overlay["CODEX_HOME"] = str(home_dir)
+            constraints["skill_env_overlay"] = env_overlay
+
+        write_event(
+            conn, run_id=run_id, step_id=step_id, new_status="skills_resolved",
+            actor=actor, reason_code="skills_resolved",
+            payload_json=json.dumps(
+                {"skills": [{"ref": ref.ref, "digest": digest, "shared": ref.share} for ref, _s, digest, _d in resolved]}
+            ),
+        )
+        resolved_skill_refs = tuple(ref.ref for ref, _skill, _digest, _dir in resolved)
+
+    if objective == invocation.objective and not resolved:
+        return invocation
+
+    return AgentInvocation(
+        objective=objective,
+        inputs=invocation.inputs,
+        workspace_root=invocation.workspace_root,
+        capabilities=invocation.capabilities,
+        skills=resolved_skill_refs,
+        constraints=constraints,
+        completion_contract=invocation.completion_contract,
+        trace_context=invocation.trace_context,
+    )
+
+
 def run_agent_step(
     conn: sqlite3.Connection,
     *,
@@ -182,7 +305,9 @@ def run_agent_step(
     role: str | None = None,
     actor: str = "agent",
     voice: str | None = None,
+    instructions: str = "",
     mcp_refs: list[str] | None = None,
+    skill_refs: list[SkillRef] | None = None,
     repo_root: Path | None = None,
 ) -> dict:
     def fn(_payload: dict) -> dict:
@@ -206,6 +331,18 @@ def run_agent_step(
                     failure_class="POLICY_DENIED",
                 )
 
+        skilled_invocation = _apply_skills(
+            conn,
+            run_id=run_id,
+            step_id=step_id,
+            worktree_path=worktree_path,
+            repo_root=repo_root,
+            skill_refs=list(skill_refs) if skill_refs else [],
+            actor=actor,
+            instructions=instructions,
+            invocation=invocation,
+        )
+
         effective_invocation = _apply_mcp(
             conn,
             run_id=run_id,
@@ -214,7 +351,7 @@ def run_agent_step(
             repo_root=repo_root,
             mcp_refs=list(mcp_refs) if mcp_refs else [],
             actor=actor,
-            invocation=invocation,
+            invocation=skilled_invocation,
         )
 
         result = adapter_fn(effective_invocation)

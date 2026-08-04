@@ -89,7 +89,11 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
             text=True,
             timeout=timeout_seconds,
             stdin=subprocess.DEVNULL,
-            env={**os.environ, **invocation.constraints.get("mcp_env_overlay", {})},
+            env={
+                **os.environ,
+                **invocation.constraints.get("mcp_env_overlay", {}),
+                **invocation.constraints.get("skill_env_overlay", {}),
+            },
         )
     except subprocess.TimeoutExpired:
         return AgentResult(

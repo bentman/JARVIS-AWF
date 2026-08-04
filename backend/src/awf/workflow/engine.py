@@ -115,12 +115,8 @@ def make_agent_node_executor(
                 f"agent node '{node['id']}': no adapter - declare 'adapter' or 'agentRef'"
             )
 
-        objective = node["objective"]
-        if manifest and manifest.instructions:
-            objective = f"{manifest.instructions}\n\n{objective}"
-
         invocation = AgentInvocation(
-            objective=objective,
+            objective=node["objective"],
             inputs={},
             workspace_root=worktree_path,
             constraints=node.get("constraints", {}),
@@ -143,7 +139,9 @@ def make_agent_node_executor(
             role=node.get("role") or (manifest.role if manifest else None),
             actor=adapter_name,
             voice=manifest.voice if manifest else None,
+            instructions=manifest.instructions if manifest else "",
             mcp_refs=list(manifest.mcp) if manifest and manifest.mcp else [],
+            skill_refs=list(manifest.skills) if manifest and manifest.skills else [],
             repo_root=repo_root,
         )
         return output

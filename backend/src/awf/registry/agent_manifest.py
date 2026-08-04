@@ -4,7 +4,7 @@ A Markdown file with YAML frontmatter - the shape every real subagent
 config format independently converged on (Claude Code, GitHub Copilot CLI,
 Antigravity), adapted for AWF's own concepts: which adapter it routes
 through, its capability allowlist (Section 9.2), Trifecta role (Section
-12.3), and optional voice/MCP/model-profile references. The Markdown body
+12.3), and optional voice/MCP/skills/model-profile references. The Markdown body
 is the manifest's default instructions, layered under a workflow node's
 per-invocation `objective`, never replacing it.
 
@@ -27,6 +27,18 @@ class AgentManifestValidationError(ValueError):
 
 
 @dataclass(frozen=True)
+class SkillRef:
+    # `share: false` (default) is the AWF-injected tier (ADR-0004): the
+    # Skill's body is folded into the objective text, the adapter never
+    # sees a discoverable skill directory. `share: true` is the second,
+    # explicit, per-reference opt-in - the only "grant" this system can
+    # express, since no authority model exists above the operator who
+    # authors the manifest.
+    ref: str
+    share: bool = False
+
+
+@dataclass(frozen=True)
 class AgentManifest:
     name: str
     version: str
@@ -35,6 +47,7 @@ class AgentManifest:
     capabilities: tuple[str, ...] = ()
     role: str | None = None
     mcp: tuple[str, ...] = ()
+    skills: tuple[SkillRef, ...] = ()
     voice: str | None = None
     model_profile: str | None = None
     instructions: str = ""
@@ -68,6 +81,14 @@ def _split_frontmatter(text: str) -> tuple[dict, str]:
     return frontmatter, body
 
 
+def _parse_skill_ref(item: object) -> SkillRef:
+    if isinstance(item, str):
+        return SkillRef(ref=item)
+    if isinstance(item, dict):
+        return SkillRef(ref=_require(item, "ref", "skill ref"), share=bool(item.get("share", False)))
+    raise AgentManifestValidationError(f"skills entry must be a string or a mapping, got {item!r}")
+
+
 def parse_agent_manifest(raw: dict, instructions: str = "") -> AgentManifest:
     role = raw.get("role")
     if role is not None and role not in ROLES:
@@ -81,6 +102,7 @@ def parse_agent_manifest(raw: dict, instructions: str = "") -> AgentManifest:
         capabilities=tuple(raw.get("capabilities", [])),
         role=role,
         mcp=tuple(raw.get("mcp", [])),
+        skills=tuple(_parse_skill_ref(item) for item in raw.get("skills", [])),
         voice=raw.get("voice"),
         model_profile=raw.get("modelProfile"),
         instructions=instructions,

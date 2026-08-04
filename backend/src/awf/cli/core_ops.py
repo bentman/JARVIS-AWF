@@ -8,6 +8,7 @@ Capability Guard / durability / worktree-commit paths as the CLI.
 
 import hashlib
 import shlex
+import shutil
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -31,6 +32,7 @@ from awf.registry.capability_record import parse_capability_record
 from awf.registry.mcp_server import parse_mcp_server
 from awf.registry.model_profile import load_model_profile, parse_model_profile
 from awf.registry.resolve import CONFIG_ROOT, DATA_ONLY_KINDS, DATA_ROOT, resolve_registry_object
+from awf.registry.skill import directory_digest, load_skill
 from awf.secrets.store import list_secret_names, set_secret
 from awf.workflow.approval import make_approval_node_executor
 from awf.workflow.definition import load_workflow, parse_workflow
@@ -424,7 +426,23 @@ def op_registry_get(repo_root: Path, *, kind: str, name: str, version: str) -> d
     return {"kind": kind, "name": name, "version": version, "source": source, "content": path.read_text()}
 
 
+def _skill_md_path(path: Path) -> Path | None:
+    # Skills are directory-shaped (<name>/<version>/SKILL.md, Section 9.3),
+    # not a single file like every other kind - `path` may point at either
+    # the SKILL.md file itself or its containing version directory.
+    if path.name == "SKILL.md":
+        return path
+    if path.is_dir() and (path / "SKILL.md").is_file():
+        return path / "SKILL.md"
+    return None
+
+
 def op_registry_validate(path: Path) -> dict:
+    skill_md_path = _skill_md_path(path)
+    if skill_md_path is not None:
+        skill = load_skill(skill_md_path)
+        return {"kind": "Skill", "ref": skill.ref, "valid": True}
+
     if path.suffix == ".md":
         manifest = load_agent_manifest(path)
         return {"kind": "AgentManifest", "ref": manifest.ref, "valid": True}
@@ -449,6 +467,27 @@ def op_registry_validate(path: Path) -> dict:
 
 
 def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path) -> dict:
+    skill_md_path = _skill_md_path(path)
+    if skill_md_path is not None:
+        skill = load_skill(skill_md_path)
+        skill_dir = skill_md_path.parent
+        digest = directory_digest(skill_dir)
+        target_dir = repo_root / DATA_ROOT / "skills" / skill.name / skill.version
+        if target_dir.is_dir():
+            shutil.rmtree(target_dir)
+        target_dir.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(skill_dir, target_dir)
+
+        conn.execute(
+            "INSERT INTO registry_index (kind, name, version, digest, source, path, trust_status, indexed_at) "
+            "VALUES ('skills', ?, ?, ?, 'data', ?, 'local', ?) "
+            "ON CONFLICT(kind, name, version) DO UPDATE SET "
+            "digest=excluded.digest, path=excluded.path, indexed_at=excluded.indexed_at",
+            (skill.name, skill.version, digest, str(target_dir.relative_to(repo_root)), utc_now_rfc3339()),
+        )
+        conn.commit()
+        return {"kind": "skills", "name": skill.name, "version": skill.version, "digest": digest, "path": str(target_dir)}
+
     if path.suffix == ".md":
         manifest = load_agent_manifest(path)
         kind, name, version, extension = "agents", manifest.name, manifest.version, "md"

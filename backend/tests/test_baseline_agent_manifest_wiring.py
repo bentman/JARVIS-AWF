@@ -145,6 +145,37 @@ def test_agent_ref_mcp_list_is_threaded_through_to_the_adapter(tmp_path, conn):
     assert "--mcp-config" in captured["invocation"].constraints["mcp_extra_args"]
 
 
+def test_agent_ref_skills_list_is_threaded_through_to_the_objective(tmp_path, conn):
+    publish_manifest(
+        tmp_path,
+        "skilled-builder",
+        "name: skilled-builder\nversion: 1.0.0\ndescription: x\nadapter: claude-code\n"
+        "skills: [demo-skill@1.0.0]\n",
+        instructions="You are the skilled builder.",
+    )
+    skill_dir = tmp_path / "config" / "app_registry" / "skills" / "demo-skill" / "1.0.0"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: demo-skill\ndescription: A minimal demo skill.\n---\n\nDo the demo thing.\n"
+    )
+    captured = {}
+
+    def fake_adapter(invocation: AgentInvocation) -> AgentResult:
+        captured["invocation"] = invocation
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    executor = make_agent_node_executor({"claude-code": fake_adapter}, tmp_path, tmp_path)
+    node = {"id": "build", "type": "agent", "agentRef": "skilled-builder@1.0.0", "objective": "add a feature"}
+
+    output = executor(conn, "run-1", "step-1", node)
+
+    objective = captured["invocation"].objective
+    assert output["status"] == "COMPLETED"
+    assert objective.index("You are the skilled builder.") < objective.index("Do the demo thing.")
+    assert objective.index("Do the demo thing.") < objective.index("add a feature")
+    assert captured["invocation"].skills == ("demo-skill@1.0.0",)
+
+
 def test_node_without_agent_ref_is_unaffected(tmp_path, conn):
     # Additive, not breaking: a node with no agentRef keeps today's
     # behavior exactly - raw `adapter`/`role` fields, self-permitting

@@ -248,6 +248,51 @@ def test_registry_list_mcp_finds_the_real_shipped_config_defaults():
     assert {"context7"} <= names
 
 
+REAL_SKILL_DIR = REPO_ROOT / "data" / "registry" / "skills" / "demo-skill" / "1.0.0"
+
+
+def test_registry_validate_recognizes_skill_directory():
+    result = op_registry_validate(REAL_SKILL_DIR)
+    assert result["kind"] == "Skill"
+    assert result["ref"] == "demo-skill@1.0.0"
+    assert result["valid"] is True
+
+
+def test_registry_validate_recognizes_skill_md_file():
+    result = op_registry_validate(REAL_SKILL_DIR / "SKILL.md")
+    assert result["kind"] == "Skill"
+    assert result["ref"] == "demo-skill@1.0.0"
+
+
+def test_registry_publish_skill_writes_data_registry_and_index(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+    source_dir = tmp_path / "authoring" / "other-skill" / "1.0.0"
+    source_dir.mkdir(parents=True)
+    (source_dir / "SKILL.md").write_text(
+        "---\nname: other-skill\ndescription: A minimal authored skill.\n---\n\nDo the other thing.\n"
+    )
+    (source_dir / "scripts").mkdir()
+    (source_dir / "scripts" / "run.sh").write_text("echo hi\n")
+
+    result = op_registry_publish(repo_root, conn, path=source_dir)
+
+    assert result["kind"] == "skills"
+    assert result["name"] == "other-skill"
+    assert result["version"] == "1.0.0"
+    published_dir = Path(result["path"])
+    assert (published_dir / "SKILL.md").is_file()
+    assert (published_dir / "scripts" / "run.sh").is_file()
+
+    row = conn.execute(
+        "SELECT * FROM registry_index WHERE kind = 'skills' AND name = 'other-skill' AND version = '1.0.0'"
+    ).fetchone()
+    assert row["source"] == "data"
+    assert row["digest"] == result["digest"]
+
+    fetched_list = op_registry_list(repo_root, kind="skills")
+    assert {"source": "data", "kind": "skills", "name": "other-skill", "version": "1.0.0"} in fetched_list
+
+
 def test_registry_list_never_shows_config_side_model_profiles(tmp_path):
     # Section 9.3: model-profiles has no config/app_registry/ counterpart -
     # ADR-0001's reference examples under config/app_registry/model-profiles/

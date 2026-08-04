@@ -1,9 +1,4 @@
-# Example Model Profile (Section 11) - a reference shape, not an operator's
-# real registry entry. Never resolved for a real Run (registry/resolve.py::
-# DATA_ONLY_KINDS); see docs/adr/0001-example-model-profiles-location.md.
-# `gpt-4o-mini` is a real, currently-recognized model in LiteLLM's own
-# bundled model registry as of authoring - re-verify against
-# `litellm.model_cost` whenever the pinned litellm version changes.
+# Example Model Profile
 purpose: adversary
 privacy: {maximum_data_class: internal, local_only: false}
 candidates:

@@ -20,6 +20,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-04 09:23
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0004 (Skills registry schema) - `skills` is a real registry kind now, Agent Manifests gain a `skills` list with a per-reference `share` opt-in, and the default injection tier folds resolved SKILL.md bodies into the objective while the shared tier materializes a skill directory for Claude Code/Copilot CLI/Antigravity/Codex.
+  - Scope: see `docs/adr/0004-skills-registry-schema.md` for full detail.
+  - Validation: `pytest backend/tests/` → 331 passed (up from 309 baseline); live-verified the Codex shared-tier path through the real `run_agent_step` → `codex_cli.invoke` code path (not a mock) - a real `codex exec` subprocess, under its default safe sandbox flags, read a shared SKILL.md via a scratch `$CODEX_HOME` and echoed back a probe token.
+  - Notes: Scope item 7 (AWF's `/skills` CLI-frontend invocation surface) is explicitly out of scope for this ADR, per the ADR's own text.
+
 - Timestamp: 2026-08-03 09:10
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Implemented ADR-0002 (Agent Manifest schema and wiring) - `agents` is a real registry kind now, workflow `agent` nodes gain an `agentRef` field, and the Capability Guard's allowlist check is real for the first time.

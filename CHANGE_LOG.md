@@ -338,6 +338,23 @@
   - Notes:
     - The `fetch` default drafted during design used a nonexistent npm package (`@modelcontextprotocol/server-fetch` 404s - the real reference server is the Python package `mcp-server-fetch` via `uvx`). Dropped rather than shipped, to avoid adding a second per-invocation runtime; only `context7` ships this pass.
 
+- Timestamp: 2026-08-04 01:48
+  - Corrects: the 2026-08-03 14:49 entry's implicit assumption that Antigravity was covered - it shipped supported behind the scene, but the underlying mechanism (`render_antigravity`) actually raised on any non-empty server list, since Antigravity has no per-invocation MCP flag. Fixed, not worked around.
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Antigravity now gets a real MCP handoff too - all four implemented adapters are supported. Mechanism, tradeoff, and the accepted exception (below) are written into `docs/adr/0003-mcp-server-registry-schema.md` (Mechanism, Scope item 8, Acceptance).
+  - Scope:
+    - `backend/src/awf/mcp/render.py` (`render_antigravity` renders a fresh `.gemini/config/mcp_config.json` + `.gemini/antigravity-cli/settings.json` instead of raising; new `RenderedMcpConfig.home_relative_files`/`home_copy_paths` fields)
+    - `backend/src/awf/engine/agent_step.py` (`_apply_mcp` materializes a scratch `$HOME` under `cache/sandbox/<run_id>/agy_home/<actor>/`, copies in the real `antigravity-oauth-token`, and injects `HOME` via `mcp_env_overlay`)
+    - `backend/tests/test_baseline_mcp_render.py`, `test_baseline_agent_step_mcp.py`
+    - `docs/adr/0003-mcp-server-registry-schema.md`
+  - Validation:
+    - `pytest backend/tests/` → 271 passed
+    - Real, non-mocked run through the actual `run_agent_step` → `antigravity_cli.invoke` path: a real `context7@1.0.0` ref produced a real `resolve-library-id` tool call (`react`→`/reactjs/react.dev`, `vue`→`/vuejs/vue`, `svelte`→`/sveltejs/svelte` across separate runs), with the API key resolved via `${VAR}` substitution and injected only into the subprocess env - never written to any file. Demo run/step/event rows and scratch dirs removed afterward.
+  - Notes:
+    - The real mechanism (confirmed by asking `agy` itself, then live-testing): Antigravity only reads MCP servers from `~/.gemini/config/mcp_config.json` - its actual home directory, with no per-invocation override flag. The fix redirects the subprocess's own `$HOME` env var to a scratch directory instead of touching the operator's real one.
+    - Named, accepted exception: the copied `antigravity-oauth-token` is real session-credential material, at rest in `cache/sandbox/<run_id>/` for the Run's duration (longer if the Run fails, per the existing worktree/scratch retention policy) - a real increase in exposure over the other three adapters, where no secret ever touches disk at all.
+    - Separately observed, not fixed here (out of scope - unrelated to MCP): in headless print mode, Antigravity sometimes wants to run an arbitrary shell command mid-turn and gets auto-denied (a `command(*)` permission gap, same class as Copilot CLI's still-unbuilt `preToolUse` hook) - nondeterministic, didn't block any run above, flagged for later.
+
 ---
 
 ## Change Appendix

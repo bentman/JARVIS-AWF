@@ -53,6 +53,10 @@ The system must support these targets without assuming any one acceleration path
   - skills: `SKILL.md` as the entry point, scoped instructions, optional scripts/templates/examples directories.
 - Generated MCP/agent/service artifacts must be linted before registration.
 - Published workflows, agents, activities, policies, eval suites, skills, capabilities, model profiles, and sandbox profiles must be semantic-versioned and digest-pinned.
+- Registry root by durability/portability, not convenience:
+  - `cache/` — non-durable/temp; untracked, safe to delete anytime.
+  - `config/app_registry/` — repo-tracked application defaults; no operator-specific endpoints/secrets/local paths.
+  - `data/registry/` — operator data and customizations; portable, untracked, operator's own backup responsibility.
 - Untrusted commands and agent steps must run through declared sandbox profiles; direct host execution requires an explicit approved exception.
 - Secrets must never be logged, written to flywheel records, or sent to external APIs without redaction policy review.
 - Destructive operations, credential rotation, backup restore, and chaos testing default to dry-run or disabled until explicitly enabled.

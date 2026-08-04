@@ -1,0 +1,15 @@
+function: stt
+profile: linux-x64-cuda
+files:
+- acquisition: huggingface
+  repo_id: deepdml/faster-whisper-large-v3-turbo-ct2
+  revision: 4df90f75321148c3a29a9e2351b7ddf8f5b115a8
+notes: 'Corrected from an earlier draft that pinned a nonexistent repo id, `Systran/faster-whisper-large-v3-turbo`
+  - real HuggingFace API search (with a real, operator-supplied read token) found no such repo. The
+  real, existing repo for this exact model (CTranslate2 format, large-v3-turbo weights) is `deepdml/faster-whisper-large-v3-turbo-ct2`,
+  confirmed via a real, authenticated HF API call: sha `4df90f75321148c3a29a9e2351b7ddf8f5b115a8`, MIT
+  license, real `config.json`/`model.bin`/`tokenizer.json`/`vocabulary.json` file set. A second real
+  alternative exists with far more downloads but thinner metadata: `mobiuslabsgmbh/faster-whisper-large-v3-turbo`
+  (sha `0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf`) - not pinned here, but a legitimate substitute if this
+  one is ever deprecated. This is a multi-file repo (CTranslate2 model directory, not a single artifact),
+  so the pin is a revision, not a sha256.'

@@ -36,6 +36,7 @@ from awf.workflow.approval import make_approval_node_executor
 from awf.workflow.definition import load_workflow, parse_workflow
 from awf.workflow.engine import make_activity_node_executor, make_agent_node_executor, run_workflow_definition
 from awf.workflow.handoff import make_handoff_node_executor
+from awf.workflow.io_schema import InputValidationError, validate_input
 from awf.workflow.loop_node import make_loop_node_executor
 from awf.workflow.map_node import make_map_node_executor
 from awf.workflow.subworkflow import make_subworkflow_node_executor
@@ -68,12 +69,8 @@ def _make_check_fn(node: dict, worktree: Path):
     return check_fn
 
 
-def _resolve_review_profile(node: dict, repo_root: Path):
-    # A gate node MAY declare `reviewProfile: name@version` (a `purpose:
-    # judge` Model Profile, Section 11) to add a real LLM-driven review
-    # Finding, routed through the Model Gateway, alongside the deterministic
-    # check - the Verifier's other, previously-unbuilt obligation half.
-    review_ref = node.get("reviewProfile")
+def _resolve_named_review_profile(node: dict, repo_root: Path, field_name: str):
+    review_ref = node.get(field_name)
     if not review_ref:
         return None, None
     name, _, version = review_ref.partition("@")
@@ -84,6 +81,22 @@ def _resolve_review_profile(node: dict, repo_root: Path):
     except (FileNotFoundError, KeyError):
         secret_key = None
     return profile, secret_key
+
+
+def _resolve_review_profile(node: dict, repo_root: Path):
+    # A gate node MAY declare `reviewProfile: name@version` (a `purpose:
+    # judge` Model Profile, Section 11) to add a real LLM-driven review
+    # Finding, routed through the Model Gateway, alongside the deterministic
+    # check - the Verifier's other, previously-unbuilt obligation half.
+    return _resolve_named_review_profile(node, repo_root, "reviewProfile")
+
+
+def _resolve_adversary_review_profile(node: dict, repo_root: Path):
+    # A gate node MAY declare `adversaryReviewProfile: name@version` (a
+    # `purpose: adversary` Model Profile, Section 11) for the high-risk
+    # tier's LLM-driven adversary Finding - `reviewProfile`'s counterpart
+    # for the Adversary role instead of the Verifier's.
+    return _resolve_named_review_profile(node, repo_root, "adversaryReviewProfile")
 
 
 def _make_run_child(worktree: Path, artifacts_root: Path, repo_root: Path):
@@ -121,16 +134,64 @@ def _make_run_child(worktree: Path, artifacts_root: Path, repo_root: Path):
     return run_child
 
 
+def _make_run_map_item(artifacts_root: Path, repo_root: Path):
+    # Unlike `_make_run_child` (shared worktree, single connection - fine
+    # for `subworkflow`/`loop`, which never run concurrently with anything
+    # else), a `map` item may run concurrently with its siblings: it gets
+    # its own isolated worktree (branched from the parent's current HEAD)
+    # and its own `sqlite3.Connection`, since neither is safe to share
+    # across threads. `map_node.py` merges each successful item's commits
+    # back into the parent worktree itself, in order, once every item has
+    # finished - this function only runs one item to completion.
+    def run_map_item(parent_head: str, index: int, workflow_ref: str, item) -> tuple[str, Path, dict]:
+        import json
+
+        from awf.db.connection import get_connection
+
+        db_path = repo_root / "data" / "awf_db" / "awf.db"
+        item_conn = get_connection(db_path)
+        try:
+            child_workflow = _resolve_workflow(repo_root, workflow_ref)
+            child_run_id = uuid7()
+            create_run(
+                item_conn, run_id=child_run_id, workflow_ref=child_workflow.ref,
+                input_json=json.dumps({"item": item, "index": index}),
+            )
+            item_worktree = create_worktree(repo_root, child_run_id, base_ref=parent_head)
+            item_scratch_dir = create_scratch_dir(repo_root, child_run_id)
+            try:
+                item_executors = _build_node_executors(
+                    child_workflow, item_worktree, artifacts_root, repo_root, item_scratch_dir
+                )
+                result = _run_workflow_safely(
+                    item_conn, run_id=child_run_id, workflow=child_workflow, node_executors=item_executors
+                )
+            except Exception as exc:
+                item_conn.execute(
+                    "UPDATE runs SET status = 'FAILED', updated_at = ? WHERE run_id = ?",
+                    (utc_now_rfc3339(), child_run_id),
+                )
+                item_conn.commit()
+                result = {"status": "FAILED", "error": str(exc)}
+            remove_scratch_dir(repo_root, child_run_id)
+            return child_run_id, item_worktree, result
+        finally:
+            item_conn.close()
+
+    return run_map_item
+
+
 def _build_node_executors(
     workflow, worktree: Path, artifacts_root: Path, repo_root: Path, run_scratch_dir: Path
 ) -> dict:
     run_child = _make_run_child(worktree, artifacts_root, repo_root)
+    run_map_item = _make_run_map_item(artifacts_root, repo_root)
     executors = {
         "agent": make_agent_node_executor(ADAPTER_REGISTRY, worktree, repo_root),
         "activity": make_activity_node_executor(),
         "approval": make_approval_node_executor(),
         "subworkflow": make_subworkflow_node_executor(run_child),
-        "map": make_map_node_executor(run_child),
+        "map": make_map_node_executor(run_map_item, worktree_path=worktree, repo_root=repo_root),
         "loop": make_loop_node_executor(run_child),
     }
     for node in workflow.nodes:
@@ -140,6 +201,9 @@ def _build_node_executors(
             # nothing here infers it automatically) to reach the full
             # Trifecta Adversary pass instead of Builder+Verifier only.
             review_profile, review_secret_key = _resolve_review_profile(node, repo_root)
+            adversary_review_profile, adversary_review_secret_key = _resolve_adversary_review_profile(
+                node, repo_root
+            )
             executors["gate"] = make_trifecta_gate_executor(
                 check_fn=_make_check_fn(node, worktree),
                 check_summary=node.get("check", node["id"]),
@@ -149,6 +213,9 @@ def _build_node_executors(
                 guard_bypassed=node.get("guardBypassed", False),
                 review_profile=review_profile,
                 review_secret_key=review_secret_key,
+                adversary_review_profile=adversary_review_profile,
+                adversary_review_secret_key=adversary_review_secret_key,
+                worktree_path=worktree,
             )
         elif node["type"] == "handoff":
             executors["handoff"] = make_handoff_node_executor(ADAPTER_REGISTRY, worktree)
@@ -192,6 +259,11 @@ def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str
     import json
 
     workflow = _resolve_workflow(repo_root, workflow_ref)
+    try:
+        validate_input(input_data, workflow.input_schema)
+    except InputValidationError as exc:
+        raise CoreOpError(f"input does not match {workflow.ref}'s inputSchema: {exc}") from exc
+
     run_id = uuid7()
     create_run(conn, run_id=run_id, workflow_ref=workflow.ref, input_json=json.dumps(input_data))
 
@@ -267,12 +339,24 @@ def op_approval_approve(
     # the GUI's own TypeScript copy of this same rule, so no frontend can
     # bypass it by skipping its own check.
     if channel == "voice":
-        if risk_class is None:
-            raise CoreOpError("channel='voice' requires risk_class to evaluate the voice-approval rule")
+        row = conn.execute("SELECT risk_class FROM approvals WHERE approval_id = ?", (approval_id,)).fetchone()
+        if row is None:
+            raise CoreOpError(f"no such approval: {approval_id}")
+        stored_risk_class = row["risk_class"]
+        if risk_class is not None and stored_risk_class is not None and risk_class != stored_risk_class:
+            raise CoreOpError(
+                f"risk_class={risk_class!r} does not match this approval's real risk_class={stored_risk_class!r} "
+                "- a caller may not claim a different risk class than the one recorded when this approval was requested"
+            )
+        # An approval whose node never declared `riskClass` has no real
+        # value to check against - the safe default is R2 (never auto-
+        # grantable from voice alone), not R0/R1, since trusting an absent
+        # value as low-risk would be a real bypass of the rule below.
+        effective_risk_class = risk_class or stored_risk_class or "R2"
         from awf.gates.voice_approval import attempt_voice_approval
 
         decision = attempt_voice_approval(
-            conn, approval_id=approval_id, risk_class=risk_class, voice_confirmed=True
+            conn, approval_id=approval_id, risk_class=effective_risk_class, voice_confirmed=True
         )
         if not decision["decided"]:
             return {

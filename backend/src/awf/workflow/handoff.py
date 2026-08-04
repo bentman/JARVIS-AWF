@@ -16,13 +16,18 @@ artifacts, never raw conversation history: each hop's agent is instructed to
 write a JSON status file (default `handoff_status.json`) containing at least
 `{"<terminationField>": bool, "summary": str}`. The engine reads that file
 deterministically - it never parses or trusts agent prose to decide whether
-the loop continues.
+the loop continues - and validates it against the node's own required
+`payloadSchema` before reading anything out of it; a hop whose status file
+doesn't conform fails the Step with `INVALID_INPUT` rather than silently
+trusting a malformed or incomplete payload.
 """
 
 import json
 import sqlite3
 from pathlib import Path
 from typing import Callable
+
+import jsonschema
 
 from awf.adapters.base import AgentInvocation, AgentStatus
 from awf.clock import utc_now_rfc3339
@@ -94,6 +99,13 @@ def make_handoff_node_executor(
             if not status_path.is_file():
                 raise HandoffError(f"hop {hop_count}: agent did not write {status_filename}")
             status = json.loads(status_path.read_text())
+            try:
+                jsonschema.validate(instance=status, schema=node["payloadSchema"])
+            except jsonschema.ValidationError as exc:
+                raise HandoffError(
+                    f"hop {hop_count}: {status_filename} does not match this node's payloadSchema: {exc}",
+                    failure_class="INVALID_INPUT",
+                ) from exc
             previous_summary = status.get("summary", "")
             if status.get(termination_field):
                 completed = True

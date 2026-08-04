@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from awf.cli import core_ops as ops
+from awf.cli.core_ops import CoreOpError
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.secrets import cli as secrets_cli
@@ -147,7 +148,11 @@ def run(argv: list[str], repo_root: Path) -> int:
     init_db(db_path)
     conn = get_connection(db_path)
     try:
-        return args.func(args, repo_root, conn)
+        try:
+            return args.func(args, repo_root, conn)
+        except CoreOpError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
     finally:
         conn.close()
 

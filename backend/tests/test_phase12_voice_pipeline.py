@@ -79,6 +79,41 @@ def test_full_round_trip_wake_stt_response_tts(tmp_path):
     assert len(samples) > 0
 
 
+def test_round_trip_with_repo_root_verifies_real_pinned_models_and_logs_it(tmp_path):
+    # closes the "manifests are pinned but nothing reads them" gap - a real
+    # round trip against the real, already-downloaded models on this host,
+    # checked against the real shipped config/voice/*/linux-x64-*.yaml pins.
+    conn = make_conn(tmp_path)
+
+    run_voice_round_trip(
+        conn,
+        wake_audio_path=FIXTURES / "hey_jarvis.wav",
+        command_audio_path=FIXTURES / "hello_world.wav",
+        wake_model_path=WAKE_MODEL,
+        vad_model_path=VAD_MODEL,
+        tts_model_path=TTS_MODEL,
+        tts_voices_path=TTS_VOICES,
+        voice_id="bf_isabella",
+        core_fn=lambda text: "ok",
+        stt_download_root=MODELS / "stt",
+        repo_root=REPO_ROOT,
+    )
+
+    event = conn.execute(
+        "SELECT payload_json FROM events WHERE actor = 'hardware_profiler' "
+        "AND reason_code = 'pinned_model_verification'"
+    ).fetchone()
+    assert event is not None
+    import json
+
+    payload = json.loads(event["payload_json"])
+    functions_checked = {v["function"] for v in payload["verifications"]}
+    assert functions_checked == {"wake", "vad", "tts", "stt"}
+    for verification in payload["verifications"]:
+        for result in verification["results"]:
+            assert result["status"] == "OK", verification
+
+
 def test_round_trip_raises_when_wake_word_does_not_fire(tmp_path):
     conn = make_conn(tmp_path)
 

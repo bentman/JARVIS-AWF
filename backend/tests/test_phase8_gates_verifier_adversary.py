@@ -7,6 +7,7 @@ from awf.gates.adversary import (
     check_memory_contamination,
     check_resource_safety,
     check_safety_gate_bypass,
+    run_llm_adversary_review,
 )
 from awf.gates.verifier import run_llm_review, run_verifier_check
 from awf.hardware.gpu_sampler import GpuSamplerUnavailable
@@ -70,6 +71,57 @@ def test_llm_review_routes_through_the_model_gateway(monkeypatch):
     profile = _judge_profile()
 
     run_llm_review(profile, candidate_summary="the candidate diff")
+
+    assert captured["profile"] is profile
+    assert captured["messages"][-1] == {"role": "user", "content": "the candidate diff"}
+
+
+def _adversary_profile():
+    return parse_model_profile(
+        {
+            "purpose": "adversary",
+            "privacy": {"maximum_data_class": "internal", "local_only": True},
+            "candidates": [{"provider": "ollama", "model": "phi4-mini:latest", "priority": 1, "enabled": True}],
+            "fallback": {"mode": "none", "allow_quality_degrade": False},
+            "limits": {"max_input_tokens_per_call": 512, "max_output_tokens_per_call": 64, "max_cost_usd_per_call": 0},
+        }
+    )
+
+
+def test_llm_adversary_review_pass_response_yields_low_severity_finding(monkeypatch):
+    monkeypatch.setattr("awf.gates.adversary.complete", lambda *a, **k: "PASS: nothing exploitable")
+    finding = run_llm_adversary_review(_adversary_profile(), candidate_summary="add(a, b) returns a + b")
+
+    assert finding.role == "adversary"
+    assert finding.category == "other"
+    assert finding.severity == "low"
+    assert finding.details["passed"] is True
+    assert finding.details["model"] == "ollama/phi4-mini:latest"
+
+
+def test_llm_adversary_review_fail_response_yields_high_severity_finding(monkeypatch):
+    monkeypatch.setattr(
+        "awf.gates.adversary.complete", lambda *a, **k: "FAIL: unbounded recursion allows a stack exhaustion DoS"
+    )
+    finding = run_llm_adversary_review(_adversary_profile(), candidate_summary="def f(n): return f(n)")
+
+    assert finding.severity == "high"
+    assert finding.details["passed"] is False
+    assert "stack exhaustion" in finding.summary
+
+
+def test_llm_adversary_review_routes_through_the_model_gateway(monkeypatch):
+    captured = {}
+
+    def fake_complete(profile, messages, *, conn=None, secret_key=None):
+        captured["profile"] = profile
+        captured["messages"] = messages
+        return "PASS: fine"
+
+    monkeypatch.setattr("awf.gates.adversary.complete", fake_complete)
+    profile = _adversary_profile()
+
+    run_llm_adversary_review(profile, candidate_summary="the candidate diff")
 
     assert captured["profile"] is profile
     assert captured["messages"][-1] == {"role": "user", "content": "the candidate diff"}

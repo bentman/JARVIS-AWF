@@ -57,6 +57,7 @@ from awf.registry.capability_record import CapabilityRecord, Effects, Identity, 
 from awf.registry.resolve import resolve_registry_object
 from awf.workflow.activities import ACTIVITY_REGISTRY, UnknownActivityError
 from awf.workflow.definition import WorkflowDefinition
+from awf.workflow.io_schema import OutputValidationError, render_outputs, validate_output
 
 NodeExecutor = Callable[[sqlite3.Connection, str, str, dict], dict]
 AdapterFn = Callable[[AgentInvocation], "AgentResult"]
@@ -183,6 +184,7 @@ def run_workflow_definition(
 ) -> dict:
     max_repairs = workflow.budgets.get("maxRepairIterations", 3)
     repairs_used = 0
+    hops_used = 0
     last_verdict_artifact_id = None
     attempt_counts: dict[str, int] = {}
 
@@ -222,6 +224,9 @@ def run_workflow_definition(
             _mark_run_failed(conn, run_id=run_id, reason_code=f"step_failed:{exc}")
             return {"status": "FAILED", "repairs_used": repairs_used, "error": str(exc)}
 
+        if "hops_used" in output:
+            hops_used = output["hops_used"]
+
         if output.get("waiting_input"):
             return {"status": "WAITING_INPUT", "repairs_used": repairs_used, **output}
 
@@ -248,6 +253,18 @@ def run_workflow_definition(
         else:
             current_id = node.get("next")
 
+    engine_context = {
+        "repairs_used": repairs_used,
+        "hops_used": hops_used,
+        "verdict_artifact_id": last_verdict_artifact_id,
+    }
+    rendered_outputs = render_outputs(workflow.outputs, engine_context)
+    try:
+        validate_output(rendered_outputs, workflow.output_schema)
+    except OutputValidationError as exc:
+        _mark_run_failed(conn, run_id=run_id, reason_code=f"output_schema_invalid:{exc}")
+        return {"status": "FAILED", "repairs_used": repairs_used, "error": str(exc)}
+
     conn.execute(
         "UPDATE runs SET status = 'SUCCEEDED', updated_at = ? WHERE run_id = ?",
         (utc_now_rfc3339(), run_id),
@@ -258,4 +275,5 @@ def run_workflow_definition(
         "status": "SUCCEEDED",
         "repairs_used": repairs_used,
         "verdict_artifact_id": last_verdict_artifact_id,
+        "outputs": rendered_outputs,
     }

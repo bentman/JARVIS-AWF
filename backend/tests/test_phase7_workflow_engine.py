@@ -53,7 +53,7 @@ def test_straight_pass_no_repair_needed(tmp_path):
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
-    assert result == {"status": "SUCCEEDED", "repairs_used": 0, "verdict_artifact_id": None}
+    assert result == {"status": "SUCCEEDED", "repairs_used": 0, "verdict_artifact_id": None, "outputs": {}}
     assert calls == ["produce"]
     row = conn.execute("SELECT status FROM runs WHERE run_id = 'run-1'").fetchone()
     assert row["status"] == "SUCCEEDED"
@@ -76,7 +76,7 @@ def test_gate_fails_once_then_repair_succeeds(tmp_path):
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
-    assert result == {"status": "SUCCEEDED", "repairs_used": 1, "verdict_artifact_id": None}
+    assert result == {"status": "SUCCEEDED", "repairs_used": 1, "verdict_artifact_id": None, "outputs": {}}
     assert len(gate_calls) == 2
 
 

@@ -42,7 +42,7 @@ def conn(tmp_path):
     return connection
 
 
-def make_handoff_workflow(max_hops=4):
+def make_handoff_workflow(max_hops=4, payload_schema=None):
     return parse_workflow(
         {
             "apiVersion": "awf/v1",
@@ -56,7 +56,7 @@ def make_handoff_workflow(max_hops=4):
                         "type": "handoff",
                         "initiatingAgent": {"adapter": "a", "objective": "draft"},
                         "receivingAgent": {"adapter": "b", "objective": "review"},
-                        "payloadSchema": {"type": "object"},
+                        "payloadSchema": payload_schema or {"type": "object"},
                         "maxHops": max_hops,
                         "next": None,
                     }
@@ -170,6 +170,56 @@ def test_handoff_missing_status_file_fails_run_cleanly_with_tool_error(worktree,
         "SELECT status FROM steps WHERE step_id = 'run-1:loop#1:hop1'"
     ).fetchone()
     assert step_row["status"] == "SUCCEEDED"
+
+
+def test_handoff_status_file_violating_payloadschema_fails_run_with_invalid_input(worktree, conn):
+    # A real, meaningful payloadSchema (not the loose {"type": "object"}
+    # every other test in this file uses) - requires a "confidence" field
+    # the agent never actually writes.
+    strict_schema = {
+        "type": "object",
+        "required": ["handoff_complete", "summary", "confidence"],
+        "properties": {"confidence": {"type": "number"}},
+    }
+
+    def adapter_fn(invocation):
+        (invocation.workspace_root / "handoff_status.json").write_text(
+            json.dumps({"handoff_complete": True, "summary": "done"})  # missing "confidence"
+        )
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    adapter_registry = {"a": adapter_fn, "b": adapter_fn}
+    executor = make_handoff_node_executor(adapter_registry, worktree)
+    workflow = make_handoff_workflow(max_hops=2, payload_schema=strict_schema)
+
+    result = run_workflow_definition(conn, run_id="run-1", workflow=workflow, node_executors={"handoff": executor})
+
+    assert result["status"] == "FAILED"
+    assert "payloadSchema" in result["error"]
+    row = conn.execute("SELECT status FROM runs WHERE run_id = 'run-1'").fetchone()
+    assert row["status"] == "FAILED"
+
+
+def test_handoff_status_file_conforming_to_strict_payloadschema_succeeds(worktree, conn):
+    strict_schema = {
+        "type": "object",
+        "required": ["handoff_complete", "summary", "confidence"],
+        "properties": {"confidence": {"type": "number"}},
+    }
+
+    def adapter_fn(invocation):
+        (invocation.workspace_root / "handoff_status.json").write_text(
+            json.dumps({"handoff_complete": True, "summary": "done", "confidence": 0.9})
+        )
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    adapter_registry = {"a": adapter_fn, "b": adapter_fn}
+    executor = make_handoff_node_executor(adapter_registry, worktree)
+    workflow = make_handoff_workflow(max_hops=2, payload_schema=strict_schema)
+
+    result = run_workflow_definition(conn, run_id="run-1", workflow=workflow, node_executors={"handoff": executor})
+
+    assert result["status"] == "SUCCEEDED"
 
 
 def test_handoff_adapter_failure_fails_run_cleanly_with_tool_error(worktree, conn):

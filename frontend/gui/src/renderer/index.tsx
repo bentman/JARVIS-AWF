@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.js";
+import type { ApprovalSummary, RunSummary } from "./Dashboard.js";
 
 interface VoiceRoundTripResult {
   wake_detected: boolean;
@@ -16,8 +17,8 @@ declare global {
   interface Window {
     awf: {
       runStatus: (runId: string) => Promise<unknown>;
-      runList: () => Promise<unknown>;
-      approvalList: () => Promise<unknown>;
+      runList: () => Promise<RunSummary[]>;
+      approvalList: () => Promise<ApprovalSummary[]>;
       approvalApprove: (approvalId: string) => Promise<unknown>;
       approvalReject: (approvalId: string, reason: string) => Promise<unknown>;
       voiceRoundTrip: (
@@ -37,8 +38,10 @@ if (container) {
     React.createElement(App, {
       onApprove: (approvalId: string) => void window.awf.approvalApprove(approvalId),
       onReject: (approvalId: string, reason: string) => void window.awf.approvalReject(approvalId, reason),
-      onVoiceRoundTrip: (wakeAudioPath: string, commandAudioPath: string) =>
-        window.awf.voiceRoundTrip(wakeAudioPath, commandAudioPath, "bf_isabella", "/tmp/awf-gui-response.wav"),
+      onVoiceRoundTrip: (wakeAudioPath: string, commandAudioPath: string, voiceId: string) =>
+        window.awf.voiceRoundTrip(wakeAudioPath, commandAudioPath, voiceId, "/tmp/awf-gui-response.wav"),
+      onRunList: () => window.awf.runList(),
+      onApprovalList: () => window.awf.approvalList(),
     }),
   );
 }

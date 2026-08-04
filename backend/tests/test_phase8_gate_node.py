@@ -1,12 +1,32 @@
 import json
+import subprocess
 
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.run import create_run
 from awf.gates.gate_node import make_trifecta_gate_executor
+from awf.isolation.worktree import commit_all_changes
 from awf.registry.model_profile import parse_model_profile
 from awf.workflow.definition import parse_workflow
 from awf.workflow.engine import run_workflow_definition
+
+
+def run_git(args, cwd):
+    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    return result
+
+
+def make_real_worktree(tmp_path):
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    run_git(["init", "-q"], cwd=repo_root)
+    run_git(["config", "user.email", "t@e.com"], cwd=repo_root)
+    run_git(["config", "user.name", "T"], cwd=repo_root)
+    (repo_root / "README.md").write_text("x\n")
+    run_git(["add", "-A"], cwd=repo_root)
+    run_git(["commit", "-q", "-m", "init"], cwd=repo_root)
+    return repo_root
 
 
 def make_conn(tmp_path):
@@ -113,6 +133,96 @@ def test_gate_with_review_profile_adds_a_real_llm_review_finding_via_the_gateway
     assert len(finding_rows) == 2  # deterministic check + the real LLM review
     contents = [read_artifact_json(conn, artifacts_root, row["artifact_id"]) for row in finding_rows]
     assert any("reviewed, looks correct" in c["summary"] for c in contents)
+
+
+def test_gate_with_worktree_path_shows_the_llm_reviewer_the_real_diff_not_just_the_label(tmp_path, monkeypatch):
+    repo_root = make_real_worktree(tmp_path)
+    (repo_root / "calc.py").write_text("def add(a, b):\n    return a - b\n")
+    commit_all_changes(repo_root, "produce: buggy add")
+
+    captured = {}
+
+    def fake_complete(profile, messages, *, conn=None, secret_key=None):
+        captured["candidate_summary"] = messages[-1]["content"]
+        return "PASS: fine"
+
+    monkeypatch.setattr("awf.gates.verifier.complete", fake_complete)
+
+    conn = make_conn(tmp_path)
+    workflow = make_workflow()
+    artifacts_root = tmp_path / "artifacts"
+
+    def agent_executor(conn, run_id, step_id, node):
+        return {"ok": True}
+
+    review_profile = parse_model_profile(
+        {
+            "purpose": "judge",
+            "privacy": {"maximum_data_class": "internal", "local_only": True},
+            "candidates": [{"provider": "ollama", "model": "phi4-mini:latest", "priority": 1, "enabled": True}],
+            "fallback": {"mode": "none", "allow_quality_degrade": False},
+            "limits": {"max_input_tokens_per_call": 512, "max_output_tokens_per_call": 64, "max_cost_usd_per_call": 0},
+        }
+    )
+    gate_executor = make_trifecta_gate_executor(
+        check_fn=lambda: True, check_summary="calc_add_returns_sum", artifacts_root=artifacts_root,
+        review_profile=review_profile, worktree_path=repo_root,
+    )
+
+    run_workflow_definition(
+        conn, run_id="run-1", workflow=workflow,
+        node_executors={"agent": agent_executor, "gate": gate_executor},
+    )
+
+    # not just the bare label - the real diff content is in what the
+    # reviewer was actually shown.
+    assert "calc_add_returns_sum" in captured["candidate_summary"]
+    assert "calc.py" in captured["candidate_summary"]
+    assert "return a - b" in captured["candidate_summary"]
+
+
+def test_high_risk_gate_with_adversary_review_profile_adds_a_real_llm_adversary_finding(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "awf.gates.adversary.complete", lambda *a, **k: "FAIL: unchecked input allows a path traversal"
+    )
+
+    conn = make_conn(tmp_path)
+    workflow = make_workflow()
+    artifacts_root = tmp_path / "artifacts"
+
+    def agent_executor(conn, run_id, step_id, node):
+        return {"ok": True}
+
+    adversary_review_profile = parse_model_profile(
+        {
+            "purpose": "adversary",
+            "privacy": {"maximum_data_class": "internal", "local_only": True},
+            "candidates": [{"provider": "ollama", "model": "phi4-mini:latest", "priority": 1, "enabled": True}],
+            "fallback": {"mode": "none", "allow_quality_degrade": False},
+            "limits": {"max_input_tokens_per_call": 512, "max_output_tokens_per_call": 64, "max_cost_usd_per_call": 0},
+        }
+    )
+    gate_executor = make_trifecta_gate_executor(
+        check_fn=lambda: True, check_summary="demo check", artifacts_root=artifacts_root,
+        tier="high-risk", adversary_review_profile=adversary_review_profile,
+    )
+
+    result = run_workflow_definition(
+        conn, run_id="run-1", workflow=workflow,
+        node_executors={"agent": agent_executor, "gate": gate_executor},
+    )
+
+    # a FAIL from the LLM adversary review is a normal high-severity
+    # Finding, not a terminal safety_gate_bypass - it consumes repair
+    # iterations like any other failing Finding (the deterministic check
+    # always passes here, so the budget exhausts deterministically).
+    assert result["status"] == "FAILED"
+    assert result["repairs_used"] == 3
+    finding_rows = conn.execute(
+        "SELECT * FROM artifacts WHERE artifact_type = 'finding' ORDER BY created_at"
+    ).fetchall()
+    contents = [read_artifact_json(conn, artifacts_root, row["artifact_id"]) for row in finding_rows]
+    assert any(c["role"] == "adversary" and "path traversal" in c["summary"] for c in contents)
 
 
 def test_gate_fails_then_repairs_then_passes_produces_two_verdicts(tmp_path):

@@ -1,0 +1,15 @@
+function: stt
+profile: linux-arm64-gpu
+files:
+- acquisition: huggingface
+  repo_id: Systran/faster-whisper-small
+  revision: 536b0662742c02347bc0e980a01041f333bce120
+  target_relative_path: models--Systran--faster-whisper-small/snapshots/536b0662742c02347bc0e980a01041f333bce120/model.bin
+  sha256: 3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671
+notes: 'Section 16.4''s table names a sherpa-onnx ONNX export ("Whisper `small` int8 ONNX") for this acceleration
+  class. The real, installed adapter (backend/src/awf/speech/stt_whisper.py) uses faster-whisper''s HuggingFace-hosted
+  CTranslate2 model instead - pinned here to what is actually running, not the spec''s literal wording
+  (see CHANGE_LOG.md). A genuine sherpa-onnx alternative does exist upstream if that literal path is ever
+  built: https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-small.tar.bz2,
+  sha256 (upstream-published, not locally verified) 486a46afbb7ba798507190ffe02fea2dd726049af212e774537efac6afb210a6
+  - the ''asr-models'' release tag is a rolling tag, not immutable.'

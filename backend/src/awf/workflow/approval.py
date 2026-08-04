@@ -2,6 +2,14 @@
 an exact action digest - the default gate for anything R2+ under the
 attended model.
 
+A node MAY declare `riskClass` (R0-R3); it's stored on the `approvals` row
+so a caller (a frontend rendering the pending-approvals list, or the voice-
+approval rule below) can read the real risk class of a specific pending
+approval instead of needing to already know it out of band. An
+undeclared `riskClass` stores `NULL` - `op_approval_approve` treats an
+unknown risk class as R2+ for the voice-refusal rule (Section 16.4),
+never as R0/R1, since silently trusting an absent value would be a bypass.
+
 The Step for this node does not go through `run_step` while still pending:
 `run_step` marks a Step `SUCCEEDED` as soon as its function
 returns, which would permanently cache the "still waiting" result across a
@@ -50,9 +58,9 @@ def make_approval_node_executor():
             approval_id = uuid7()
             now = utc_now_rfc3339()
             conn.execute(
-                "INSERT INTO approvals (approval_id, run_id, step_id, action_digest, status, requested_at) "
-                "VALUES (?, ?, ?, ?, 'pending', ?)",
-                (approval_id, run_id, step_id, _action_digest(run_id, node), now),
+                "INSERT INTO approvals (approval_id, run_id, step_id, action_digest, status, requested_at, risk_class) "
+                "VALUES (?, ?, ?, ?, 'pending', ?, ?)",
+                (approval_id, run_id, step_id, _action_digest(run_id, node), now, node.get("riskClass")),
             )
             conn.execute(
                 "UPDATE steps SET status = 'WAITING_APPROVAL', started_at = ? WHERE step_id = ?",

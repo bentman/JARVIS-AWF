@@ -318,6 +318,84 @@ def test_op_run_start_fails_cleanly_for_an_unknown_activity_name(tmp_path):
     assert row["status"] == "FAILED"
 
 
+def test_op_run_start_rejects_input_that_violates_inputschema(tmp_path):
+    repo_root, conn = make_git_repo(tmp_path)
+    publish_workflow(
+        repo_root,
+        {
+            "apiVersion": "awf/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "requires-objective", "version": "1.0.0", "digest": "sha256:demo"},
+            "spec": {
+                "inputSchema": {"type": "object", "required": ["objective"]},
+                "outputSchema": {}, "budgets": {},
+                "nodes": [{"id": "check", "type": "gate", "checkCommand": "true", "next": None}],
+                "outputs": {},
+            },
+        },
+    )
+
+    with pytest.raises(CoreOpError):
+        op_run_start(repo_root, conn, workflow_ref="requires-objective@1.0.0", input_data={})
+
+    assert conn.execute("SELECT 1 FROM runs").fetchone() is None  # never created
+
+
+def test_op_run_start_renders_and_validates_real_outputs(tmp_path):
+    repo_root, conn = make_git_repo(tmp_path)
+    publish_workflow(
+        repo_root,
+        {
+            "apiVersion": "awf/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "reports-repairs", "version": "1.0.0", "digest": "sha256:demo"},
+            "spec": {
+                "inputSchema": {}, "budgets": {},
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {"repairs_used": {"type": "integer"}},
+                    "required": ["repairs_used"],
+                },
+                "nodes": [{"id": "check", "type": "gate", "checkCommand": "true", "next": None}],
+                "outputs": {"repairs_used": "{{ engine.repairs_used }}"},
+            },
+        },
+    )
+
+    result = op_run_start(repo_root, conn, workflow_ref="reports-repairs@1.0.0", input_data={})
+
+    assert result["status"] == "SUCCEEDED"
+    assert result["outputs"] == {"repairs_used": 0}
+
+
+def test_op_run_start_fails_run_when_rendered_outputs_violate_outputschema(tmp_path):
+    repo_root, conn = make_git_repo(tmp_path)
+    publish_workflow(
+        repo_root,
+        {
+            "apiVersion": "awf/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "unresolvable-output", "version": "1.0.0", "digest": "sha256:demo"},
+            "spec": {
+                "inputSchema": {}, "budgets": {},
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {"totally_unresolvable": {"type": "integer"}},
+                    "required": ["totally_unresolvable"],
+                },
+                "nodes": [{"id": "check", "type": "gate", "checkCommand": "true", "next": None}],
+                "outputs": {"totally_unresolvable": "{{ engine.nonexistent_field }}"},
+            },
+        },
+    )
+
+    result = op_run_start(repo_root, conn, workflow_ref="unresolvable-output@1.0.0", input_data={})
+
+    assert result["status"] == "FAILED"
+    row = conn.execute("SELECT status FROM runs WHERE run_id = ?", (result["run_id"],)).fetchone()
+    assert row["status"] == "FAILED"
+
+
 def publish_trivial_gate_workflow(repo_root, *, name: str, version: str = "1.0.0") -> None:
     publish_workflow(
         repo_root,

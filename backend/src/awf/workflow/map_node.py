@@ -3,17 +3,32 @@ same child Workflow once per item in `items` (a literal list embedded in
 the node; this engine has no runtime expression language to pull `items`
 from a Run's input dynamically).
 
-`maxItems` bounds how many items may be declared at all (Section 12.2:
-mandatory); `maxConcurrency` is validated as a declared upper bound, but
-every item currently runs sequentially through the same `sqlite3.Connection`
-- that connection is not thread-safe, and this module does not open
-per-thread connections, so it makes no claim of real parallel execution.
+`maxItems` bounds how many items may be declared at all (mandatory).
+`maxConcurrency` bounds a real thread pool, not just a declared number:
+each item runs its child Workflow in its own isolated worktree (branched
+from the parent worktree's current HEAD) with its own `sqlite3.Connection`
+- neither is shared between concurrently-running items, since
+`sqlite3.Connection` is not thread-safe and two items committing into the
+same worktree concurrently would race.
+
+After every item finishes, each *successful* item's commits are merged
+back into the parent worktree in item order (`git merge --no-ff`) - so a
+later node in the parent workflow sees a map item's file changes exactly
+as it always could when this ran sequentially in the shared worktree. A
+merge conflict between two items' changes is a real failure
+(`INTEGRITY_FAILURE`), not silently resolved by picking one side.
 """
 
+import concurrent.futures
 import sqlite3
+from pathlib import Path
+from typing import Callable
 
 from awf.engine.executor import run_step
-from awf.workflow.subworkflow import RunChildFn
+from awf.isolation.worktree import WorktreeError, branch_name, current_head, merge_branch, remove_worktree
+
+# (parent_head_sha, index, workflow_ref, item) -> (child_run_id, item_worktree_path, result)
+RunMapItemFn = Callable[[str, int, str, object], tuple[str, Path, dict]]
 
 
 class MapNodeError(RuntimeError):
@@ -22,7 +37,7 @@ class MapNodeError(RuntimeError):
         self.failure_class = failure_class
 
 
-def make_map_node_executor(run_child: RunChildFn):
+def make_map_node_executor(run_map_item: RunMapItemFn, *, worktree_path: Path, repo_root: Path):
     def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
         def fn(_payload: dict) -> dict:
             items = node["items"]
@@ -32,17 +47,40 @@ def make_map_node_executor(run_child: RunChildFn):
                     f"node '{node['id']}': {len(items)} items exceeds maxItems={max_items}",
                     failure_class="INVALID_INPUT",
                 )
+            max_concurrency = max(1, node["maxConcurrency"])
+            workflow_ref = node["workflowRef"]
+            parent_head = current_head(worktree_path)
+
+            results_by_index: dict[int, tuple[str, Path, dict]] = {}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrency) as pool:
+                futures = {
+                    pool.submit(run_map_item, parent_head, index, workflow_ref, item): index
+                    for index, item in enumerate(items)
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    results_by_index[futures[future]] = future.result()
 
             child_run_ids = []
-            for index, item in enumerate(items):
-                child_run_id, result = run_child(
-                    conn, node["workflowRef"], {"item": item, "index": index}
-                )
-                if result.get("status") != "SUCCEEDED":
-                    raise MapNodeError(
-                        f"map item {index} (child run {child_run_id}) did not succeed: {result}"
-                    )
-                child_run_ids.append(child_run_id)
+            try:
+                for index in range(len(items)):
+                    child_run_id, _item_worktree, result = results_by_index[index]
+                    if result.get("status") != "SUCCEEDED":
+                        raise MapNodeError(
+                            f"map item {index} (child run {child_run_id}) did not succeed: {result}"
+                        )
+                    child_run_ids.append(child_run_id)
+                    try:
+                        merge_branch(
+                            worktree_path, branch_name(child_run_id),
+                            message=f"map: merge item {index} (child run {child_run_id})",
+                        )
+                    except WorktreeError as exc:
+                        raise MapNodeError(
+                            f"map item {index}: {exc}", failure_class="INTEGRITY_FAILURE"
+                        ) from exc
+            finally:
+                for child_run_id, _item_worktree, _result in results_by_index.values():
+                    remove_worktree(repo_root, child_run_id)
 
             return {"item_count": len(items), "child_run_ids": child_run_ids}
 

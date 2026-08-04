@@ -83,7 +83,8 @@ DDL_STATEMENTS = [
         status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected', 'expired')),
         reason TEXT,
         requested_at TEXT NOT NULL,
-        decided_at TEXT
+        decided_at TEXT,
+        risk_class TEXT CHECK (risk_class IS NULL OR risk_class IN ('R0', 'R1', 'R2', 'R3'))
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_approvals_run_id ON approvals (run_id)",

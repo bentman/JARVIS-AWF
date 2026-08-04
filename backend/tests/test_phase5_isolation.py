@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -8,6 +9,7 @@ from awf.isolation.worktree import (
     branch_name,
     commit_all_changes,
     create_worktree,
+    last_commit_diff,
     remove_worktree,
     worktree_path,
 )
@@ -64,6 +66,37 @@ def test_commit_all_changes_commits_only_the_worktree(repo):
     # main worktree/branch is untouched
     main_log = run_git(["log", "--oneline", "-1"], cwd=repo).stdout
     assert "init" in main_log
+
+
+def test_last_commit_diff_shows_the_real_content_of_the_most_recent_commit(repo):
+    path = create_worktree(repo, "run-1")
+    (path / "calc.py").write_text("def add(a, b):\n    return a - b\n")
+    commit_all_changes(path, "produce: buggy add")
+
+    diff = last_commit_diff(path)
+
+    assert "calc.py" in diff
+    assert "return a - b" in diff
+
+
+def test_last_commit_diff_truncates_past_max_chars():
+    # No real worktree needed - this is a pure formatting behavior, tested
+    # against a fake result to avoid manufacturing an 8000-character commit.
+    import awf.isolation.worktree as worktree_module
+
+    class FakeResult:
+        stdout = "x" * 100
+
+    original = worktree_module._run_git
+    worktree_module._run_git = lambda args, cwd: FakeResult()
+    try:
+        diff = last_commit_diff(Path("/does-not-matter"), max_chars=10)
+    finally:
+        worktree_module._run_git = original
+
+    assert diff.startswith("x" * 10)
+    assert "truncated" in diff
+    assert len(diff) < 100
 
 
 def test_remove_worktree_cleans_up_path_and_branch(repo):

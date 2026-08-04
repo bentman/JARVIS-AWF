@@ -78,11 +78,26 @@ def test_core_op_approve_with_voice_channel_and_r0_risk_actually_approves(tmp_pa
     assert row["status"] == "approved"
 
 
-def test_core_op_approve_with_voice_channel_requires_risk_class(tmp_path):
+def test_core_op_approve_with_voice_channel_and_no_known_risk_class_defaults_to_r2_not_a_bypass(tmp_path):
+    # ap-1's row (via make_conn) has no stored risk_class (its node never
+    # declared `riskClass`) and the caller supplies none either - the only
+    # safe default is R2 (never auto-grantable from voice), not silently
+    # treating the unknown as R0/R1.
     conn = make_conn(tmp_path)
 
+    result = op_approval_approve(conn, approval_id="ap-1", channel="voice")
+
+    assert result["status"] == "pending"
+    assert result["requires_on_screen_confirmation"] is True
+
+
+def test_core_op_approve_with_voice_channel_rejects_a_risk_class_that_does_not_match_the_real_stored_value(tmp_path):
+    conn = make_conn(tmp_path)
+    conn.execute("UPDATE approvals SET risk_class = 'R2' WHERE approval_id = 'ap-1'")
+    conn.commit()
+
     with pytest.raises(CoreOpError):
-        op_approval_approve(conn, approval_id="ap-1", channel="voice")
+        op_approval_approve(conn, approval_id="ap-1", channel="voice", risk_class="R0")
 
 
 def test_core_op_approve_default_channel_is_unaffected(tmp_path):

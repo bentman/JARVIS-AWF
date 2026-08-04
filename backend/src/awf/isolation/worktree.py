@@ -52,6 +52,42 @@ def commit_all_changes(worktree_path: Path, message: str) -> str | None:
     return result.stdout.strip()
 
 
+def last_commit_diff(worktree_path: Path, *, max_chars: int = 8000) -> str:
+    """The real diff the most recent commit introduced - what an LLM reviewer
+    (`gates/verifier.py`, `gates/adversary.py`) is actually shown, instead of
+    a gate node's short `check` label. Truncated, never silently empty: a
+    diff with no parent commit or with nothing to show still returns a real,
+    honest string rather than letting the caller assume content exists."""
+    try:
+        result = _run_git(["diff", "HEAD~1", "HEAD"], cwd=worktree_path)
+    except WorktreeError as exc:
+        return f"(no diff available: {exc})"
+    diff = result.stdout
+    if not diff:
+        return "(most recent commit introduced no diff)"
+    if len(diff) > max_chars:
+        return diff[:max_chars] + f"\n... (truncated, {len(diff) - max_chars} more characters)"
+    return diff
+
+
+def current_head(worktree_path: Path) -> str:
+    return _run_git(["rev-parse", "HEAD"], cwd=worktree_path).stdout.strip()
+
+
+def merge_branch(worktree_path: Path, branch: str, *, message: str) -> None:
+    """Merges `branch` into whatever is currently checked out at `worktree_path`
+    (`git merge --no-ff`, a real merge commit - never a silent fast-forward
+    that would hide which branch a change came from). A conflict aborts the
+    merge cleanly and raises, rather than picking a side."""
+    result = subprocess.run(
+        ["git", "merge", "--no-ff", branch, "-m", message],
+        cwd=worktree_path, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        subprocess.run(["git", "merge", "--abort"], cwd=worktree_path, capture_output=True, text=True)
+        raise WorktreeError(f"merging {branch} conflicted: {result.stderr.strip()}")
+
+
 def remove_worktree(repo_root: Path, run_id: str) -> None:
     path = worktree_path(repo_root, run_id)
     subprocess.run(

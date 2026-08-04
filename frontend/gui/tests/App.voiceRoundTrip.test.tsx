@@ -22,10 +22,34 @@ describe("App voice round trip (text-first invariant)", () => {
     });
     fireEvent.click(screen.getByText("Activate"));
 
-    expect(onVoiceRoundTrip).toHaveBeenCalledWith("/fixtures/hey_jarvis.wav", "/fixtures/hello_world.wav");
+    expect(onVoiceRoundTrip).toHaveBeenCalledWith(
+      "/fixtures/hey_jarvis.wav", "/fixtures/hello_world.wav", "bf_isabella",
+    );
 
     expect(await screen.findByText(/Operator \(voice\):/)).toBeTruthy();
     expect(screen.getByText(/Acknowledged: Hello world\./)).toBeTruthy();
+  });
+
+  it("passes the operator-selected voice, not always the same hardcoded one", async () => {
+    const onVoiceRoundTrip = vi.fn().mockResolvedValue({
+      command_text: "Hello world.",
+      response_text: "Acknowledged.",
+    });
+
+    render(<App onApprove={vi.fn()} onReject={vi.fn()} onVoiceRoundTrip={onVoiceRoundTrip} />);
+
+    fireEvent.change(screen.getByPlaceholderText("/path/to/hey_jarvis.wav"), {
+      target: { value: "/fixtures/hey_jarvis.wav" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("/path/to/command.wav"), {
+      target: { value: "/fixtures/hello_world.wav" },
+    });
+    fireEvent.change(screen.getByLabelText("Response voice"), { target: { value: "am_michael" } });
+    fireEvent.click(screen.getByText("Activate"));
+
+    expect(onVoiceRoundTrip).toHaveBeenCalledWith(
+      "/fixtures/hey_jarvis.wav", "/fixtures/hello_world.wav", "am_michael",
+    );
   });
 
   it("shows an error message inline when the round trip rejects (e.g. wake word did not fire)", async () => {

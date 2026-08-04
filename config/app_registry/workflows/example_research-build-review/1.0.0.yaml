@@ -1,0 +1,32 @@
+apiVersion: awf/v1
+kind: Workflow
+metadata:
+  name: example_research-build-review
+  version: 1.0.0
+  digest: "6dc55dd4cb95d0086ac99baace9fcc5344fb731c1782e8521dace7e1af484d44"
+spec:
+  inputSchema:
+    type: object
+    properties:
+      topic:
+        type: string
+    required: [topic]
+  outputSchema: {}
+  budgets: {}
+  nodes:
+    - id: research
+      type: agent
+      agentRef: researcher@1.0.0
+      objective: "Research: what are the tradeoffs between SQLite WAL mode and rollback-journal mode for a single-writer local app? Write a short summary (5-10 sentences) to research_notes.md in the worktree."
+      next: build
+    - id: build
+      type: agent
+      agentRef: builder@1.0.0
+      objective: "Read research_notes.md. Based on it, write a short recommendation (3-5 sentences) to recommendation.md choosing WAL or rollback-journal mode for a local single-writer SQLite app, with justification."
+      next: review
+    - id: review
+      type: agent
+      agentRef: reviewer@1.0.0
+      objective: "Read recommendation.md and research_notes.md. Write a critique to review.md: is the recommendation well-justified given the research? Note any gaps."
+      next: null
+  outputs: {}

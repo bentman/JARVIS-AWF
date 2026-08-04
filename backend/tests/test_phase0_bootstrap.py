@@ -52,6 +52,47 @@ def test_init_db_is_idempotent(tmp_path):
     assert row == ("run-1", "CREATED")
 
 
+def test_init_db_migrates_a_pre_existing_db_missing_the_risk_class_column(tmp_path):
+    # simulates a real, already-deployed database created before
+    # `approvals.risk_class` existed - a plain CREATE TABLE IF NOT EXISTS
+    # alone would never add the column to it.
+    db_path = tmp_path / "awf.db"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE approvals (
+                approval_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                step_id TEXT NOT NULL,
+                action_digest TEXT NOT NULL,
+                status TEXT NOT NULL,
+                reason TEXT,
+                requested_at TEXT NOT NULL,
+                decided_at TEXT
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO approvals (approval_id, run_id, step_id, action_digest, status, requested_at) "
+            "VALUES ('ap-1', 'run-1', 'step-1', 'sha256:abc', 'pending', 't')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    init_db(db_path)  # must not raise, must add the column, must not touch existing rows
+
+    conn = sqlite3.connect(db_path)
+    try:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(approvals)").fetchall()}
+        row = conn.execute("SELECT approval_id, status FROM approvals WHERE approval_id = 'ap-1'").fetchone()
+    finally:
+        conn.close()
+    assert "risk_class" in columns
+    assert row == ("ap-1", "pending")
+
+
 def test_uuid7_has_correct_version_and_variant():
     value = uuid7()
     assert value[14] == "7"

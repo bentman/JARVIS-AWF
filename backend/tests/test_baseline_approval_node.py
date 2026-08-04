@@ -34,6 +34,22 @@ def test_first_call_requests_approval_and_waits(conn):
     assert approval_row["action_digest"].startswith("sha256:")
 
 
+def test_declared_risk_class_is_stored_on_the_approval_row(conn):
+    executor = make_approval_node_executor()
+    executor(conn, "run-1", "step-1", {"id": "approve-deploy", "type": "approval", "riskClass": "R2"})
+
+    row = conn.execute("SELECT risk_class FROM approvals WHERE step_id = 'step-1'").fetchone()
+    assert row["risk_class"] == "R2"
+
+
+def test_undeclared_risk_class_stores_null_not_a_guessed_default(conn):
+    executor = make_approval_node_executor()
+    executor(conn, "run-1", "step-1", {"id": "approve-deploy", "type": "approval"})
+
+    row = conn.execute("SELECT risk_class FROM approvals WHERE step_id = 'step-1'").fetchone()
+    assert row["risk_class"] is None
+
+
 def test_still_pending_keeps_waiting_without_reasking(conn):
     executor = make_approval_node_executor()
     first = executor(conn, "run-1", "step-1", {"id": "approve-deploy", "type": "approval"})

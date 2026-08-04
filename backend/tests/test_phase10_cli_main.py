@@ -60,6 +60,34 @@ def test_run_command_success_exit_code(tmp_path, monkeypatch):
     assert exit_code == 0
 
 
+def test_run_command_reports_a_coreoperror_cleanly_not_a_traceback(tmp_path, capsys):
+    # A real CoreOpError (e.g. input that violates a real workflow's
+    # inputSchema, or any other op_run_start-raised error) must produce a
+    # clean CLI error and a non-zero exit code, not an uncaught traceback -
+    # the JSON-RPC surface already had this safety net; the CLI didn't.
+    repo_root = make_repo(tmp_path)
+    workflow_dir = repo_root / "config" / "app_registry" / "workflows" / "requires-objective"
+    workflow_dir.mkdir(parents=True)
+    (workflow_dir / "1.0.0.yaml").write_text(
+        "apiVersion: awf/v1\nkind: Workflow\n"
+        "metadata: {name: requires-objective, version: 1.0.0, digest: 'sha256:demo'}\n"
+        "spec:\n"
+        "  inputSchema: {type: object, required: [objective]}\n"
+        "  outputSchema: {}\n  budgets: {}\n"
+        "  nodes: [{id: check, type: gate, checkCommand: 'true', next: null}]\n"
+        "  outputs: {}\n"
+    )
+    input_file = tmp_path / "input.json"
+    input_file.write_text(json.dumps({}))
+
+    exit_code = cli_main.run(
+        ["run", "requires-objective@1.0.0", "--input", str(input_file)], repo_root
+    )
+
+    assert exit_code == 1
+    assert "inputSchema" in capsys.readouterr().err
+
+
 def test_approve_command_dispatches_to_core_ops(tmp_path, monkeypatch):
     repo_root = make_repo(tmp_path)
     captured = {}

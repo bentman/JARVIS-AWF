@@ -2,16 +2,35 @@
 safety-gate bypass, and memory contamination. Each check returns `None` when
 no violation is found, else a `Finding`. Only run in the high-risk tier -
 the default tier omits the Adversary/Optimizer pass entirely.
+
+`run_llm_adversary_review` is a fourth, optional obligation: an independent
+LLM actively looking for exploitable flaws, routed through the Model
+Gateway (Section 11) via a `purpose: adversary` Model Profile - Section 11's
+own rule ("Adversary MUST resolve to a different model family than the
+Builder") applies here, same as `verifier.run_llm_review`'s `purpose: judge`
+profile. The three deterministic checks above stay mandatory in the
+high-risk tier regardless; this one only runs when a gate node declares
+`adversaryReviewProfile`.
 """
 
 import sqlite3
 from pathlib import Path
 
+from awf.gateway.client import complete
 from awf.gates.schema import Finding
 from awf.hardware.gpu_sampler import (
     GPU_UTILIZATION_CEILING,
     GpuSamplerUnavailable,
     sample_gpu_utilization,
+)
+from awf.registry.model_profile import ModelProfile
+
+ADVERSARY_SYSTEM_PROMPT = (
+    "You are an adversarial reviewer actively trying to find exploitable flaws, "
+    "unsafe assumptions, or ways this candidate could cause harm if trusted blindly - "
+    "not just whether it looks correct. Reply with exactly one line: 'PASS: <one-line "
+    "reason>' if you find nothing exploitable, or 'FAIL: <one-line reason>' describing "
+    "the specific flaw if you do."
 )
 
 
@@ -65,3 +84,26 @@ def check_memory_contamination(
                 details={"path": str(path)},
             )
     return None
+
+
+def run_llm_adversary_review(
+    profile: ModelProfile,
+    *,
+    candidate_summary: str,
+    conn: sqlite3.Connection | None = None,
+    secret_key: bytes | None = None,
+) -> Finding:
+    messages = [
+        {"role": "system", "content": ADVERSARY_SYSTEM_PROMPT},
+        {"role": "user", "content": candidate_summary},
+    ]
+    response = complete(profile, messages, conn=conn, secret_key=secret_key).strip()
+    passed = response.upper().startswith("PASS")
+    model = profile.candidates[0].litellm_model if profile.candidates else None
+    return Finding(
+        role="adversary",
+        category="other",
+        severity="low" if passed else "high",
+        summary=response,
+        details={"passed": passed, "model": model},
+    )

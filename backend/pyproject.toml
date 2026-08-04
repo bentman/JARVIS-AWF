@@ -16,6 +16,7 @@ dependencies = [
   "openwakeword>=0.4",
   "faster-whisper>=1.2",
   "kokoro-onnx>=0.5",
+  "jsonschema>=4.20",
 ]
 
 [project.optional-dependencies]

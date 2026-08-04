@@ -1,0 +1,10 @@
+function: vad
+profile: linux-x64-cuda
+files:
+- acquisition: pip-package
+  package: silero-vad
+  target_relative_path: silero_vad.onnx
+  sha256: a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28
+notes: Section 16.4's table names "Silero VAD ONNX (sherpa-onnx-packaged)". The real, installed copy was
+  sourced from the silero-vad PyPI package's own bundled ONNX export instead (confirmed by this project's
+  own Phase 12 changelog entry) - pinned here to what is actually installed and running.

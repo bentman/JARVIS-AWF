@@ -9,6 +9,14 @@ outside an explicit container/VM escalation.
 `agy` does not bind to the caller's cwd by default - it writes into its own
 scratch project unless `--add-dir <workspace_root> --new-project` is passed
 (confirmed by probing the installed CLI; not documented in the spec text).
+
+`agy` compiles in a real, headful-by-default Playwright browser tool suite
+(`open_browser_url`, `read_browser_page`, `browser_click_element`, etc.) -
+live-verified to be reachable during a plain research objective, popping a
+real, visible window. `JETSKI_BROWSER_HEADLESS=true` (confirmed via the
+installed CLI's own self-inspection) forces headless without disabling the
+tool outright - set unconditionally here, since a Run's adapter subprocess
+must never surface a visible UI element on the operator's desktop.
 """
 
 import json
@@ -18,6 +26,7 @@ import subprocess
 from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
 
 DEFAULT_TIMEOUT_SECONDS = 300
+REQUIRED_ENV = {"JETSKI_BROWSER_HEADLESS": "true"}
 
 
 class AntigravityAdapterError(RuntimeError):
@@ -51,7 +60,7 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
             text=True,
             timeout=timeout_seconds,
             stdin=subprocess.DEVNULL,
-            env={**os.environ, **invocation.constraints.get("mcp_env_overlay", {})},
+            env={**os.environ, **invocation.constraints.get("mcp_env_overlay", {}), **REQUIRED_ENV},
         )
     except subprocess.TimeoutExpired:
         return AgentResult(

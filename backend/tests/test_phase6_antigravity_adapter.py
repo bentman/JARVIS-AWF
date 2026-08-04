@@ -22,6 +22,7 @@ def test_invoke_builds_sandboxed_accept_edits_command_bound_to_workspace(monkeyp
 
     def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
         captured["command"] = command
+        captured["env"] = env
         return SimpleNamespace(
             returncode=0,
             stdout=json.dumps({"status": "SUCCESS", "response": "done", "usage": {}}),
@@ -42,6 +43,26 @@ def test_invoke_builds_sandboxed_accept_edits_command_bound_to_workspace(monkeyp
         "--new-project",
     ]
     assert result.status == AgentStatus.COMPLETED
+    # a Run's adapter subprocess must never surface a visible UI element
+    assert captured["env"]["JETSKI_BROWSER_HEADLESS"] == "true"
+
+
+def test_invoke_forces_headless_browser_even_if_constraints_try_to_override(monkeypatch):
+    env_capture = {}
+
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
+        env_capture["env"] = env
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({"status": "SUCCESS", "response": "done", "usage": {}}),
+            stderr="",
+        )
+
+    monkeypatch.setattr("awf.adapters.antigravity_cli.subprocess.run", fake_run)
+
+    invoke(make_invocation(mcp_env_overlay={"JETSKI_BROWSER_HEADLESS": "false"}))
+
+    assert env_capture["env"]["JETSKI_BROWSER_HEADLESS"] == "true"
 
 
 def test_invoke_maps_error_status_to_failed(monkeypatch):

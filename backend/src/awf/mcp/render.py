@@ -20,11 +20,23 @@ Per-adapter mechanism, each confirmed against the installed CLI's own
   - GitHub Copilot CLI: `--additional-mcp-config @<path>` (confirmed via
     `copilot --help`: "augments config from ~/.copilot/mcp-config.json for
     this session").
-  - Antigravity (`agy`): unsupported. `agy --print --help` exposes no
-    per-invocation MCP flag, and antigravity-cli issue #60 confirms
-    project-local `mcp_config.json` is read but ignored - only the
-    operator's home-directory config loads servers, which would violate
-    "never the operator's home directory" outright. Not worked around.
+  - Antigravity (`agy`): has no per-invocation flag and only reads MCP
+    servers from `~/.gemini/config/mcp_config.json` - the operator's real
+    home directory, confirmed via the installed CLI's own self-inspection
+    and live-tested against a real server. Never written to directly.
+    Instead, each invocation gets its own throwaway `$HOME`
+    (`cache/sandbox/<run_id>/agy_home/`, never the operator's real home):
+    `.gemini/antigravity-cli/antigravity-oauth-token` is copied in
+    read-only from the real home (session auth lives there and nowhere
+    else - confirmed by live-testing that a scratch `$HOME` without it
+    fails auth), and `.gemini/antigravity-cli/settings.json` /
+    `.gemini/config/mcp_config.json` are written fresh, scoped to this Run
+    only. `settings.json`'s `permissions.allow` needs an `mcp(*)` entry -
+    live-tested: MCP tool calls are denied by default in headless mode
+    otherwise, and no narrower per-server/per-tool allow syntax is
+    confirmed to work. This never touches the operator's persistent
+    `~/.gemini/antigravity-cli/settings.json` - the copy is scoped to the
+    scratch `$HOME`.
 """
 
 import json
@@ -32,9 +44,11 @@ from dataclasses import dataclass, field
 
 from awf.registry.mcp_server import McpServer
 
-
-class McpRenderError(RuntimeError):
-    pass
+# No narrower per-server syntax (e.g. "mcp(context7)") was found to work
+# against the installed CLI - broad, but scoped to the Run's own scratch
+# $HOME, never the operator's persistent settings.
+ANTIGRAVITY_MCP_PERMISSION_ALLOW = ("mcp(*)",)
+ANTIGRAVITY_OAUTH_TOKEN_RELATIVE_PATH = ".gemini/antigravity-cli/antigravity-oauth-token"
 
 
 @dataclass(frozen=True)
@@ -43,6 +57,8 @@ class RenderedMcpConfig:
     contents: str | None
     extra_args: tuple[str, ...] = ()
     env_overlay: dict = field(default_factory=dict)
+    home_relative_files: dict = field(default_factory=dict)
+    home_copy_paths: tuple[str, ...] = ()
 
 
 def _secret_env_var_name(server_name: str, key: str) -> str:
@@ -165,10 +181,39 @@ def render_codex(servers: list[McpServer], resolved_secrets: dict[str, str]) -> 
 def render_antigravity(servers: list[McpServer], resolved_secrets: dict[str, str]) -> RenderedMcpConfig:
     if not servers:
         return RenderedMcpConfig(relative_path=None, contents=None)
-    raise McpRenderError(
-        "antigravity has no per-invocation MCP mechanism and its project-local "
-        "mcp_config.json is not honored by the installed CLI - unsupported, not "
-        "worked around (ADR-0003)"
+
+    mcp_servers = {}
+    for server in servers:
+        if server.type == "stdio":
+            entry = {"command": server.command, "args": list(server.args)}
+            env = dict(server.env)
+            for env_var in server.env_secrets:
+                env[env_var] = f"${{{_secret_env_var_name(server.name, env_var)}}}"
+            if env:
+                entry["env"] = env
+        else:
+            entry = {"url": server.url}
+            headers = dict(server.headers)
+            for header_name in server.header_secrets:
+                headers[header_name] = f"${{{_secret_env_var_name(server.name, header_name)}}}"
+            if headers:
+                entry["headers"] = headers
+        mcp_servers[server.name] = entry
+
+    mcp_config_contents = json.dumps({"mcpServers": mcp_servers}, indent=2)
+    settings_contents = json.dumps(
+        {"permissions": {"allow": list(ANTIGRAVITY_MCP_PERMISSION_ALLOW)}}, indent=2
+    )
+
+    return RenderedMcpConfig(
+        relative_path=None,
+        contents=None,
+        env_overlay=_env_overlay_for(servers, resolved_secrets),
+        home_relative_files={
+            ".gemini/config/mcp_config.json": mcp_config_contents,
+            ".gemini/antigravity-cli/settings.json": settings_contents,
+        },
+        home_copy_paths=(ANTIGRAVITY_OAUTH_TOKEN_RELATIVE_PATH,),
     )
 
 

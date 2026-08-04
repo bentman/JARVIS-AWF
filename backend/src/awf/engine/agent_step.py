@@ -33,6 +33,7 @@ from awf.engine.executor import StepFailure, run_step
 from awf.envfile import get_env_value
 from awf.events.writer import write_event
 from awf.guard.capability_guard import Decision, authorize
+from awf.isolation.scratch import scratch_path
 from awf.isolation.worktree import commit_all_changes
 from awf.mcp.render import RENDERERS
 from awf.registry.capability_record import CapabilityRecord
@@ -120,20 +121,41 @@ def _apply_mcp(
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(rendered.contents)
 
+    scratch_home = None
+    if rendered.home_relative_files or rendered.home_copy_paths:
+        # A throwaway $HOME for this Run only - never the operator's real
+        # home directory, never anything that outlives the Run (Section
+        # 18 #3's spirit, applied to an adapter with no per-invocation MCP
+        # flag of its own).
+        scratch_home = scratch_path(repo_root, run_id) / "agy_home" / actor
+        for relative, contents in rendered.home_relative_files.items():
+            target = scratch_home / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(contents)
+        for relative in rendered.home_copy_paths:
+            source = Path.home() / relative
+            if source.is_file():
+                target = scratch_home / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(source.read_bytes())
+
     write_event(
         conn, run_id=run_id, step_id=step_id, new_status="mcp_rendered",
         actor=actor, reason_code="mcp_rendered",
         payload_json=json.dumps({"servers": refs_with_digest}),
     )
 
-    if not rendered.extra_args and not rendered.env_overlay:
+    if not rendered.extra_args and not rendered.env_overlay and scratch_home is None:
         return invocation
 
     constraints = dict(invocation.constraints)
     if rendered.extra_args:
         constraints["mcp_extra_args"] = list(rendered.extra_args)
-    if rendered.env_overlay:
-        constraints["mcp_env_overlay"] = rendered.env_overlay
+    env_overlay = dict(rendered.env_overlay)
+    if scratch_home is not None:
+        env_overlay["HOME"] = str(scratch_home)
+    if env_overlay:
+        constraints["mcp_env_overlay"] = env_overlay
     return AgentInvocation(
         objective=invocation.objective,
         inputs=invocation.inputs,

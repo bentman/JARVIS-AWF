@@ -48,6 +48,19 @@ At each `agent` node, before the adapter runs:
 3. Render each remaining server into the adapter's own config format,
    written into the Run's worktree or `cache/sandbox/<run_id>/` - never
    the operator's home directory, never anything that outlives the Run.
+   Antigravity has no per-invocation config flag and reads MCP servers
+   only from `~/.gemini/config/mcp_config.json` - its own real home
+   directory. For this one adapter, step 3 means giving the subprocess a
+   throwaway `$HOME` instead: `cache/sandbox/<run_id>/agy_home/<actor>/`
+   gets a fresh `.gemini/config/mcp_config.json` and
+   `.gemini/antigravity-cli/settings.json` (with the `mcp(*)` allow rule
+   headless mode requires - no narrower per-server syntax was found to
+   work), plus a read-only copy of
+   `.gemini/antigravity-cli/antigravity-oauth-token` from the operator's
+   real home, since that is where session auth lives and nowhere else.
+   The operator's real `~/.gemini/` is only ever read from, never written
+   to; the copy is scoped to the Run's own `cache/sandbox/` tree and goes
+   with it.
 4. Write one `events` row carrying the `name@version` refs and digests
    rendered - the audit record of what tool surface the agent was given.
 
@@ -59,6 +72,15 @@ environment directly. The value dies with the process and never touches
 disk - non-negotiable #3 ("No secret may appear in plaintext in
 `config/app_registry/`, `data/registry/`, the `events` table, or any
 artifact," Section 18) holds without a special case.
+
+Antigravity's copied `antigravity-oauth-token` is the one exception: it is
+real session-credential material, at rest in `cache/sandbox/<run_id>/` for
+the Run's duration (and, for a `FAILED` run kept for post-mortem per the
+existing worktree/scratch retention policy, until that Run is cleaned up).
+This is a real, named increase in exposure over the other three adapters,
+where nothing secret ever touches disk at all - accepted because no
+narrower mechanism exists for this adapter, not because the risk is the
+same size.
 
 ## Registry object schema
 
@@ -132,14 +154,27 @@ Copilot CLI's `preToolUse` hook (Section 10.2, still unbuilt) is the seam
    `--config`, or by extending `config/codex/awf-default.toml` needs
    testing against the installed version, not assuming.
 8. Any adapter that cannot be driven per-invocation is unsupported this
-   pass - not worked around.
+   pass - not worked around. Antigravity was live-tested against this
+   rule, not assumed: it has no per-invocation flag, but redirecting the
+   subprocess's own `$HOME` env var to a scratch directory is a real,
+   working per-invocation mechanism (confirmed live, including that the
+   copied `antigravity-oauth-token` is required - a scratch `$HOME`
+   without it fails auth) - so it is driven, not excluded, per the
+   Mechanism section above. Of the four adapters actually implemented in
+   `ADAPTER_REGISTRY` (`claude-code`, `codex`, `antigravity`, `copilot` -
+   Cline, named in Context/Decision above, has no adapter module in this
+   codebase and is out of scope for this rule entirely), none is excluded
+   by it.
 
 ## Acceptance
 
 A manifest with `mcp: [context7@1.0.0]` drives a real Run where the adapter
-actually calls a tool from it. The same workflow with the field omitted
-renders nothing. A quarantined ref is refused before the adapter starts.
-`events` shows the rendered set. No secret exists on disk anywhere.
+actually calls a tool from it - verified against all four implemented
+adapters, including Antigravity via its scratch-`$HOME` mechanism. The same workflow
+with the field omitted renders nothing. A quarantined ref is refused
+before the adapter starts. `events` shows the rendered set. No secret
+exists on disk anywhere, except Antigravity's copied session-auth token,
+named as an accepted exception in the Mechanism section above.
 
 ## Consequences
 

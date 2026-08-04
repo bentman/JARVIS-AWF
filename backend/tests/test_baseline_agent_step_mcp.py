@@ -151,6 +151,48 @@ def test_quarantined_mcp_ref_is_refused_before_adapter_runs(repo_and_worktree, c
     assert conn.execute("SELECT 1 FROM events WHERE new_status = 'mcp_rendered'").fetchone() is None
 
 
+def test_antigravity_mcp_ref_materializes_a_scratch_home_never_the_real_one(repo_and_worktree, conn, tmp_path, monkeypatch):
+    repo_root, worktree = repo_and_worktree
+    _write_fetch_server(repo_root)
+
+    fake_real_home = tmp_path / "fake_real_home"
+    (fake_real_home / ".gemini" / "antigravity-cli").mkdir(parents=True)
+    (fake_real_home / ".gemini" / "antigravity-cli" / "antigravity-oauth-token").write_text("real-token-contents")
+
+    import awf.engine.agent_step as agent_step_module
+
+    monkeypatch.setattr(agent_step_module.Path, "home", staticmethod(lambda: fake_real_home))
+
+    seen = {}
+
+    def adapter_fn(invocation: AgentInvocation) -> AgentResult:
+        seen["invocation"] = invocation
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    invocation = AgentInvocation(objective="use fetch", inputs={}, workspace_root=worktree)
+    run_agent_step(
+        conn,
+        step_id="step-1",
+        run_id="run-1",
+        worktree_path=worktree,
+        invocation=invocation,
+        adapter_fn=adapter_fn,
+        commit_message="agent: used fetch via antigravity",
+        actor="antigravity",
+        mcp_refs=["fetch@1.0.0"],
+        repo_root=repo_root,
+    )
+
+    scratch_home = repo_root / "cache" / "sandbox" / "run-1" / "agy_home" / "antigravity"
+    assert (scratch_home / ".gemini" / "config" / "mcp_config.json").is_file()
+    assert (scratch_home / ".gemini" / "antigravity-cli" / "antigravity-oauth-token").read_text() == "real-token-contents"
+    # the real home directory itself was never written to
+    assert not (fake_real_home / ".gemini" / "config").exists()
+
+    overlay = seen["invocation"].constraints["mcp_env_overlay"]
+    assert overlay["HOME"] == str(scratch_home)
+
+
 def test_mcp_secret_reaches_env_overlay_never_the_rendered_file(repo_and_worktree, conn):
     repo_root, worktree = repo_and_worktree
     key = Fernet.generate_key().decode("ascii")

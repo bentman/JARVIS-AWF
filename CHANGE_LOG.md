@@ -1,12 +1,11 @@
 # CHANGE_LOG.md
-> No edits/reorders/deletes of past entries.
-> If an entry is wrong, append a corrective entry in `## Change Appendix`.
+> No edits/reorders/deletes of past entries.  
+> Ammendments only on explicit User instruction &/or approval.
 
 ## Rules
 - Write an entry for codebase change only after objective is complete and supported by evidence.
 - Ordering: Entries are maintained in descending chronological order (newest first, oldest last).
 - Append location: New entries must be added at the top directly under `## Change Entries`.
-- Corrections or clarifications go only below the `## Change Appendix` section.
 - Each entry must include:
 
 - Timestamp: `YYYY-MM-DD HH:MM`
@@ -26,6 +25,91 @@
   - Scope: see `docs/adr/0004-skills-registry-schema.md` for full detail.
   - Validation: `pytest backend/tests/` → 331 passed (up from 309 baseline); live-verified the Codex shared-tier path through the real `run_agent_step` → `codex_cli.invoke` code path (not a mock) - a real `codex exec` subprocess, under its default safe sandbox flags, read a shared SKILL.md via a scratch `$CODEX_HOME` and echoed back a probe token.
   - Notes: Scope item 7 (AWF's `/skills` CLI-frontend invocation surface) is explicitly out of scope for this ADR, per the ADR's own text.
+
+- Timestamp: 2026-08-04 06:58
+  - Summary: Closed the three remaining Phase 12 GUI gaps found earlier in this session's own audit (dead `runList`/`approvalList` IPC channels, a hardcoded single voice, an unreachable R2-voice-refusal UI) - and, in the course of fixing the third, found and closed a real structural gap underneath it: the `approvals` table had no `risk_class` column at all, so nothing could correctly tell an operator (or the voice-refusal rule) what risk class a real pending approval actually was.
+  - Scope:
+    - `db/schema.py`/`db/bootstrap.py` (new `approvals.risk_class` column + a real, idempotent `ALTER TABLE` migration for pre-existing databases - a plain `CREATE TABLE IF NOT EXISTS` never adds a column to one that already exists; applied to this project's own real local `data/awf_db/awf.db` too)
+    - `workflow/approval.py` (a node MAY declare `riskClass`, stored on the approval row at insert time)
+    - `cli/core_ops.py` (`op_approval_approve`: an unsupplied `risk_class` now defaults to the real stored value instead of raising - and defaults to `R2`, never R0/R1, when neither exists; a caller-supplied value that contradicts the real stored one is now rejected - closes a real gap where any caller could previously claim any risk class it wanted for the voice-refusal check, with nothing to check it against)
+    - `frontend/gui/src/renderer/{App,Dashboard,VoiceActivation,index}.tsx` (`Dashboard.tsx` new - real `runList`/`approvalList` rendering with a refresh button; `App.tsx` fetches both on mount and derives a real `pendingApproval` from the live approvals list instead of requiring one be handed in; `VoiceActivation.tsx` gained a real voice selector over the four shipped Voice Profiles, `onVoiceRoundTrip` now takes the operator's chosen `voiceId` instead of always `bf_isabella`)
+  - Validation: 309 backend tests pass (4 new - the migration, the `riskClass` storage, the safe-default, and the stored-vs-claimed mismatch rejection); 66 frontend tests pass across all three workspace packages (8 new GUI tests - dashboard rendering, on-mount fetch, a real pending approval reaching the on-screen `ApprovalConfirmation` dialog, a null risk_class rendering as R2 not silently R0/R1, voice selection actually changing what's passed to the round trip). `tsc --strict` clean. Live-relaunched the real Electron app: React rendered correctly (confirmed via the same DevTools-console-message proof used earlier this session) and the `runList`/`approvalList` IPC handlers genuinely fired on mount - the backend call itself failed only because of this sandbox's already-known GPU/display limitation killing the whole process mid-request, not a defect in the new wiring. Applied the real DB migration to this project's own local database, not just the test fixtures.
+  - Notes: this closes every item from the audit that started this multi-part effort (`inputSchema`/`outputSchema` enforcement, `payloadSchema` enforcement, Adversary's Gateway review path, `map` concurrency, the hardware-profile manifests, and now the three GUI gaps). No further items remain on the list as of this entry.
+
+- Timestamp: 2026-08-04 06:42
+  - Corrects: item (2) in the immediately preceding entry's Notes.
+  - Summary: The user set a real, operator-supplied HuggingFace read token (`awf secret set huggingface-token`, resolved through the real secrets store, never seen in this conversation) so the `*-cuda` STT revision pin could actually be verified instead of left as `main`. Doing so surfaced a real error in the prior entry: `Systran/faster-whisper-large-v3-turbo` does not exist - a real, authenticated HF API search for it returned zero results. The real repo is `deepdml/faster-whisper-large-v3-turbo-ct2` (confirmed via the authenticated API: real MIT-licensed CTranslate2 file set, sha `4df90f75321148c3a29a9e2351b7ddf8f5b115a8`). Both `config/voice/stt/{windows-x64-cuda,linux-x64-cuda}.yaml` now pin this real revision instead of the moving `main` branch.
+  - Validation: 305 backend tests pass (unchanged count - these two manifests were already covered by the "all 48 shipped manifests parse cleanly" test, which still passes against the corrected content).
+  - Notes: a second real, viable alternative was found and rejected in favor of the one shipped: `mobiuslabsgmbh/faster-whisper-large-v3-turbo` (sha `0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf`, far more downloads but thinner repo metadata) - noted in the manifest's own `notes` field as a legitimate substitute if `deepdml`'s repo is ever deprecated, not silently discarded.
+
+- Timestamp: 2026-08-04 06:28
+  - Summary: Closed the sixth caveat - all 48 hardware-profile-pinned-artifact manifests (12 profile IDs x 4 functions) now exist under `config/voice/`, and the voice pipeline actually reads them. Two real spec/reality mismatches were found and pinned to reality, not the spec's literal wording: STT's cpu/gpu-class table entry says "sherpa-onnx ONNX export," but the real, installed adapter uses faster-whisper's HuggingFace-hosted model instead; VAD's entry says "sherpa-onnx-packaged," but the real installed copy came from the `silero-vad` PyPI package. Both manifests pin what is actually running, with the mismatch stated in the manifest's own `notes` field, not silently "corrected" to match the spec or silently left wrong.
+  - Scope: `registry/hardware_voice_manifest.py` (new - schema, `verify_pinned_files`, `verify_profile_models` with one-hop fallback resolution), `config/voice/{stt,tts,vad,wake}/<profile-id>.yaml` x48 (new), `speech/pipeline.py` (`run_voice_round_trip` gains optional `repo_root` - when given, verifies the resolved profile's pinned models against what's actually on disk and logs the result to `events`, closing "the manifests are pinned but nothing reads them").
+  - Validation: 305 backend tests pass (12 new, including a real check that all 48 shipped manifests parse cleanly). Independently re-verified every sha256 myself via a direct `sha256sum` of the real local files before trusting a research pass's transcription of the same values - all matched. Live-verified through the real production path: a real `run_voice_round_trip(..., repo_root=REPO_ROOT)` against the real fixtures checked the real `linux-x64-cpu` manifests (wake/vad/tts/stt, all four) against the real already-downloaded models on this host - every pinned hash matched (`status: OK`), and the verification event is real and queryable.
+  - Notes: two things could not be pinned with the same confidence as the rest, named rather than faked. (1) STT's `*-qnn` profiles (windows-arm64-qnn, linux-arm64-qnn): no sherpa-onnx Whisper QNN build exists upstream as of this writing - verified against sherpa-onnx's real GitHub releases, which only publish QNN assets for a different model family. These two manifests declare `fallback_to` their arch's `*-cpu` profile instead of a fabricated pin, per Section 16.4's own fallback rule. (2) STT's `*-cuda` profiles: the real HuggingFace repo (`Systran/faster-whisper-large-v3-turbo`) is confirmed to exist, but its exact current revision SHA could not be independently verified from this environment (direct HF API access returned 401 here) - pinned to `revision: main` (the moving default branch) with an explicit note that this isn't a fixed pin yet.
+
+- Timestamp: 2026-08-04 05:48
+  - Summary: Closed the fifth caveat - `map`'s `maxConcurrency` now bounds a real thread pool, not just a declared number. Real concurrency needed more than a per-thread DB connection: two items committing into the same shared worktree concurrently would race, so each item now gets its own isolated worktree (branched from the parent's current HEAD) too. Every successful item's commits are merged back into the parent worktree afterward, in item order (`git merge --no-ff`) - a design fork the user picked explicitly (isolated-worktree-plus-merge-back, over a no-merge or leave-sequential alternative) - so later nodes still see a map item's file changes exactly as they could when this ran sequentially in the shared worktree. A merge conflict between two items now fails cleanly (`INTEGRITY_FAILURE`, merge aborted) instead of being possible to hit silently.
+  - Scope: `workflow/map_node.py` (rewritten), `isolation/worktree.py` (new `current_head`/`merge_branch`), `cli/core_ops.py` (new `_make_run_map_item`, isolated worktree + own connection per item), `db/connection.py` (new `busy_timeout=5000` PRAGMA - real concurrent writers to the same db file now exist and need to wait for each other rather than fail immediately).
+  - Validation: 293 backend tests pass (4 new, real git repos - one exercises an actual merge conflict end to end, confirms the abort leaves the parent worktree clean). Live-verified twice: the real tracked 3-item `fan-out-demo` still passes through `op_run_start` unchanged; a new real timing check (3 items each sleeping 2s) showed genuinely overlapping `steps.started_at`/`ended_at` windows (19:47:19-21 overlapping 19:47:20-22) - real concurrent execution, not disguised sequential. Total wall time (5.68s) didn't drop to ~2s because per-item worktree creation has real, honest overhead - not a defect, an accepted tradeoff of true isolation.
+  - Next: the original Phase 12 note that the hardware-profile-pinned-artifact manifests (`config/voice/{stt,tts,vad,wake}/<profile-id>.yaml`, Section 16.4) were never built - each speech adapter still uses its own pip-package acquisition path instead. That's next up the same list.
+
+- Timestamp: 2026-08-04 05:33
+  - Summary: Closed the fourth buried caveat (found while closing the third) - `run_llm_review`/`run_llm_adversary_review` only ever saw a gate node's short `check` label, never the real candidate content. Now both are shown the real diff the most recent commit introduced (`isolation.worktree.last_commit_diff`, new), alongside the label, since a gate always runs immediately after the agent step whose work it's reviewing.
+  - Scope: `isolation/worktree.py` (new `last_commit_diff`), `gates/gate_node.py` (new `worktree_path` param, builds `candidate_content` once and passes it to both review calls), `cli/core_ops.py` (threads `worktree_path=worktree` through).
+  - Validation: 292 backend tests pass (3 new). Live-reran the real `high-risk-review-demo` end to end (GPU confirmed idle beforehand) - review quality changed from garbled/hallucinated responses to real, substantive ones: judge → "PASS: Correct implementation returns the sum of a and b per requirement"; adversary → "FAIL: No error handling for non-numeric inputs", "FAIL: The function name 'add' is not descriptive". `check_resource_safety()` tripped again (85-95%, started from idle) - expected and self-consistent, not a new bug: this specific demo routes the judge review through the same GPU-hosted `llama-server` the check is watching, so exercising the review necessarily moves the metric it polices. A real config tension in this one demo workflow, not something to fix by weakening the check.
+  - Next: `map`'s `maxConcurrency` is declared and validated but execution is still sequential (disclosed at build time, `sqlite3.Connection` isn't thread-safe, no per-thread connection plumbing exists) - that's next up the same list.
+
+- Timestamp: 2026-08-04 05:20
+  - Summary: Closed the third buried caveat - the Adversary role had no Model Gateway-routed review path (only the Verifier's did), and `reviewProfile` had never actually been exercised by any published workflow. Both fixed: a new `run_llm_adversary_review` (`gates/adversary.py`) mirrors the Verifier's LLM review but with an adversarial system prompt and `role="adversary"`, wired into the high-risk tier via a new `adversaryReviewProfile: name@version` gate-node field (`purpose: adversary` Model Profile, Section 11's model-family-diversity rule). Published two real local profiles (`judge-local`, `adversary-local`) and a real workflow (`high-risk-review-demo`) that sets both fields, then ran it live.
+  - Scope: `gates/adversary.py`, `gates/gate_node.py`, `cli/core_ops.py`, `data/registry/model-profiles/{judge-local,adversary-local}/1.0.0.yaml` (new), `data/registry/workflows/high-risk-review-demo/1.0.0.yaml` (new).
+  - Validation: 289 backend tests pass (4 new). Live-verified both new review functions individually against real local models first (`judge-local` → Qwen3-8B via `llama-server`, `adversary-local` → `phi4-mini` via Ollama, both real PASS Findings). Then ran the real published `high-risk-review-demo` end to end via `op_run_start` - `reviewProfile`/`adversaryReviewProfile` were both genuinely exercised for the first time ever, real Finding artifacts confirm real LLM calls happened.
+  - Notes: the real run FAILED (budget-exhausted), and it's informative, not a defect in this fix. Two real things surfaced by actually running this for the first time: (1) `check_resource_safety()` genuinely tripped - real GPU utilization at 95-96%, correctly over its 55% ceiling, most likely because `judge-local` shares the same GPU-hosted `llama-server` the demo's own adapters were also contending for; the safety check did its job. (2) A deeper, pre-existing gap this exposed: both `run_llm_review` and `run_llm_adversary_review` are only ever given a gate node's short `check`/id label (e.g. `"calc_add_returns_sum"`) as `candidate_summary` - never the actual code/diff. The small local models produced visibly low-quality, sometimes hallucinated responses reviewing a bare identifier string with no real content. This predates today's fix (the Verifier's own review path had the exact same gap, just never run for real before) and is the natural next item on the list: the gate executor has no candidate-diff plumbing to give reviewers anything real to look at.
+
+- Timestamp: 2026-08-04 05:02
+  - Summary: Closed the second buried caveat - Phase 9's Handoff `payloadSchema` was required and parsed since day one but never validated against a hop's real `handoff_status.json`. Now enforced: a hop whose status file doesn't conform to the node's own declared schema fails the Step with `INVALID_INPUT` instead of silently trusting whatever the agent wrote.
+  - Scope: `workflow/handoff.py` only (`jsonschema.validate` on the parsed status dict, right after the existing "did the agent even write the file" check; same `HandoffError` path already used for that sibling failure).
+  - Validation: 285 backend tests pass (2 new: a strict schema rejecting a status file missing a required field, and the same schema accepting a conforming one); live-reran the real tracked `producer-reviewer-handoff-demo` end to end against real Claude Code/Codex adapters - `SUCCEEDED`, `outputs: {hops_used: 1}`, unaffected by the new check since its own `payloadSchema` only requires `summary: string`, which the agents already write correctly.
+  - Next: the Phase 8-era caveat that the Adversary role still doesn't use the Model Gateway review path, and `reviewProfile` remains unexercised by any published workflow - that's next up the same list.
+
+- Timestamp: 2026-08-04 04:56
+  - Summary: Closed the earliest buried caveat found by the full-log re-verification audit - Phase 7's `inputSchema`/`outputSchema` were required and parsed since day one but never actually validated against real values. Now enforced: bad input is refused before a Run is even created; `outputs` templates (`{{ engine.repairs_used }}`, `.hops_used`, `.verdict_artifact_id`) are rendered for real and validated against `outputSchema` at completion, failing the Run cleanly if they don't conform.
+  - Scope: `workflow/io_schema.py` (new), `workflow/engine.py`, `cli/core_ops.py` (`op_run_start`), `cli/main.py` (adjacent regression found and fixed: any `CoreOpError` crashed the raw CLI with a traceback - now a clean message + exit 1, matching the JSON-RPC surface's existing safety net), `data/registry/workflows/research-build-review/1.0.0.yaml` (its own `outputSchema` referenced a value the engine never tracked - fixed).
+  - Validation: 283 backend tests pass; live-reran both tracked demo workflows and my own - `produce-gate-repair-demo` → `outputs: {repairs_used: 1}`, `producer-reviewer-handoff-demo` → `outputs: {hops_used: 1}`, both real Guard/adapter/gate/handoff runs, correctly rendered and validated.
+  - Next: Phase 9's `payloadSchema` (Handoff) has the identical gap - parsed, never enforced against a real hop payload. That's next up the same list.
+
+- Timestamp: 2026-08-04 01:48
+  - Corrects: the 2026-08-03 14:49 entry's implicit assumption that Antigravity was covered - it shipped supported behind the scene, but the underlying mechanism (`render_antigravity`) actually raised on any non-empty server list, since Antigravity has no per-invocation MCP flag. Fixed, not worked around.
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Antigravity now gets a real MCP handoff too - all four implemented adapters are supported. Mechanism, tradeoff, and the accepted exception (below) are written into `docs/adr/0003-mcp-server-registry-schema.md` (Mechanism, Scope item 8, Acceptance).
+  - Scope:
+    - `backend/src/awf/mcp/render.py` (`render_antigravity` renders a fresh `.gemini/config/mcp_config.json` + `.gemini/antigravity-cli/settings.json` instead of raising; new `RenderedMcpConfig.home_relative_files`/`home_copy_paths` fields)
+    - `backend/src/awf/engine/agent_step.py` (`_apply_mcp` materializes a scratch `$HOME` under `cache/sandbox/<run_id>/agy_home/<actor>/`, copies in the real `antigravity-oauth-token`, and injects `HOME` via `mcp_env_overlay`)
+    - `backend/tests/test_baseline_mcp_render.py`, `test_baseline_agent_step_mcp.py`
+    - `docs/adr/0003-mcp-server-registry-schema.md`
+  - Validation:
+    - `pytest backend/tests/` → 271 passed
+    - Real, non-mocked run through the actual `run_agent_step` → `antigravity_cli.invoke` path: a real `context7@1.0.0` ref produced a real `resolve-library-id` tool call (`react`→`/reactjs/react.dev`, `vue`→`/vuejs/vue`, `svelte`→`/sveltejs/svelte` across separate runs), with the API key resolved via `${VAR}` substitution and injected only into the subprocess env - never written to any file. Demo run/step/event rows and scratch dirs removed afterward.
+  - Notes:
+    - The real mechanism (confirmed by asking `agy` itself, then live-testing): Antigravity only reads MCP servers from `~/.gemini/config/mcp_config.json` - its actual home directory, with no per-invocation override flag. The fix redirects the subprocess's own `$HOME` env var to a scratch directory instead of touching the operator's real one.
+    - Named, accepted exception: the copied `antigravity-oauth-token` is real session-credential material, at rest in `cache/sandbox/<run_id>/` for the Run's duration (longer if the Run fails, per the existing worktree/scratch retention policy) - a real increase in exposure over the other three adapters, where no secret ever touches disk at all.
+    - Separately observed, not fixed here (out of scope - unrelated to MCP): in headless print mode, Antigravity sometimes wants to run an arbitrary shell command mid-turn and gets auto-denied (a `command(*)` permission gap, same class as Copilot CLI's still-unbuilt `preToolUse` hook) - nondeterministic, didn't block any run above, flagged for later.
+
+- Timestamp: 2026-08-03 14:49
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: ADR-0003 implemented - MCP servers are rendered into each adapter's own config format at Run time and connected by the adapter itself; AWF still has no MCP client. Details, mechanism, and schema: `docs/adr/0003-mcp-server-registry-schema.md`.
+  - Scope:
+    - `backend/src/awf/registry/mcp_server.py` (new), `backend/src/awf/mcp/render.py` (new)
+    - `backend/src/awf/engine/agent_step.py`, `backend/src/awf/workflow/engine.py` (resolve/trust-gate/render/event wiring)
+    - `backend/src/awf/adapters/{claude_code,codex_cli,antigravity_cli,copilot_cli}.py` (consume rendered extra args + env overlay)
+    - `backend/src/awf/cli/core_ops.py` (`mcp` publish/validate branch)
+    - `config/app_registry/mcp/context7/1.0.0.yaml` (shipped default)
+    - `backend/tests/test_baseline_mcp_{server,render}.py`, `test_baseline_agent_step_mcp.py`, plus additions to `test_baseline_agent_manifest_wiring.py` and `test_phase10_core_ops.py`
+  - Validation:
+    - `pytest backend/tests/` → 268 passed
+    - Real, non-mocked run: a real `context7@1.0.0` manifest ref drove the actual Claude Code adapter through the real `run_agent_step` path - rendered `mcp/claude-code.mcp.json`, a real `mcp_rendered` event, and a genuine `resolve-library-id("react")` tool call returning `/reactjs/react.dev`, with the API key never touching any file. Demo run/step/event rows and worktree removed afterward.
+  - Notes:
+    - The `fetch` default drafted during design used a nonexistent npm package (`@modelcontextprotocol/server-fetch` 404s - the real reference server is the Python package `mcp-server-fetch` via `uvx`). Dropped rather than shipped, to avoid adding a second per-invocation runtime; only `context7` ships this pass.
 
 - Timestamp: 2026-08-03 09:10
   - Host class(es): Linux/WSL2, AMD64
@@ -56,6 +140,152 @@
   - Notes:
     - `registry/resolve.py::DATA_ONLY_KINDS` itself is unchanged - these examples are still never resolvable by a real Run, only listable-until-this-fix and loadable directly by path in tests.
     - `example-lmstudio-embedding`'s model name remains a placeholder label - no LM Studio instance was available to verify against.
+
+- Timestamp: 2026-08-03 07:05
+  - Corrects: the note in the 2026-08-03 06:10 entry flagging "`activity` is the one Section 12.2 node type still with no executor anywhere."
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: `activity` now has a real executor - all eight Section 12.2 node types have working execution semantics for the first time in the build.
+  - What was wrong: `activity` was listed in `workflow/engine.py::EXECUTABLE_NODE_TYPES` since the original Phase 7 build (a pre-existing mis-categorization, not introduced by any prior fix in this series), but `cli/core_ops.py` never registered an executor for it - a real workflow reaching an `activity` node failed with "no executor registered," caught cleanly by the existing safety net but never actually running anything.
+  - Scope of the fix:
+    - `backend/src/awf/workflow/nodes.py` (`activity` now requires a `function` field)
+    - `backend/src/awf/workflow/activities.py` (new - `ACTIVITY_REGISTRY`: `hardware_probe` wraps `run_hardware_profiler` - the R0 hardware-probe activity Section 12.3's Adversary resource-safety obligation describes, now invocable mid-Run, not just at voice setup; `gpu_utilization_sample` wraps `sample_gpu_utilization`)
+    - `backend/src/awf/workflow/engine.py` (new `make_activity_node_executor`: looks up `node["function"]` in the registry and runs it through the normal `run_step` durability path inside the Step's own `fn`, so an unregistered name is recorded as a real `FAILED`/`INVALID_INPUT` Step, not raised before any Step exists to record it)
+    - `backend/src/awf/cli/core_ops.py` (`_build_node_executors` registers `"activity"` unconditionally, same as `agent`)
+    - `backend/tests/test_baseline_activity_node.py` (new, 3 tests: a real hardware-probe run persists correctly, an unregistered name fails the Step cleanly, and a replay after `SUCCEEDED` returns the cached output without re-probing)
+    - `backend/tests/test_phase7_workflow_nodes.py`, `test_phase10_core_ops.py` (updated for the new required field; the pre-existing "unbuilt node type" test switched to a real runtime error - an unregistered activity name - since no node type is unbuilt anymore)
+    - `backend/tests/test_phase7_workflow_definition.py` (fixture regression caught and fixed: two tests used a bare `{"type": "activity"}` node with no `function`, which no longer parses now that the field is required)
+  - Validation:
+    - `pytest backend/tests/` → 223 passed (219 prior + 4 net new)
+    - Real, non-mocked run against the actual repo: published a real `activity` workflow calling `hardware_probe`, ran it via `awf run`, confirmed `SUCCEEDED`, and - by querying the real `data/awf_db/awf.db` directly - the Step's `output_json` contained a genuine `"profile_id": "linux-x64-cpu"` from the real Hardware Profiler, not a stub. Demo workflow file and DB rows removed afterward; `git status` shows no residue.
+  - Notes:
+    - **All eight Section 12.2 node types now have real execution semantics.** This closes the entire deferred-items list first flagged in the 2026-08-03 03:15 entry (Model Gateway, Hardware Profiler, node executors x5, voice_approval.py).
+    - `gpu_utilization_sample` is registered but has no workflow currently calling it - available, not yet exercised end to end.
+
+- Timestamp: 2026-08-03 06:45
+  - Corrects: the note in the 2026-08-03 03:15 entry flagging "the Python-side `gates/voice_approval.py` still has zero real callers."
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: `gates/voice_approval.py::attempt_voice_approval` now has a real caller - `op_approval_approve` itself enforces the Section 16.4 rule that an R2+ approval MUST NOT be granted from voice input alone, reachable over the real `awf/approval.approve` JSON-RPC method. This enforcement now lives in the core, not only in the GUI's separate TypeScript copy of the same rule - no frontend can bypass it by skipping its own check.
+  - What was wrong: `attempt_voice_approval`/`decide_voice_acknowledgement` existed, were correctly implemented, and were fully unit-tested, but nothing in the real approval path ever called them - the only enforcement of the R2+ voice-refusal rule was the GUI's independent client-side TypeScript logic.
+  - Scope of the fix:
+    - `backend/src/awf/cli/core_ops.py` (`op_approval_approve` takes optional `channel` (default `"manual"`, unchanged behavior) and `risk_class`; `channel="voice"` delegates to `attempt_voice_approval` via a deferred import - avoids a circular import with `gates/voice_approval.py`, which already imported `op_approval_approve` at module level; raises `CoreOpError` if `channel="voice"` is given without a `risk_class`)
+    - `backend/src/awf/server/stdio.py` (`awf/approval.approve` now passes through optional `channel`/`riskClass` params to `op_approval_approve`)
+    - `backend/tests/test_phase12_voice_approval.py` (+4 tests: voice-channel R2 stays pending, voice-channel R0 actually approves, missing `risk_class` raises, default `channel="manual"` behavior is unchanged)
+    - `backend/tests/test_phase10_server_stdio.py` (+1 test: a real R2 approval sent over JSON-RPC with `channel: "voice"` correctly stays pending)
+  - Validation:
+    - `pytest backend/tests/` → 219 passed (214 prior + 5 net new)
+    - Real, non-mocked proof over the actual JSON-RPC transport: seeded a genuine pending approval in the real `data/awf_db/awf.db`, piped a real `awf/approval.approve` request with `channel: "voice", riskClass: "R2"` into `awf serve --stdio` - stayed `pending` with `requires_on_screen_confirmation: true`; a second request without the voice channel against the same approval genuinely returned `approved`. Demo rows removed afterward; `git status` shows no residue.
+  - Notes:
+    - This closes the last item from the original deferred-items list (Model Gateway, Hardware Profiler, node executors, voice_approval.py) - all four have now been given real callers and live-verified, except `activity`, which remains explicitly unbuilt and flagged (2026-08-03 06:10 entry).
+    - The GUI's own TypeScript enforcement (`frontend/gui/src/renderer/ApprovalConfirmation.tsx`) is unchanged and still independently correct - this fix adds a second, authoritative enforcement point in the core, it doesn't replace the GUI-side one (defense in depth, per the original Phase 12 design intent).
+
+- Timestamp: 2026-08-03 06:10
+  - Corrects: the note in the 2026-08-03 03:15 entry flagging "`approval`/`subworkflow`/`map`/`loop` node executors still don't exist."
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: `approval`, `subworkflow`, `map`, and `loop` now have real execution semantics in the workflow engine - four of the five previously-unbuilt Section 12.2 node types (`activity` remains explicitly out of this fix's scope). `activity` is still unbuilt and is flagged, not silently left implied-done.
+  - What was wrong: `workflow/nodes.py`/`workflow/engine.py` validated these four node shapes but raised `WorkflowEngineError` (or "no executor registered") the moment a real workflow reached one - none had a working executor anywhere in the codebase.
+  - Scope of the fix:
+    - `backend/src/awf/workflow/nodes.py` (`subworkflow` now requires `workflowRef`; `map` additionally requires `workflowRef`/`items`; `loop` additionally requires `workflowRef`)
+    - `backend/src/awf/workflow/approval.py` (new - `make_approval_node_executor`: computes a real action digest, inserts a real `approvals` row, and holds the Step in `WAITING_APPROVAL` - deliberately bypassing `run_step`'s automatic SUCCEEDED-caching while still pending, since that would have permanently frozen the "still waiting" result across a resume; a rejected decision fails the Step with `APPROVAL_REJECTED`)
+    - `backend/src/awf/workflow/subworkflow.py` (new - `make_subworkflow_node_executor`: starts a version-pinned child Workflow as a real, independent `runs` row and runs it to completion through the same durable engine before the parent Step is considered done)
+    - `backend/src/awf/workflow/map_node.py` (new - `make_map_node_executor`: bounded fan-out over a literal `items` list embedded in the node - `maxItems` is enforced; `maxConcurrency` is validated as a declared bound but execution is sequential, since the shared `sqlite3.Connection` isn't thread-safe and no per-thread connection plumbing exists - documented as a real limitation, not claimed as true parallelism)
+    - `backend/src/awf/workflow/loop_node.py` (new - `make_loop_node_executor`: repeats a child Workflow while a named boolean field in the child's own last-Step output holds true, feeding that output forward as the next iteration's input; self-stepping like Handoff, so reaching `maxIterations` while still true moves the Run to `WAITING_INPUT` rather than getting cached as a false terminal success)
+    - `backend/src/awf/workflow/engine.py` (`EXECUTABLE_NODE_TYPES` gains all four; `SELF_STEPPING_NODE_TYPES` gains `loop`, alongside `handoff`)
+    - `backend/src/awf/cli/core_ops.py` (new `_make_run_child`: the shared "resolve + build executors + run to completion + clean up scratch dir" callback used by `subworkflow`/`map`/`loop`; `_build_node_executors` registers all four unconditionally, same as `agent`)
+    - `backend/tests/test_baseline_{approval,subworkflow,map,loop}_node.py` (new, 21 tests against each executor directly)
+    - `backend/tests/test_phase10_core_ops.py` (+3 real end-to-end tests through `op_run_start` with genuinely published parent+child workflows; the pre-existing "unbuilt node type" test switched from `subworkflow` - now built - to `activity`, which still has no executor)
+    - `backend/tests/test_phase7_workflow_nodes.py` (fixture updated for the new required fields)
+  - Validation:
+    - `pytest backend/tests/` → 214 passed (198 prior + 16 net new)
+    - Real, non-mocked run against the actual repo: published a real `map` workflow fanning out to 3 items over a real child gate workflow, ran it via `awf run`, confirmed `SUCCEEDED` and - by querying the real `data/awf_db/awf.db` directly - exactly 3 independent, genuinely `SUCCEEDED` child `runs` rows, plus normal worktree cleanup (`git worktree list` empty afterward). Demo workflow files and DB rows removed afterward; `git status` shows no residue.
+  - Notes:
+    - **`activity` is the one Section 12.2 node type still with no executor anywhere** - it remains in `EXECUTABLE_NODE_TYPES` (a pre-existing, unrelated mis-categorization from the original Phase 7 build, not introduced here) but `core_ops.py` never registers one; a real workflow reaching an `activity` node still fails cleanly via the existing `_run_workflow_safely` boundary, it just doesn't run anything. Not fixed in this pass - out of the requested scope.
+    - `map`'s `items` must be a literal list embedded in the node; there is no runtime expression language to pull items from a Run's own input dynamically.
+    - `loop`'s condition-field convention (reading the child's last Step output) is this implementation's own choice, not dictated by the spec text, which only says "while a condition holds."
+
+- Timestamp: 2026-08-03 05:05
+  - Corrects: the note in the 2026-08-03 03:15 entry flagging "the Hardware Profiler is still never invoked automatically."
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: `run_hardware_profiler` is now called automatically at the start of every real voice round trip (Section 16.4: "run ... before any voice model is downloaded or loaded"), and its result is not just logged - it genuinely selects the STT device/compute_type.
+  - What was wrong: the Hardware Profiler (Phase 12) had zero callers outside its own unit tests; `speech/pipeline.py::run_voice_round_trip` loaded wake/VAD/TTS models and ran STT unconditionally on a hardcoded `device="cpu"`, regardless of what hardware was actually available.
+  - Scope of the fix:
+    - `backend/src/awf/speech/stt_whisper.py` (`transcribe` takes a `device` parameter, previously hardcoded to `"cpu"`)
+    - `backend/src/awf/speech/pipeline.py` (`run_voice_round_trip` now requires a `conn` and calls `run_hardware_profiler(conn)` first, before any model loads; new `_stt_device_for_profile()` maps a resolved profile ending in `-cuda` to `("cuda", "float16")` and everything else to the safe `("cpu", "int8")` floor; `VoiceRoundTripResult` carries the resolved `hardware_profile_id`)
+    - `backend/src/awf/speech/cli.py` (`awf-speech round-trip` now opens the real repo `data/awf_db/awf.db` and passes the connection through, so the resolution event lands in the same audit trail as every other operation; the resolved profile id is included in the printed JSON result)
+    - `backend/tests/test_phase12_voice_pipeline.py` (all three existing tests updated for the new required `conn` argument; +2 tests: the profiler event is genuinely written to `events`, and `_stt_device_for_profile`'s selection logic across every canonical profile suffix)
+  - Validation:
+    - `pytest backend/tests/` → 198 passed (197 prior + 1 net new)
+    - Real, non-mocked run: `python -m awf.speech.cli round-trip` against the real committed audio fixtures returned `"hardware_profile_id": "linux-x64-cpu"` - correct for this host, whose `onnxruntime` build has no CUDA execution provider (confirmed by the accompanying provider-unavailable warning); a direct query against the real `data/awf_db/awf.db` afterward confirmed a genuine `hardware_profile_resolved` event was written, not just returned in-memory
+  - Notes:
+    - Only the STT device/compute_type is actually driven by the resolved profile; wake-word/VAD/TTS still run through their default ONNX Runtime provider selection regardless of profile, since openWakeWord/Kokoro's constructors don't expose an equivalent device override the way faster-whisper does. The Hardware Profiler's own accelerator-manifest-pinning mechanism (Section 16.4's `config/voice/*` YAML table) remains unbuilt, unchanged from the original Phase 12 note.
+
+- Timestamp: 2026-08-03 04:20
+  - Corrects: the note in the 2026-08-03 03:15 entry flagging "the Model Gateway still has no real adapter-path caller."
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: The Model Gateway now has a real caller - the Verifier's previously-unbuilt "LLM-driven independent code-review pass" is implemented and routed through `gateway/client.py::complete()` via a `purpose: judge` Model Profile (an enum value that existed since Phase 3 but was never used).
+  - What was wrong: `gates/verifier.py` documented the LLM-review half of the Verifier's Section 12.3 obligation as explicitly not built; the Model Gateway (Phase 3) was exercised only by its own validation call, never by anything in the real gate/verification path.
+  - Scope of the fix:
+    - `backend/src/awf/gates/verifier.py` (new `run_llm_review()`: sends a fixed review prompt plus the candidate summary through `gateway.client.complete()`, parses a `PASS`/`FAIL` response into the same structured `Finding` contract `run_verifier_check` already produces)
+    - `backend/src/awf/gates/gate_node.py` (`make_trifecta_gate_executor` takes optional `review_profile`/`review_secret_key`; when a profile is given, its Finding is appended alongside the deterministic check, in both gate tiers)
+    - `backend/src/awf/cli/core_ops.py` (new `_resolve_review_profile`: a gate node MAY declare `reviewProfile: name@version`, resolved via the existing registry lookup and threaded into the gate executor; the operator's `.env` secret key is resolved the same way `op_secret_set` already does, tolerating a missing `.env`)
+    - `backend/tests/test_phase8_gates_verifier_adversary.py` (+4 tests: PASS/FAIL response mapping, and that the review is genuinely routed through `gateway.client.complete()`)
+    - `backend/tests/test_phase8_gate_node.py` (+1 test: a gate node wired with a `review_profile` produces two Finding artifacts, not one)
+  - Validation:
+    - `pytest backend/tests/` → 197 passed (193 prior + 4 net new)
+    - Real, non-mocked proof against the already-published `data/registry/model-profiles/phi4-mini/1.0.0.yaml` and local Ollama: `run_llm_review` given a candidate with `return a - b` (mislabeled as addition) returned a real `FAIL` Finding correctly identifying the subtraction bug; the same call given the corrected `return a + b` returned a real `PASS` Finding - both from genuine model inference, not stubbed responses
+  - Notes:
+    - The high-risk tier's Adversary role still does not use the Gateway - only the Verifier's new optional review path does. `reviewProfile` is opt-in per gate node; no existing published workflow sets it, so this path is available but not yet exercised by any real workflow run end to end.
+
+- Timestamp: 2026-08-03 03:15
+  - Corrects: nothing prior is factually wrong; this closes a gap a report-only Phase 10/11 review found - Section 18 non-negotiable #1 ("No workflow logic may bypass the Capability Guard") was violated by the real execution path, and three durability/cleanup defects were present alongside it.
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: A direct codebase-integrity pass (application code first, tests only swept afterward to match) fixed five real defects in the actual execution path: the Capability Guard was never consulted for real agent invocations; an uncaught exception left a Run/Step stuck in `RUNNING` forever with no `failure_class`; worktrees and scratch dirs leaked on every real Run; the high-risk Trifecta tier had no YAML path to reach it; and `/skills` was permanently broken by a registry naming-convention mismatch.
+  - What was wrong:
+    1. **The Capability Guard had zero real callers.** `workflow/engine.py::make_agent_node_executor` called the adapter directly; `guard/capability_guard.py::authorize()` was exercised only by its own unit tests. Any real workflow's `agent` node ran with no authorization check at all.
+    2. **`engine/executor.py::run_step` had no exception handling.** A raised exception during a real Step left `steps.status='RUNNING'` forever, with no `failure_class` and no event recorded - the crash simply propagated to the caller.
+    3. **`cli/core_ops.py` never called `remove_worktree`/`remove_scratch_dir`.** Every real `awf run` left its worktree and scratch directory on disk permanently; both functions existed and were unit-tested but had no real caller.
+    4. **The high-risk Trifecta tier (`gates/adversary.py`) had no YAML field to select it.** `make_trifecta_gate_executor`'s `tier`/`cache_sandbox_dir` parameters were never threaded from a workflow file, so the Adversary pass was unreachable outside its own unit tests.
+    5. **`op_registry_list(kind="skills")` globbed for `<name>/<version>.yaml`**, but skills publish as `<name>/<version>/SKILL.md` (Section 9.3) - the `/skills` command could never find a real published skill.
+  - Scope of the fix:
+    - `backend/src/awf/engine/executor.py` (new `StepFailure` exception; `run_step` now catches any exception, records `FAILED` + `failure_class` + an event, then re-raises)
+    - `backend/src/awf/engine/agent_step.py` (`run_agent_step` is now the single canonical agent-Step path: calls the real Guard's `authorize()` before the adapter runs; `AgentStepError(StepFailure)` maps adapter statuses to failure classes)
+    - `backend/src/awf/workflow/engine.py` (removed the dead `make_gate_node_executor`; `make_agent_node_executor` now delegates to `run_agent_step`; added `_synthesized_capability_for_node`/`_resolve_node_capability` so every `agent` node is Guard-checked even without a declared `capability`; `run_workflow_definition` wraps the executor call and marks the Run cleanly `FAILED` instead of propagating)
+    - `backend/src/awf/workflow/handoff.py` (`HandoffError` now carries `failure_class`, so `run_step`'s generic handler records it correctly)
+    - `backend/src/awf/cli/core_ops.py` (added `_cleanup_run_workspace` - removes the worktree and scratch dir on `SUCCEEDED`; added `_run_workflow_safely` - an outer boundary marking the Run `FAILED` cleanly on any exception, including structural `WorkflowEngineError`s; `_build_node_executors` threads `tier`/`cache_sandbox_dir`/`guardBypassed` from the gate node's YAML into the Trifecta executor; `op_registry_list` special-cases `kind == "skills"` to glob `<name>/<version>/SKILL.md`)
+    - `backend/tests/test_phase9_handoff.py`, `test_phase5_agent_step.py`, `test_phase10_core_ops.py` (updated/added to match the corrected behavior: clean `FAILED` results instead of raised exceptions where the Run-level boundary now catches them; two new Guard-integration tests proving an R3 capability is denied before the adapter runs and an R1 capability is allowed through)
+    - `data/registry/skills/demo-skill/1.0.0/SKILL.md` (a real published skill, used to verify the `/skills` fix live, not a test fixture)
+  - Validation:
+    - `pytest backend/tests/` → 191 passed (188 prior + 3 net new)
+    - Real, non-mocked run: `awf run produce-gate-repair-demo@1.0.0` succeeded; the real `events` table shows Guard decision events for both `agent_node_produce@0.0.0` and `agent_node_repair@0.0.0` (`reason_code: approval_never`) that did not exist before this fix; `git worktree list`/`ls cache/worktrees/` confirm no leftover worktree after the run, the first time in the whole build this cleanup has been automatic rather than manual
+    - Published a real skill under `data/registry/skills/demo-skill/1.0.0/SKILL.md` and confirmed `op_registry_list(kind="skills")` now finds it (previously would have returned empty for any real skill)
+  - Notes:
+    - **Deliberately not fixed in this pass, flagged rather than hidden:** the Model Gateway (`gateway/client.py`) still has no real adapter-path caller; `activity`/`approval`/`subworkflow`/`map`/`loop` node executors still don't exist, so the high-risk tier is reachable via YAML but no workflow currently sets it; the Hardware Profiler is still never invoked automatically; the Python-side `gates/voice_approval.py` still has zero real callers (an intentional defense-in-depth duplicate of the GUI-side TypeScript rule, not a new finding).
+    - The Guard's authorization for a node with no declared `capability` uses a conservative synthesized R1/approval-never `CapabilityRecord` rather than a real registered one - this keeps every invocation authorized and logged, but is not equivalent to an operator having actually reviewed and published a Capability Record for that specific action.
+
+- Timestamp: 2026-08-03 02:00
+  - Corrects: the Phase 12 entry (2026-08-03 01:23) and the Phase 8 entry's Verifier/Adversary notes.
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: An independent audit (four fresh agents, one per phase group, each re-running tests and reading code without trusting this log) found two real gaps behind claims that were either overstated or under-flagged. Both are now fixed.
+  - What was wrong:
+    1. **Phase 8 claimed Trifecta role separation without enforcing it.** Section 12.3 requires the Capability Guard to deny a `verifier`-scoped invocation any write capability above R0 and an `adversary`-scoped invocation any capability that alters the worktree - enforced by the Guard, never by agent self-assessment. `guard/capability_guard.py::evaluate()` had no `role` parameter at all; this was never built, only implied by the Verifier/Adversary Finding-producing functions existing.
+    2. **Phase 12's "full round-trip... was validated" claim was overstated.** The wake→STT→response→TTS chain was run once as an ad hoc script and never committed. `frontend/gui/src/` had zero audio/mic/wake-word code - no integrated pipeline existed anywhere in the repository, only four independently-tested adapters.
+  - Scope of the fix:
+    - `backend/src/awf/guard/capability_guard.py` (`evaluate`/`authorize` take an optional `role` parameter; `verifier` denied any write-type operation above R0, `adversary` denied any write-type operation, both checked before risk-class evaluation)
+    - `backend/tests/test_phase1_registry_guard.py` (+8 tests covering both roles, the builder/no-role unrestricted case, an invalid role, and the role recorded in the `events` payload)
+    - `backend/src/awf/speech/pipeline.py` (new - `run_voice_round_trip`, chaining wake word -> VAD -> STT -> core -> TTS for real, raising rather than silently proceeding if the wake word doesn't fire or VAD finds no speech)
+    - `backend/src/awf/speech/cli.py` (new - `awf-speech round-trip`, a standalone subprocess entry point so a non-Python caller can invoke the pipeline the same way the GUI already spawns `awf serve --stdio`)
+    - `backend/pyproject.toml` (registered the `awf-speech` console script)
+    - `backend/tests/test_phase12_voice_pipeline.py` (new, 3 tests: the real chained round trip, the wake-word-never-fires error path, and that `core_fn`'s response carries through to TTS input)
+    - `frontend/gui/src/main/voicePipeline.ts` (new - `runVoiceRoundTrip`/`registerVoiceIpcHandler`, spawning the real `awf-speech` subprocess from the Electron main process)
+    - `frontend/gui/src/renderer/VoiceActivation.tsx` (new - a push-to-talk-by-file control: operator supplies a wake-word file path and a command file path)
+    - `frontend/gui/src/renderer/App.tsx`, `index.tsx`, `src/preload/preload.ts` (wired the new IPC channel through; recognized text and response both land in the same visible Transcript as any other command)
+    - `frontend/gui/tests/{voicePipeline,App.voiceRoundTrip}.test.tsx` (new, 7 tests)
+  - Validation:
+    - `pytest backend/tests/` → 188 passed (177 prior + 8 Guard-role tests + 3 pipeline tests)
+    - `vitest --root gui` → 20 passed (13 prior + 4 voicePipeline + 3 App-wiring)
+    - Real, non-mocked proof: called the compiled `registerVoiceIpcHandler`'s handler directly (the same function `main.ts` registers against Electron's real `ipcMain`), which spawned the real `awf-speech` subprocess, which ran real wake-word/VAD/STT/TTS inference against the real audio fixtures and returned a real transcript, response text, and response WAV file through the same JSON-RPC-shaped path the GUI uses
+  - Notes:
+    - The Guard's role enforcement covers only the pre-execution, input-side half of Section 12.3's "prompt enforcement" rule. Detecting an agent that claims a different role in its own output is a separate mechanism (inspecting `AgentResult.output` after the fact) and remains open.
+    - The voice pipeline is push-to-talk-by-file, not live microphone capture: the operator supplies pre-recorded wake-word and command audio files rather than speaking into a live stream. Live `getUserMedia` capture in the renderer, and a human confirming the four voices sound right, remain open.
 
 - Timestamp: 2026-08-03 01:23
   - Host class(es): Linux/WSL2 (WSLg, PulseAudio-over-RDP virtual audio devices), AMD64
@@ -328,238 +558,3 @@
     - `CHANGE_LOG.md`
   - Validation:
     - `cat CHANGE_LOG.md` output `# CHANGE_LOG.md`...
-
-- Timestamp: 2026-08-03 14:49
-  - Host class(es): Linux/WSL2, AMD64
-  - Summary: ADR-0003 implemented - MCP servers are rendered into each adapter's own config format at Run time and connected by the adapter itself; AWF still has no MCP client. Details, mechanism, and schema: `docs/adr/0003-mcp-server-registry-schema.md`.
-  - Scope:
-    - `backend/src/awf/registry/mcp_server.py` (new), `backend/src/awf/mcp/render.py` (new)
-    - `backend/src/awf/engine/agent_step.py`, `backend/src/awf/workflow/engine.py` (resolve/trust-gate/render/event wiring)
-    - `backend/src/awf/adapters/{claude_code,codex_cli,antigravity_cli,copilot_cli}.py` (consume rendered extra args + env overlay)
-    - `backend/src/awf/cli/core_ops.py` (`mcp` publish/validate branch)
-    - `config/app_registry/mcp/context7/1.0.0.yaml` (shipped default)
-    - `backend/tests/test_baseline_mcp_{server,render}.py`, `test_baseline_agent_step_mcp.py`, plus additions to `test_baseline_agent_manifest_wiring.py` and `test_phase10_core_ops.py`
-  - Validation:
-    - `pytest backend/tests/` → 268 passed
-    - Real, non-mocked run: a real `context7@1.0.0` manifest ref drove the actual Claude Code adapter through the real `run_agent_step` path - rendered `mcp/claude-code.mcp.json`, a real `mcp_rendered` event, and a genuine `resolve-library-id("react")` tool call returning `/reactjs/react.dev`, with the API key never touching any file. Demo run/step/event rows and worktree removed afterward.
-  - Notes:
-    - The `fetch` default drafted during design used a nonexistent npm package (`@modelcontextprotocol/server-fetch` 404s - the real reference server is the Python package `mcp-server-fetch` via `uvx`). Dropped rather than shipped, to avoid adding a second per-invocation runtime; only `context7` ships this pass.
-
-- Timestamp: 2026-08-04 01:48
-  - Corrects: the 2026-08-03 14:49 entry's implicit assumption that Antigravity was covered - it shipped supported behind the scene, but the underlying mechanism (`render_antigravity`) actually raised on any non-empty server list, since Antigravity has no per-invocation MCP flag. Fixed, not worked around.
-  - Host class(es): Linux/WSL2, AMD64
-  - Summary: Antigravity now gets a real MCP handoff too - all four implemented adapters are supported. Mechanism, tradeoff, and the accepted exception (below) are written into `docs/adr/0003-mcp-server-registry-schema.md` (Mechanism, Scope item 8, Acceptance).
-  - Scope:
-    - `backend/src/awf/mcp/render.py` (`render_antigravity` renders a fresh `.gemini/config/mcp_config.json` + `.gemini/antigravity-cli/settings.json` instead of raising; new `RenderedMcpConfig.home_relative_files`/`home_copy_paths` fields)
-    - `backend/src/awf/engine/agent_step.py` (`_apply_mcp` materializes a scratch `$HOME` under `cache/sandbox/<run_id>/agy_home/<actor>/`, copies in the real `antigravity-oauth-token`, and injects `HOME` via `mcp_env_overlay`)
-    - `backend/tests/test_baseline_mcp_render.py`, `test_baseline_agent_step_mcp.py`
-    - `docs/adr/0003-mcp-server-registry-schema.md`
-  - Validation:
-    - `pytest backend/tests/` → 271 passed
-    - Real, non-mocked run through the actual `run_agent_step` → `antigravity_cli.invoke` path: a real `context7@1.0.0` ref produced a real `resolve-library-id` tool call (`react`→`/reactjs/react.dev`, `vue`→`/vuejs/vue`, `svelte`→`/sveltejs/svelte` across separate runs), with the API key resolved via `${VAR}` substitution and injected only into the subprocess env - never written to any file. Demo run/step/event rows and scratch dirs removed afterward.
-  - Notes:
-    - The real mechanism (confirmed by asking `agy` itself, then live-testing): Antigravity only reads MCP servers from `~/.gemini/config/mcp_config.json` - its actual home directory, with no per-invocation override flag. The fix redirects the subprocess's own `$HOME` env var to a scratch directory instead of touching the operator's real one.
-    - Named, accepted exception: the copied `antigravity-oauth-token` is real session-credential material, at rest in `cache/sandbox/<run_id>/` for the Run's duration (longer if the Run fails, per the existing worktree/scratch retention policy) - a real increase in exposure over the other three adapters, where no secret ever touches disk at all.
-    - Separately observed, not fixed here (out of scope - unrelated to MCP): in headless print mode, Antigravity sometimes wants to run an arbitrary shell command mid-turn and gets auto-denied (a `command(*)` permission gap, same class as Copilot CLI's still-unbuilt `preToolUse` hook) - nondeterministic, didn't block any run above, flagged for later.
-
-- Timestamp: 2026-08-04 04:56
-  - Summary: Closed the earliest buried caveat found by the full-log re-verification audit - Phase 7's `inputSchema`/`outputSchema` were required and parsed since day one but never actually validated against real values. Now enforced: bad input is refused before a Run is even created; `outputs` templates (`{{ engine.repairs_used }}`, `.hops_used`, `.verdict_artifact_id`) are rendered for real and validated against `outputSchema` at completion, failing the Run cleanly if they don't conform.
-  - Scope: `workflow/io_schema.py` (new), `workflow/engine.py`, `cli/core_ops.py` (`op_run_start`), `cli/main.py` (adjacent regression found and fixed: any `CoreOpError` crashed the raw CLI with a traceback - now a clean message + exit 1, matching the JSON-RPC surface's existing safety net), `data/registry/workflows/research-build-review/1.0.0.yaml` (its own `outputSchema` referenced a value the engine never tracked - fixed).
-  - Validation: 283 backend tests pass; live-reran both tracked demo workflows and my own - `produce-gate-repair-demo` → `outputs: {repairs_used: 1}`, `producer-reviewer-handoff-demo` → `outputs: {hops_used: 1}`, both real Guard/adapter/gate/handoff runs, correctly rendered and validated.
-  - Next: Phase 9's `payloadSchema` (Handoff) has the identical gap - parsed, never enforced against a real hop payload. That's next up the same list.
-
-- Timestamp: 2026-08-04 05:02
-  - Summary: Closed the second buried caveat - Phase 9's Handoff `payloadSchema` was required and parsed since day one but never validated against a hop's real `handoff_status.json`. Now enforced: a hop whose status file doesn't conform to the node's own declared schema fails the Step with `INVALID_INPUT` instead of silently trusting whatever the agent wrote.
-  - Scope: `workflow/handoff.py` only (`jsonschema.validate` on the parsed status dict, right after the existing "did the agent even write the file" check; same `HandoffError` path already used for that sibling failure).
-  - Validation: 285 backend tests pass (2 new: a strict schema rejecting a status file missing a required field, and the same schema accepting a conforming one); live-reran the real tracked `producer-reviewer-handoff-demo` end to end against real Claude Code/Codex adapters - `SUCCEEDED`, `outputs: {hops_used: 1}`, unaffected by the new check since its own `payloadSchema` only requires `summary: string`, which the agents already write correctly.
-  - Next: the Phase 8-era caveat that the Adversary role still doesn't use the Model Gateway review path, and `reviewProfile` remains unexercised by any published workflow - that's next up the same list.
-
-- Timestamp: 2026-08-04 05:20
-  - Summary: Closed the third buried caveat - the Adversary role had no Model Gateway-routed review path (only the Verifier's did), and `reviewProfile` had never actually been exercised by any published workflow. Both fixed: a new `run_llm_adversary_review` (`gates/adversary.py`) mirrors the Verifier's LLM review but with an adversarial system prompt and `role="adversary"`, wired into the high-risk tier via a new `adversaryReviewProfile: name@version` gate-node field (`purpose: adversary` Model Profile, Section 11's model-family-diversity rule). Published two real local profiles (`judge-local`, `adversary-local`) and a real workflow (`high-risk-review-demo`) that sets both fields, then ran it live.
-  - Scope: `gates/adversary.py`, `gates/gate_node.py`, `cli/core_ops.py`, `data/registry/model-profiles/{judge-local,adversary-local}/1.0.0.yaml` (new), `data/registry/workflows/high-risk-review-demo/1.0.0.yaml` (new).
-  - Validation: 289 backend tests pass (4 new). Live-verified both new review functions individually against real local models first (`judge-local` → Qwen3-8B via `llama-server`, `adversary-local` → `phi4-mini` via Ollama, both real PASS Findings). Then ran the real published `high-risk-review-demo` end to end via `op_run_start` - `reviewProfile`/`adversaryReviewProfile` were both genuinely exercised for the first time ever, real Finding artifacts confirm real LLM calls happened.
-  - Notes: the real run FAILED (budget-exhausted), and it's informative, not a defect in this fix. Two real things surfaced by actually running this for the first time: (1) `check_resource_safety()` genuinely tripped - real GPU utilization at 95-96%, correctly over its 55% ceiling, most likely because `judge-local` shares the same GPU-hosted `llama-server` the demo's own adapters were also contending for; the safety check did its job. (2) A deeper, pre-existing gap this exposed: both `run_llm_review` and `run_llm_adversary_review` are only ever given a gate node's short `check`/id label (e.g. `"calc_add_returns_sum"`) as `candidate_summary` - never the actual code/diff. The small local models produced visibly low-quality, sometimes hallucinated responses reviewing a bare identifier string with no real content. This predates today's fix (the Verifier's own review path had the exact same gap, just never run for real before) and is the natural next item on the list: the gate executor has no candidate-diff plumbing to give reviewers anything real to look at.
-
-- Timestamp: 2026-08-04 05:33
-  - Summary: Closed the fourth buried caveat (found while closing the third) - `run_llm_review`/`run_llm_adversary_review` only ever saw a gate node's short `check` label, never the real candidate content. Now both are shown the real diff the most recent commit introduced (`isolation.worktree.last_commit_diff`, new), alongside the label, since a gate always runs immediately after the agent step whose work it's reviewing.
-  - Scope: `isolation/worktree.py` (new `last_commit_diff`), `gates/gate_node.py` (new `worktree_path` param, builds `candidate_content` once and passes it to both review calls), `cli/core_ops.py` (threads `worktree_path=worktree` through).
-  - Validation: 292 backend tests pass (3 new). Live-reran the real `high-risk-review-demo` end to end (GPU confirmed idle beforehand) - review quality changed from garbled/hallucinated responses to real, substantive ones: judge → "PASS: Correct implementation returns the sum of a and b per requirement"; adversary → "FAIL: No error handling for non-numeric inputs", "FAIL: The function name 'add' is not descriptive". `check_resource_safety()` tripped again (85-95%, started from idle) - expected and self-consistent, not a new bug: this specific demo routes the judge review through the same GPU-hosted `llama-server` the check is watching, so exercising the review necessarily moves the metric it polices. A real config tension in this one demo workflow, not something to fix by weakening the check.
-  - Next: `map`'s `maxConcurrency` is declared and validated but execution is still sequential (disclosed at build time, `sqlite3.Connection` isn't thread-safe, no per-thread connection plumbing exists) - that's next up the same list.
-
-- Timestamp: 2026-08-04 05:48
-  - Summary: Closed the fifth caveat - `map`'s `maxConcurrency` now bounds a real thread pool, not just a declared number. Real concurrency needed more than a per-thread DB connection: two items committing into the same shared worktree concurrently would race, so each item now gets its own isolated worktree (branched from the parent's current HEAD) too. Every successful item's commits are merged back into the parent worktree afterward, in item order (`git merge --no-ff`) - a design fork the user picked explicitly (isolated-worktree-plus-merge-back, over a no-merge or leave-sequential alternative) - so later nodes still see a map item's file changes exactly as they could when this ran sequentially in the shared worktree. A merge conflict between two items now fails cleanly (`INTEGRITY_FAILURE`, merge aborted) instead of being possible to hit silently.
-  - Scope: `workflow/map_node.py` (rewritten), `isolation/worktree.py` (new `current_head`/`merge_branch`), `cli/core_ops.py` (new `_make_run_map_item`, isolated worktree + own connection per item), `db/connection.py` (new `busy_timeout=5000` PRAGMA - real concurrent writers to the same db file now exist and need to wait for each other rather than fail immediately).
-  - Validation: 293 backend tests pass (4 new, real git repos - one exercises an actual merge conflict end to end, confirms the abort leaves the parent worktree clean). Live-verified twice: the real tracked 3-item `fan-out-demo` still passes through `op_run_start` unchanged; a new real timing check (3 items each sleeping 2s) showed genuinely overlapping `steps.started_at`/`ended_at` windows (19:47:19-21 overlapping 19:47:20-22) - real concurrent execution, not disguised sequential. Total wall time (5.68s) didn't drop to ~2s because per-item worktree creation has real, honest overhead - not a defect, an accepted tradeoff of true isolation.
-  - Next: the original Phase 12 note that the hardware-profile-pinned-artifact manifests (`config/voice/{stt,tts,vad,wake}/<profile-id>.yaml`, Section 16.4) were never built - each speech adapter still uses its own pip-package acquisition path instead. That's next up the same list.
-
-- Timestamp: 2026-08-04 06:28
-  - Summary: Closed the sixth caveat - all 48 hardware-profile-pinned-artifact manifests (12 profile IDs x 4 functions) now exist under `config/voice/`, and the voice pipeline actually reads them. Two real spec/reality mismatches were found and pinned to reality, not the spec's literal wording: STT's cpu/gpu-class table entry says "sherpa-onnx ONNX export," but the real, installed adapter uses faster-whisper's HuggingFace-hosted model instead; VAD's entry says "sherpa-onnx-packaged," but the real installed copy came from the `silero-vad` PyPI package. Both manifests pin what is actually running, with the mismatch stated in the manifest's own `notes` field, not silently "corrected" to match the spec or silently left wrong.
-  - Scope: `registry/hardware_voice_manifest.py` (new - schema, `verify_pinned_files`, `verify_profile_models` with one-hop fallback resolution), `config/voice/{stt,tts,vad,wake}/<profile-id>.yaml` x48 (new), `speech/pipeline.py` (`run_voice_round_trip` gains optional `repo_root` - when given, verifies the resolved profile's pinned models against what's actually on disk and logs the result to `events`, closing "the manifests are pinned but nothing reads them").
-  - Validation: 305 backend tests pass (12 new, including a real check that all 48 shipped manifests parse cleanly). Independently re-verified every sha256 myself via a direct `sha256sum` of the real local files before trusting a research pass's transcription of the same values - all matched. Live-verified through the real production path: a real `run_voice_round_trip(..., repo_root=REPO_ROOT)` against the real fixtures checked the real `linux-x64-cpu` manifests (wake/vad/tts/stt, all four) against the real already-downloaded models on this host - every pinned hash matched (`status: OK`), and the verification event is real and queryable.
-  - Notes: two things could not be pinned with the same confidence as the rest, named rather than faked. (1) STT's `*-qnn` profiles (windows-arm64-qnn, linux-arm64-qnn): no sherpa-onnx Whisper QNN build exists upstream as of this writing - verified against sherpa-onnx's real GitHub releases, which only publish QNN assets for a different model family. These two manifests declare `fallback_to` their arch's `*-cpu` profile instead of a fabricated pin, per Section 16.4's own fallback rule. (2) STT's `*-cuda` profiles: the real HuggingFace repo (`Systran/faster-whisper-large-v3-turbo`) is confirmed to exist, but its exact current revision SHA could not be independently verified from this environment (direct HF API access returned 401 here) - pinned to `revision: main` (the moving default branch) with an explicit note that this isn't a fixed pin yet.
-
-- Timestamp: 2026-08-04 06:42
-  - Corrects: item (2) in the immediately preceding entry's Notes.
-  - Summary: The user set a real, operator-supplied HuggingFace read token (`awf secret set huggingface-token`, resolved through the real secrets store, never seen in this conversation) so the `*-cuda` STT revision pin could actually be verified instead of left as `main`. Doing so surfaced a real error in the prior entry: `Systran/faster-whisper-large-v3-turbo` does not exist - a real, authenticated HF API search for it returned zero results. The real repo is `deepdml/faster-whisper-large-v3-turbo-ct2` (confirmed via the authenticated API: real MIT-licensed CTranslate2 file set, sha `4df90f75321148c3a29a9e2351b7ddf8f5b115a8`). Both `config/voice/stt/{windows-x64-cuda,linux-x64-cuda}.yaml` now pin this real revision instead of the moving `main` branch.
-  - Validation: 305 backend tests pass (unchanged count - these two manifests were already covered by the "all 48 shipped manifests parse cleanly" test, which still passes against the corrected content).
-  - Notes: a second real, viable alternative was found and rejected in favor of the one shipped: `mobiuslabsgmbh/faster-whisper-large-v3-turbo` (sha `0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf`, far more downloads but thinner repo metadata) - noted in the manifest's own `notes` field as a legitimate substitute if `deepdml`'s repo is ever deprecated, not silently discarded.
-
-- Timestamp: 2026-08-04 06:58
-  - Summary: Closed the three remaining Phase 12 GUI gaps found earlier in this session's own audit (dead `runList`/`approvalList` IPC channels, a hardcoded single voice, an unreachable R2-voice-refusal UI) - and, in the course of fixing the third, found and closed a real structural gap underneath it: the `approvals` table had no `risk_class` column at all, so nothing could correctly tell an operator (or the voice-refusal rule) what risk class a real pending approval actually was.
-  - Scope:
-    - `db/schema.py`/`db/bootstrap.py` (new `approvals.risk_class` column + a real, idempotent `ALTER TABLE` migration for pre-existing databases - a plain `CREATE TABLE IF NOT EXISTS` never adds a column to one that already exists; applied to this project's own real local `data/awf_db/awf.db` too)
-    - `workflow/approval.py` (a node MAY declare `riskClass`, stored on the approval row at insert time)
-    - `cli/core_ops.py` (`op_approval_approve`: an unsupplied `risk_class` now defaults to the real stored value instead of raising - and defaults to `R2`, never R0/R1, when neither exists; a caller-supplied value that contradicts the real stored one is now rejected - closes a real gap where any caller could previously claim any risk class it wanted for the voice-refusal check, with nothing to check it against)
-    - `frontend/gui/src/renderer/{App,Dashboard,VoiceActivation,index}.tsx` (`Dashboard.tsx` new - real `runList`/`approvalList` rendering with a refresh button; `App.tsx` fetches both on mount and derives a real `pendingApproval` from the live approvals list instead of requiring one be handed in; `VoiceActivation.tsx` gained a real voice selector over the four shipped Voice Profiles, `onVoiceRoundTrip` now takes the operator's chosen `voiceId` instead of always `bf_isabella`)
-  - Validation: 309 backend tests pass (4 new - the migration, the `riskClass` storage, the safe-default, and the stored-vs-claimed mismatch rejection); 66 frontend tests pass across all three workspace packages (8 new GUI tests - dashboard rendering, on-mount fetch, a real pending approval reaching the on-screen `ApprovalConfirmation` dialog, a null risk_class rendering as R2 not silently R0/R1, voice selection actually changing what's passed to the round trip). `tsc --strict` clean. Live-relaunched the real Electron app: React rendered correctly (confirmed via the same DevTools-console-message proof used earlier this session) and the `runList`/`approvalList` IPC handlers genuinely fired on mount - the backend call itself failed only because of this sandbox's already-known GPU/display limitation killing the whole process mid-request, not a defect in the new wiring. Applied the real DB migration to this project's own local database, not just the test fixtures.
-  - Notes: this closes every item from the audit that started this multi-part effort (`inputSchema`/`outputSchema` enforcement, `payloadSchema` enforcement, Adversary's Gateway review path, `map` concurrency, the hardware-profile manifests, and now the three GUI gaps). No further items remain on the list as of this entry.
-
----
-
-## Change Appendix
-
-- Timestamp: 2026-08-03 02:00
-  - Corrects: the Phase 12 entry (2026-08-03 01:23) and the Phase 8 entry's Verifier/Adversary notes.
-  - Host class(es): Linux/WSL2, AMD64
-  - Summary: An independent audit (four fresh agents, one per phase group, each re-running tests and reading code without trusting this log) found two real gaps behind claims that were either overstated or under-flagged. Both are now fixed.
-  - What was wrong:
-    1. **Phase 8 claimed Trifecta role separation without enforcing it.** Section 12.3 requires the Capability Guard to deny a `verifier`-scoped invocation any write capability above R0 and an `adversary`-scoped invocation any capability that alters the worktree - enforced by the Guard, never by agent self-assessment. `guard/capability_guard.py::evaluate()` had no `role` parameter at all; this was never built, only implied by the Verifier/Adversary Finding-producing functions existing.
-    2. **Phase 12's "full round-trip... was validated" claim was overstated.** The wake→STT→response→TTS chain was run once as an ad hoc script and never committed. `frontend/gui/src/` had zero audio/mic/wake-word code - no integrated pipeline existed anywhere in the repository, only four independently-tested adapters.
-  - Scope of the fix:
-    - `backend/src/awf/guard/capability_guard.py` (`evaluate`/`authorize` take an optional `role` parameter; `verifier` denied any write-type operation above R0, `adversary` denied any write-type operation, both checked before risk-class evaluation)
-    - `backend/tests/test_phase1_registry_guard.py` (+8 tests covering both roles, the builder/no-role unrestricted case, an invalid role, and the role recorded in the `events` payload)
-    - `backend/src/awf/speech/pipeline.py` (new - `run_voice_round_trip`, chaining wake word -> VAD -> STT -> core -> TTS for real, raising rather than silently proceeding if the wake word doesn't fire or VAD finds no speech)
-    - `backend/src/awf/speech/cli.py` (new - `awf-speech round-trip`, a standalone subprocess entry point so a non-Python caller can invoke the pipeline the same way the GUI already spawns `awf serve --stdio`)
-    - `backend/pyproject.toml` (registered the `awf-speech` console script)
-    - `backend/tests/test_phase12_voice_pipeline.py` (new, 3 tests: the real chained round trip, the wake-word-never-fires error path, and that `core_fn`'s response carries through to TTS input)
-    - `frontend/gui/src/main/voicePipeline.ts` (new - `runVoiceRoundTrip`/`registerVoiceIpcHandler`, spawning the real `awf-speech` subprocess from the Electron main process)
-    - `frontend/gui/src/renderer/VoiceActivation.tsx` (new - a push-to-talk-by-file control: operator supplies a wake-word file path and a command file path)
-    - `frontend/gui/src/renderer/App.tsx`, `index.tsx`, `src/preload/preload.ts` (wired the new IPC channel through; recognized text and response both land in the same visible Transcript as any other command)
-    - `frontend/gui/tests/{voicePipeline,App.voiceRoundTrip}.test.tsx` (new, 7 tests)
-  - Validation:
-    - `pytest backend/tests/` → 188 passed (177 prior + 8 Guard-role tests + 3 pipeline tests)
-    - `vitest --root gui` → 20 passed (13 prior + 4 voicePipeline + 3 App-wiring)
-    - Real, non-mocked proof: called the compiled `registerVoiceIpcHandler`'s handler directly (the same function `main.ts` registers against Electron's real `ipcMain`), which spawned the real `awf-speech` subprocess, which ran real wake-word/VAD/STT/TTS inference against the real audio fixtures and returned a real transcript, response text, and response WAV file through the same JSON-RPC-shaped path the GUI uses
-  - Notes:
-    - The Guard's role enforcement covers only the pre-execution, input-side half of Section 12.3's "prompt enforcement" rule. Detecting an agent that claims a different role in its own output is a separate mechanism (inspecting `AgentResult.output` after the fact) and remains open.
-    - The voice pipeline is push-to-talk-by-file, not live microphone capture: the operator supplies pre-recorded wake-word and command audio files rather than speaking into a live stream. Live `getUserMedia` capture in the renderer, and a human confirming the four voices sound right, remain open.
-
-- Timestamp: 2026-08-03 03:15
-  - Corrects: nothing prior is factually wrong; this closes a gap a report-only Phase 10/11 review found - Section 18 non-negotiable #1 ("No workflow logic may bypass the Capability Guard") was violated by the real execution path, and three durability/cleanup defects were present alongside it.
-  - Host class(es): Linux/WSL2, AMD64
-  - Summary: A direct codebase-integrity pass (application code first, tests only swept afterward to match) fixed five real defects in the actual execution path: the Capability Guard was never consulted for real agent invocations; an uncaught exception left a Run/Step stuck in `RUNNING` forever with no `failure_class`; worktrees and scratch dirs leaked on every real Run; the high-risk Trifecta tier had no YAML path to reach it; and `/skills` was permanently broken by a registry naming-convention mismatch.
-  - What was wrong:
-    1. **The Capability Guard had zero real callers.** `workflow/engine.py::make_agent_node_executor` called the adapter directly; `guard/capability_guard.py::authorize()` was exercised only by its own unit tests. Any real workflow's `agent` node ran with no authorization check at all.
-    2. **`engine/executor.py::run_step` had no exception handling.** A raised exception during a real Step left `steps.status='RUNNING'` forever, with no `failure_class` and no event recorded - the crash simply propagated to the caller.
-    3. **`cli/core_ops.py` never called `remove_worktree`/`remove_scratch_dir`.** Every real `awf run` left its worktree and scratch directory on disk permanently; both functions existed and were unit-tested but had no real caller.
-    4. **The high-risk Trifecta tier (`gates/adversary.py`) had no YAML field to select it.** `make_trifecta_gate_executor`'s `tier`/`cache_sandbox_dir` parameters were never threaded from a workflow file, so the Adversary pass was unreachable outside its own unit tests.
-    5. **`op_registry_list(kind="skills")` globbed for `<name>/<version>.yaml`**, but skills publish as `<name>/<version>/SKILL.md` (Section 9.3) - the `/skills` command could never find a real published skill.
-  - Scope of the fix:
-    - `backend/src/awf/engine/executor.py` (new `StepFailure` exception; `run_step` now catches any exception, records `FAILED` + `failure_class` + an event, then re-raises)
-    - `backend/src/awf/engine/agent_step.py` (`run_agent_step` is now the single canonical agent-Step path: calls the real Guard's `authorize()` before the adapter runs; `AgentStepError(StepFailure)` maps adapter statuses to failure classes)
-    - `backend/src/awf/workflow/engine.py` (removed the dead `make_gate_node_executor`; `make_agent_node_executor` now delegates to `run_agent_step`; added `_synthesized_capability_for_node`/`_resolve_node_capability` so every `agent` node is Guard-checked even without a declared `capability`; `run_workflow_definition` wraps the executor call and marks the Run cleanly `FAILED` instead of propagating)
-    - `backend/src/awf/workflow/handoff.py` (`HandoffError` now carries `failure_class`, so `run_step`'s generic handler records it correctly)
-    - `backend/src/awf/cli/core_ops.py` (added `_cleanup_run_workspace` - removes the worktree and scratch dir on `SUCCEEDED`; added `_run_workflow_safely` - an outer boundary marking the Run `FAILED` cleanly on any exception, including structural `WorkflowEngineError`s; `_build_node_executors` threads `tier`/`cache_sandbox_dir`/`guardBypassed` from the gate node's YAML into the Trifecta executor; `op_registry_list` special-cases `kind == "skills"` to glob `<name>/<version>/SKILL.md`)
-    - `backend/tests/test_phase9_handoff.py`, `test_phase5_agent_step.py`, `test_phase10_core_ops.py` (updated/added to match the corrected behavior: clean `FAILED` results instead of raised exceptions where the Run-level boundary now catches them; two new Guard-integration tests proving an R3 capability is denied before the adapter runs and an R1 capability is allowed through)
-    - `data/registry/skills/demo-skill/1.0.0/SKILL.md` (a real published skill, used to verify the `/skills` fix live, not a test fixture)
-  - Validation:
-    - `pytest backend/tests/` → 191 passed (188 prior + 3 net new)
-    - Real, non-mocked run: `awf run produce-gate-repair-demo@1.0.0` succeeded; the real `events` table shows Guard decision events for both `agent_node_produce@0.0.0` and `agent_node_repair@0.0.0` (`reason_code: approval_never`) that did not exist before this fix; `git worktree list`/`ls cache/worktrees/` confirm no leftover worktree after the run, the first time in the whole build this cleanup has been automatic rather than manual
-    - Published a real skill under `data/registry/skills/demo-skill/1.0.0/SKILL.md` and confirmed `op_registry_list(kind="skills")` now finds it (previously would have returned empty for any real skill)
-  - Notes:
-    - **Deliberately not fixed in this pass, flagged rather than hidden:** the Model Gateway (`gateway/client.py`) still has no real adapter-path caller; `activity`/`approval`/`subworkflow`/`map`/`loop` node executors still don't exist, so the high-risk tier is reachable via YAML but no workflow currently sets it; the Hardware Profiler is still never invoked automatically; the Python-side `gates/voice_approval.py` still has zero real callers (an intentional defense-in-depth duplicate of the GUI-side TypeScript rule, not a new finding).
-    - The Guard's authorization for a node with no declared `capability` uses a conservative synthesized R1/approval-never `CapabilityRecord` rather than a real registered one - this keeps every invocation authorized and logged, but is not equivalent to an operator having actually reviewed and published a Capability Record for that specific action.
-
-- Timestamp: 2026-08-03 04:20
-  - Corrects: the note in the 2026-08-03 03:15 entry flagging "the Model Gateway still has no real adapter-path caller."
-  - Host class(es): Linux/WSL2, AMD64
-  - Summary: The Model Gateway now has a real caller - the Verifier's previously-unbuilt "LLM-driven independent code-review pass" is implemented and routed through `gateway/client.py::complete()` via a `purpose: judge` Model Profile (an enum value that existed since Phase 3 but was never used).
-  - What was wrong: `gates/verifier.py` documented the LLM-review half of the Verifier's Section 12.3 obligation as explicitly not built; the Model Gateway (Phase 3) was exercised only by its own validation call, never by anything in the real gate/verification path.
-  - Scope of the fix:
-    - `backend/src/awf/gates/verifier.py` (new `run_llm_review()`: sends a fixed review prompt plus the candidate summary through `gateway.client.complete()`, parses a `PASS`/`FAIL` response into the same structured `Finding` contract `run_verifier_check` already produces)
-    - `backend/src/awf/gates/gate_node.py` (`make_trifecta_gate_executor` takes optional `review_profile`/`review_secret_key`; when a profile is given, its Finding is appended alongside the deterministic check, in both gate tiers)
-    - `backend/src/awf/cli/core_ops.py` (new `_resolve_review_profile`: a gate node MAY declare `reviewProfile: name@version`, resolved via the existing registry lookup and threaded into the gate executor; the operator's `.env` secret key is resolved the same way `op_secret_set` already does, tolerating a missing `.env`)
-    - `backend/tests/test_phase8_gates_verifier_adversary.py` (+4 tests: PASS/FAIL response mapping, and that the review is genuinely routed through `gateway.client.complete()`)
-    - `backend/tests/test_phase8_gate_node.py` (+1 test: a gate node wired with a `review_profile` produces two Finding artifacts, not one)
-  - Validation:
-    - `pytest backend/tests/` → 197 passed (193 prior + 4 net new)
-    - Real, non-mocked proof against the already-published `data/registry/model-profiles/phi4-mini/1.0.0.yaml` and local Ollama: `run_llm_review` given a candidate with `return a - b` (mislabeled as addition) returned a real `FAIL` Finding correctly identifying the subtraction bug; the same call given the corrected `return a + b` returned a real `PASS` Finding - both from genuine model inference, not stubbed responses
-  - Notes:
-    - The high-risk tier's Adversary role still does not use the Gateway - only the Verifier's new optional review path does. `reviewProfile` is opt-in per gate node; no existing published workflow sets it, so this path is available but not yet exercised by any real workflow run end to end.
-
-- Timestamp: 2026-08-03 05:05
-  - Corrects: the note in the 2026-08-03 03:15 entry flagging "the Hardware Profiler is still never invoked automatically."
-  - Host class(es): Linux/WSL2, AMD64
-  - Summary: `run_hardware_profiler` is now called automatically at the start of every real voice round trip (Section 16.4: "run ... before any voice model is downloaded or loaded"), and its result is not just logged - it genuinely selects the STT device/compute_type.
-  - What was wrong: the Hardware Profiler (Phase 12) had zero callers outside its own unit tests; `speech/pipeline.py::run_voice_round_trip` loaded wake/VAD/TTS models and ran STT unconditionally on a hardcoded `device="cpu"`, regardless of what hardware was actually available.
-  - Scope of the fix:
-    - `backend/src/awf/speech/stt_whisper.py` (`transcribe` takes a `device` parameter, previously hardcoded to `"cpu"`)
-    - `backend/src/awf/speech/pipeline.py` (`run_voice_round_trip` now requires a `conn` and calls `run_hardware_profiler(conn)` first, before any model loads; new `_stt_device_for_profile()` maps a resolved profile ending in `-cuda` to `("cuda", "float16")` and everything else to the safe `("cpu", "int8")` floor; `VoiceRoundTripResult` carries the resolved `hardware_profile_id`)
-    - `backend/src/awf/speech/cli.py` (`awf-speech round-trip` now opens the real repo `data/awf_db/awf.db` and passes the connection through, so the resolution event lands in the same audit trail as every other operation; the resolved profile id is included in the printed JSON result)
-    - `backend/tests/test_phase12_voice_pipeline.py` (all three existing tests updated for the new required `conn` argument; +2 tests: the profiler event is genuinely written to `events`, and `_stt_device_for_profile`'s selection logic across every canonical profile suffix)
-  - Validation:
-    - `pytest backend/tests/` → 198 passed (197 prior + 1 net new)
-    - Real, non-mocked run: `python -m awf.speech.cli round-trip` against the real committed audio fixtures returned `"hardware_profile_id": "linux-x64-cpu"` - correct for this host, whose `onnxruntime` build has no CUDA execution provider (confirmed by the accompanying provider-unavailable warning); a direct query against the real `data/awf_db/awf.db` afterward confirmed a genuine `hardware_profile_resolved` event was written, not just returned in-memory
-  - Notes:
-    - Only the STT device/compute_type is actually driven by the resolved profile; wake-word/VAD/TTS still run through their default ONNX Runtime provider selection regardless of profile, since openWakeWord/Kokoro's constructors don't expose an equivalent device override the way faster-whisper does. The Hardware Profiler's own accelerator-manifest-pinning mechanism (Section 16.4's `config/voice/*` YAML table) remains unbuilt, unchanged from the original Phase 12 note.
-
-- Timestamp: 2026-08-03 06:10
-  - Corrects: the note in the 2026-08-03 03:15 entry flagging "`approval`/`subworkflow`/`map`/`loop` node executors still don't exist."
-  - Host class(es): Linux/WSL2, AMD64
-  - Summary: `approval`, `subworkflow`, `map`, and `loop` now have real execution semantics in the workflow engine - four of the five previously-unbuilt Section 12.2 node types (`activity` remains explicitly out of this fix's scope). `activity` is still unbuilt and is flagged, not silently left implied-done.
-  - What was wrong: `workflow/nodes.py`/`workflow/engine.py` validated these four node shapes but raised `WorkflowEngineError` (or "no executor registered") the moment a real workflow reached one - none had a working executor anywhere in the codebase.
-  - Scope of the fix:
-    - `backend/src/awf/workflow/nodes.py` (`subworkflow` now requires `workflowRef`; `map` additionally requires `workflowRef`/`items`; `loop` additionally requires `workflowRef`)
-    - `backend/src/awf/workflow/approval.py` (new - `make_approval_node_executor`: computes a real action digest, inserts a real `approvals` row, and holds the Step in `WAITING_APPROVAL` - deliberately bypassing `run_step`'s automatic SUCCEEDED-caching while still pending, since that would have permanently frozen the "still waiting" result across a resume; a rejected decision fails the Step with `APPROVAL_REJECTED`)
-    - `backend/src/awf/workflow/subworkflow.py` (new - `make_subworkflow_node_executor`: starts a version-pinned child Workflow as a real, independent `runs` row and runs it to completion through the same durable engine before the parent Step is considered done)
-    - `backend/src/awf/workflow/map_node.py` (new - `make_map_node_executor`: bounded fan-out over a literal `items` list embedded in the node - `maxItems` is enforced; `maxConcurrency` is validated as a declared bound but execution is sequential, since the shared `sqlite3.Connection` isn't thread-safe and no per-thread connection plumbing exists - documented as a real limitation, not claimed as true parallelism)
-    - `backend/src/awf/workflow/loop_node.py` (new - `make_loop_node_executor`: repeats a child Workflow while a named boolean field in the child's own last-Step output holds true, feeding that output forward as the next iteration's input; self-stepping like Handoff, so reaching `maxIterations` while still true moves the Run to `WAITING_INPUT` rather than getting cached as a false terminal success)
-    - `backend/src/awf/workflow/engine.py` (`EXECUTABLE_NODE_TYPES` gains all four; `SELF_STEPPING_NODE_TYPES` gains `loop`, alongside `handoff`)
-    - `backend/src/awf/cli/core_ops.py` (new `_make_run_child`: the shared "resolve + build executors + run to completion + clean up scratch dir" callback used by `subworkflow`/`map`/`loop`; `_build_node_executors` registers all four unconditionally, same as `agent`)
-    - `backend/tests/test_baseline_{approval,subworkflow,map,loop}_node.py` (new, 21 tests against each executor directly)
-    - `backend/tests/test_phase10_core_ops.py` (+3 real end-to-end tests through `op_run_start` with genuinely published parent+child workflows; the pre-existing "unbuilt node type" test switched from `subworkflow` - now built - to `activity`, which still has no executor)
-    - `backend/tests/test_phase7_workflow_nodes.py` (fixture updated for the new required fields)
-  - Validation:
-    - `pytest backend/tests/` → 214 passed (198 prior + 16 net new)
-    - Real, non-mocked run against the actual repo: published a real `map` workflow fanning out to 3 items over a real child gate workflow, ran it via `awf run`, confirmed `SUCCEEDED` and - by querying the real `data/awf_db/awf.db` directly - exactly 3 independent, genuinely `SUCCEEDED` child `runs` rows, plus normal worktree cleanup (`git worktree list` empty afterward). Demo workflow files and DB rows removed afterward; `git status` shows no residue.
-  - Notes:
-    - **`activity` is the one Section 12.2 node type still with no executor anywhere** - it remains in `EXECUTABLE_NODE_TYPES` (a pre-existing, unrelated mis-categorization from the original Phase 7 build, not introduced here) but `core_ops.py` never registers one; a real workflow reaching an `activity` node still fails cleanly via the existing `_run_workflow_safely` boundary, it just doesn't run anything. Not fixed in this pass - out of the requested scope.
-    - `map`'s `items` must be a literal list embedded in the node; there is no runtime expression language to pull items from a Run's own input dynamically.
-    - `loop`'s condition-field convention (reading the child's last Step output) is this implementation's own choice, not dictated by the spec text, which only says "while a condition holds."
-
-- Timestamp: 2026-08-03 06:45
-  - Corrects: the note in the 2026-08-03 03:15 entry flagging "the Python-side `gates/voice_approval.py` still has zero real callers."
-  - Host class(es): Linux/WSL2, AMD64
-  - Summary: `gates/voice_approval.py::attempt_voice_approval` now has a real caller - `op_approval_approve` itself enforces the Section 16.4 rule that an R2+ approval MUST NOT be granted from voice input alone, reachable over the real `awf/approval.approve` JSON-RPC method. This enforcement now lives in the core, not only in the GUI's separate TypeScript copy of the same rule - no frontend can bypass it by skipping its own check.
-  - What was wrong: `attempt_voice_approval`/`decide_voice_acknowledgement` existed, were correctly implemented, and were fully unit-tested, but nothing in the real approval path ever called them - the only enforcement of the R2+ voice-refusal rule was the GUI's independent client-side TypeScript logic.
-  - Scope of the fix:
-    - `backend/src/awf/cli/core_ops.py` (`op_approval_approve` takes optional `channel` (default `"manual"`, unchanged behavior) and `risk_class`; `channel="voice"` delegates to `attempt_voice_approval` via a deferred import - avoids a circular import with `gates/voice_approval.py`, which already imported `op_approval_approve` at module level; raises `CoreOpError` if `channel="voice"` is given without a `risk_class`)
-    - `backend/src/awf/server/stdio.py` (`awf/approval.approve` now passes through optional `channel`/`riskClass` params to `op_approval_approve`)
-    - `backend/tests/test_phase12_voice_approval.py` (+4 tests: voice-channel R2 stays pending, voice-channel R0 actually approves, missing `risk_class` raises, default `channel="manual"` behavior is unchanged)
-    - `backend/tests/test_phase10_server_stdio.py` (+1 test: a real R2 approval sent over JSON-RPC with `channel: "voice"` correctly stays pending)
-  - Validation:
-    - `pytest backend/tests/` → 219 passed (214 prior + 5 net new)
-    - Real, non-mocked proof over the actual JSON-RPC transport: seeded a genuine pending approval in the real `data/awf_db/awf.db`, piped a real `awf/approval.approve` request with `channel: "voice", riskClass: "R2"` into `awf serve --stdio` - stayed `pending` with `requires_on_screen_confirmation: true`; a second request without the voice channel against the same approval genuinely returned `approved`. Demo rows removed afterward; `git status` shows no residue.
-  - Notes:
-    - This closes the last item from the original deferred-items list (Model Gateway, Hardware Profiler, node executors, voice_approval.py) - all four have now been given real callers and live-verified, except `activity`, which remains explicitly unbuilt and flagged (2026-08-03 06:10 entry).
-    - The GUI's own TypeScript enforcement (`frontend/gui/src/renderer/ApprovalConfirmation.tsx`) is unchanged and still independently correct - this fix adds a second, authoritative enforcement point in the core, it doesn't replace the GUI-side one (defense in depth, per the original Phase 12 design intent).
-
-- Timestamp: 2026-08-03 07:05
-  - Corrects: the note in the 2026-08-03 06:10 entry flagging "`activity` is the one Section 12.2 node type still with no executor anywhere."
-  - Host class(es): Linux/WSL2, AMD64
-  - Summary: `activity` now has a real executor - all eight Section 12.2 node types have working execution semantics for the first time in the build.
-  - What was wrong: `activity` was listed in `workflow/engine.py::EXECUTABLE_NODE_TYPES` since the original Phase 7 build (a pre-existing mis-categorization, not introduced by any prior fix in this series), but `cli/core_ops.py` never registered an executor for it - a real workflow reaching an `activity` node failed with "no executor registered," caught cleanly by the existing safety net but never actually running anything.
-  - Scope of the fix:
-    - `backend/src/awf/workflow/nodes.py` (`activity` now requires a `function` field)
-    - `backend/src/awf/workflow/activities.py` (new - `ACTIVITY_REGISTRY`: `hardware_probe` wraps `run_hardware_profiler` - the R0 hardware-probe activity Section 12.3's Adversary resource-safety obligation describes, now invocable mid-Run, not just at voice setup; `gpu_utilization_sample` wraps `sample_gpu_utilization`)
-    - `backend/src/awf/workflow/engine.py` (new `make_activity_node_executor`: looks up `node["function"]` in the registry and runs it through the normal `run_step` durability path inside the Step's own `fn`, so an unregistered name is recorded as a real `FAILED`/`INVALID_INPUT` Step, not raised before any Step exists to record it)
-    - `backend/src/awf/cli/core_ops.py` (`_build_node_executors` registers `"activity"` unconditionally, same as `agent`)
-    - `backend/tests/test_baseline_activity_node.py` (new, 3 tests: a real hardware-probe run persists correctly, an unregistered name fails the Step cleanly, and a replay after `SUCCEEDED` returns the cached output without re-probing)
-    - `backend/tests/test_phase7_workflow_nodes.py`, `test_phase10_core_ops.py` (updated for the new required field; the pre-existing "unbuilt node type" test switched to a real runtime error - an unregistered activity name - since no node type is unbuilt anymore)
-    - `backend/tests/test_phase7_workflow_definition.py` (fixture regression caught and fixed: two tests used a bare `{"type": "activity"}` node with no `function`, which no longer parses now that the field is required)
-  - Validation:
-    - `pytest backend/tests/` → 223 passed (219 prior + 4 net new)
-    - Real, non-mocked run against the actual repo: published a real `activity` workflow calling `hardware_probe`, ran it via `awf run`, confirmed `SUCCEEDED`, and - by querying the real `data/awf_db/awf.db` directly - the Step's `output_json` contained a genuine `"profile_id": "linux-x64-cpu"` from the real Hardware Profiler, not a stub. Demo workflow file and DB rows removed afterward; `git status` shows no residue.
-  - Notes:
-    - **All eight Section 12.2 node types now have real execution semantics.** This closes the entire deferred-items list first flagged in the 2026-08-03 03:15 entry (Model Gateway, Hardware Profiler, node executors x5, voice_approval.py).
-    - `gpu_utilization_sample` is registered but has no workflow currently calling it - available, not yet exercised end to end.

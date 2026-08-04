@@ -49,15 +49,14 @@ def test_r2_approval_can_still_be_approved_via_the_real_non_voice_path(tmp_path)
     voice_result = attempt_voice_approval(conn, approval_id="ap-1", risk_class="R2", voice_confirmed=True)
     assert voice_result["requires_on_screen_confirmation"] is True
 
-    # A real on-screen (click/keypress) confirmation still works normally.
+    # An on-screen (click/keypress) confirmation still works normally.
     screen_result = op_approval_approve(conn, approval_id="ap-1")
     assert screen_result["status"] == "approved"
 
 
 def test_core_op_approve_with_voice_channel_and_r2_risk_stays_pending(tmp_path):
-    # The real caller this closes: op_approval_approve itself now enforces
-    # the R2+ voice-only refusal rule (Section 16.4), not just the GUI's own
-    # separate TypeScript copy of it.
+    # op_approval_approve enforces the R2+ voice-only refusal rule (Section
+    # 16.4), not just the GUI's own separate TypeScript copy of it.
     conn = make_conn(tmp_path)
 
     result = op_approval_approve(conn, approval_id="ap-1", channel="voice", risk_class="R2")

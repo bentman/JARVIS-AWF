@@ -174,8 +174,8 @@ def test_capability_guard_allows_r1_capability_and_adapter_runs(repo_and_worktre
 
 
 def test_real_agent_allowlist_denies_a_capability_not_listed(repo_and_worktree, conn):
-    # ADR-0002: a real (non-singleton) allowlist must actually be able to
-    # fail - the pre-ADR-0002 default (agent_allowlist=None) fell back to a
+    # ADR-0002: a non-singleton allowlist must be able to fail - the
+    # pre-ADR-0002 default (agent_allowlist=None) fell back to a
     # self-permitting singleton that could never deny anything.
     _repo_root, worktree = repo_and_worktree
     adapter_calls = []

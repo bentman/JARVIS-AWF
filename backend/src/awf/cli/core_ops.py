@@ -350,10 +350,10 @@ def op_approval_approve(
                 f"risk_class={risk_class!r} does not match this approval's real risk_class={stored_risk_class!r} "
                 "- a caller may not claim a different risk class than the one recorded when this approval was requested"
             )
-        # An approval whose node never declared `riskClass` has no real
-        # value to check against - the safe default is R2 (never auto-
-        # grantable from voice alone), not R0/R1, since trusting an absent
-        # value as low-risk would be a real bypass of the rule below.
+        # An approval whose node never declared `riskClass` has no value to
+        # check against - the safe default is R2 (never auto-grantable
+        # from voice alone), not R0/R1, since trusting an absent value as
+        # low-risk would bypass the rule below.
         effective_risk_class = risk_class or stored_risk_class or "R2"
         from awf.gates.voice_approval import attempt_voice_approval
 

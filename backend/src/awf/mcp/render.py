@@ -10,33 +10,28 @@ environment (never into the rendered file itself).
 Pure functions: no subprocess, no filesystem access. `engine.agent_step`
 writes the file (if any) and injects the environment overlay.
 
-Per-adapter mechanism, each confirmed against the installed CLI's own
-`--help` or published docs, not assumed:
-  - Claude Code: `--mcp-config <path> --strict-mcp-config` (a real,
-    documented, non-interactive flag - no project-trust prompt).
+Per-adapter mechanism:
+  - Claude Code: `--mcp-config <path> --strict-mcp-config` - a
+    non-interactive flag that skips the project-trust prompt.
   - Codex CLI: repeated `-c mcp_servers.<name>.<field>=<value>` overrides
-    (the same override mechanism `adapters/codex_cli.py` already uses for
+    (the same override mechanism `adapters/codex_cli.py` uses for
     `sandbox_mode`/`approval_policy`) - no separate file.
-  - GitHub Copilot CLI: `--additional-mcp-config @<path>` (confirmed via
-    `copilot --help`: "augments config from ~/.copilot/mcp-config.json for
-    this session").
+  - GitHub Copilot CLI: `--additional-mcp-config @<path>` augments
+    `~/.copilot/mcp-config.json` for the invoked session.
   - Antigravity (`agy`): has no per-invocation flag and only reads MCP
-    servers from `~/.gemini/config/mcp_config.json` - the operator's real
-    home directory, confirmed via the installed CLI's own self-inspection
-    and live-tested against a real server. Never written to directly.
-    Instead, each invocation gets its own throwaway `$HOME`
+    servers from `~/.gemini/config/mcp_config.json` in the operator's home
+    directory, which is never written to directly. Instead, each
+    invocation gets its own throwaway `$HOME`
     (`cache/sandbox/<run_id>/agy_home/`, never the operator's real home):
     `.gemini/antigravity-cli/antigravity-oauth-token` is copied in
-    read-only from the real home (session auth lives there and nowhere
-    else - confirmed by live-testing that a scratch `$HOME` without it
-    fails auth), and `.gemini/antigravity-cli/settings.json` /
+    read-only from the real home, and
+    `.gemini/antigravity-cli/settings.json` /
     `.gemini/config/mcp_config.json` are written fresh, scoped to this Run
-    only. `settings.json`'s `permissions.allow` needs an `mcp(*)` entry -
-    live-tested: MCP tool calls are denied by default in headless mode
-    otherwise, and no narrower per-server/per-tool allow syntax is
-    confirmed to work. This never touches the operator's persistent
-    `~/.gemini/antigravity-cli/settings.json` - the copy is scoped to the
-    scratch `$HOME`.
+    only. `settings.json`'s `permissions.allow` needs an `mcp(*)` entry,
+    since MCP tool calls are denied by default in headless mode and no
+    narrower per-server/per-tool allow syntax exists. This never touches
+    the operator's persistent `~/.gemini/antigravity-cli/settings.json` -
+    the copy is scoped to the scratch `$HOME`.
 """
 
 import json

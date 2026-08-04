@@ -61,10 +61,10 @@ def test_run_command_success_exit_code(tmp_path, monkeypatch):
 
 
 def test_run_command_reports_a_coreoperror_cleanly_not_a_traceback(tmp_path, capsys):
-    # A real CoreOpError (e.g. input that violates a real workflow's
-    # inputSchema, or any other op_run_start-raised error) must produce a
-    # clean CLI error and a non-zero exit code, not an uncaught traceback -
-    # the JSON-RPC surface already had this safety net; the CLI didn't.
+    # A CoreOpError (e.g. input that violates a workflow's inputSchema, or
+    # any other op_run_start-raised error) must produce a clean CLI error
+    # and a non-zero exit code, not an uncaught traceback - the JSON-RPC
+    # surface already has this safety net; the CLI does not.
     repo_root = make_repo(tmp_path)
     workflow_dir = repo_root / "config" / "app_registry" / "workflows" / "requires-objective"
     workflow_dir.mkdir(parents=True)

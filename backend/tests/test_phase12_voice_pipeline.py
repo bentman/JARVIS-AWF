@@ -61,7 +61,7 @@ def test_full_round_trip_wake_stt_response_tts(tmp_path):
         stt_download_root=MODELS / "stt",
     )
 
-    assert result.hardware_profile_id  # e.g. linux-x64-cpu - resolved for real, not stubbed
+    assert result.hardware_profile_id  # e.g. linux-x64-cpu, resolved by the hardware profiler, not stubbed
     resolved_event = conn.execute(
         "SELECT * FROM events WHERE actor = 'hardware_profiler' AND reason_code = 'hardware_profile_resolved'"
     ).fetchone()
@@ -80,9 +80,8 @@ def test_full_round_trip_wake_stt_response_tts(tmp_path):
 
 
 def test_round_trip_with_repo_root_verifies_real_pinned_models_and_logs_it(tmp_path):
-    # closes the "manifests are pinned but nothing reads them" gap - a real
-    # round trip against the real, already-downloaded models on this host,
-    # checked against the real shipped config/voice/*/linux-x64-*.yaml pins.
+    # A round trip against the already-downloaded models on this host,
+    # checked against the shipped config/voice/*/linux-x64-*.yaml pins.
     conn = make_conn(tmp_path)
 
     run_voice_round_trip(
@@ -136,11 +135,10 @@ def test_round_trip_raises_when_wake_word_does_not_fire(tmp_path):
 
 
 def test_round_trip_carries_core_fn_response_verbatim_into_tts_input(tmp_path, monkeypatch):
-    # The full real chain (wake -> VAD -> STT -> TTS) is already proven once,
-    # for real, by test_full_round_trip_wake_stt_response_tts above - this
-    # test only needs to prove core_fn's response is what reaches synthesize,
-    # so the four heavy model calls are faked rather than loaded a second
-    # time (this alone was ~40% of the whole suite's runtime).
+    # The full chain (wake -> VAD -> STT -> TTS) is exercised by
+    # test_full_round_trip_wake_stt_response_tts above - this test only
+    # checks that core_fn's response is what reaches synthesize, so the
+    # four heavy model calls are faked rather than loaded a second time.
     conn = make_conn(tmp_path)
     seen_text = {}
     synthesize_args = {}

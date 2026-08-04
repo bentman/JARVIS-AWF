@@ -78,8 +78,8 @@ def test_map_runs_items_concurrently_and_merges_results_in_order(repo, parent_wo
     assert output["child_run_ids"] == ["child-0", "child-1", "child-2"]
     assert sorted(seen_indices) == [0, 1, 2]
 
-    # each item's real file is now visible in the parent worktree - a real
-    # git merge happened, not just bookkeeping.
+    # each item's file is visible in the parent worktree - a git merge
+    # happened, not just bookkeeping.
     assert (parent_worktree / "item_0.txt").read_text() == "result for a\n"
     assert (parent_worktree / "item_1.txt").read_text() == "result for b\n"
     assert (parent_worktree / "item_2.txt").read_text() == "result for c\n"
@@ -135,8 +135,8 @@ def test_map_raises_when_any_item_fails_and_leaves_earlier_merges_in_place(repo,
     row = conn.execute("SELECT status FROM steps WHERE step_id = 'step-1'").fetchone()
     assert row["status"] == "FAILED"
     # item 0 succeeded and merged before item 1's failure was reached (in
-    # order) - that real work is not rolled back, same as any other
-    # Step-level durability in this system.
+    # order) - that work is not rolled back, same as any other Step-level
+    # durability in this system.
     assert (parent_worktree / "item_0.txt").is_file()
 
     worktrees = run_git(["worktree", "list"], cwd=repo).stdout

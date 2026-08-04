@@ -230,9 +230,9 @@ def _codex_scratch_home_for_skills(
 ) -> Path:
     # Codex only discovers skills under its own `$CODEX_HOME/skills/` - the
     # same scratch-home shape ADR-0003 established for Antigravity's MCP
-    # fix, never the operator's real `~/.codex/`. Symlinks to the copy
-    # already written into the worktree by `_share_skill` (the single real
-    # copy) rather than a second real copy on disk.
+    # config, never the operator's real `~/.codex/`. Symlinks to the copy
+    # already written into the worktree by `_share_skill` rather than a
+    # second copy on disk.
     home_dir = scratch_path(repo_root, run_id) / "codex_home" / actor
     (home_dir / "skills").mkdir(parents=True, exist_ok=True)
     for skill in skills:

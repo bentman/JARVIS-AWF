@@ -1,7 +1,8 @@
-"""Standalone script that simulates a real mid-Run process kill (Section 13.2).
+"""Standalone script that simulates a mid-Run process kill (Section 13.2).
 
-Invoked as a subprocess (not imported) so "start" can genuinely terminate the
-process via os._exit before Step 2 persists - a real crash, not a simulated one.
+Invoked as a subprocess (not imported) so "start" can terminate the process
+via os._exit before Step 2 persists, rather than raising an in-process
+exception.
 
 Usage:
     python test_phase4_mid_run_crash_runner.py start  <db_path> <counter_path>
@@ -28,7 +29,7 @@ def _step1(_input: dict, counter_path: Path) -> dict:
 
 
 def _step2_crash(_input: dict) -> dict:
-    os._exit(137)  # a real, unrecoverable crash mid-Step - no cleanup runs
+    os._exit(137)  # unrecoverable crash mid-Step - no cleanup runs
 
 
 def _step2_clean(_input: dict) -> dict:

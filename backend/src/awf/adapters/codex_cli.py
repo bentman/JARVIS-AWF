@@ -8,24 +8,21 @@ directory, so it travels with `config/`. `--dangerously-bypass-approvals-and-san
 and `danger-full-access` MUST NOT be used outside an explicit container/VM
 escalation.
 
-Codex's own `--profile` flag layers a file from `$CODEX_HOME` (where auth
-also lives, confirmed via `codex exec --help`) - it cannot point at an
-arbitrary repo path without also relocating auth. This adapter instead loads
-the repo-committed TOML file directly and applies its keys as `-c
-key=value` overrides, which is the mechanism Codex documents for setting
-these same values non-interactively.
+Codex's own `--profile` flag layers a file from `$CODEX_HOME`, where auth
+also lives - it cannot point at an arbitrary repo path without also
+relocating auth. This adapter instead loads the repo-committed TOML file
+directly and applies its keys as `-c key=value` overrides, which is the
+mechanism Codex documents for setting these same values non-interactively.
 
 `constraints["model_override"]` (ADR-0005), when set, is passed through
-`-m/--model` - confirmed real and live-tested. Codex's `--local-provider`
-flag (paired with `--oss`, confirmed via `codex exec --help`) only accepts
-`lmstudio`/`ollama`, not an arbitrary OpenAI-compatible `api_base` - so when
-the winning candidate's `provider` is `ollama`
+`-m/--model`. Codex's `--local-provider` flag (paired with `--oss`) only
+accepts `lmstudio`/`ollama`, not an arbitrary OpenAI-compatible `api_base` -
+so when the winning candidate's `provider` is `ollama`
 (`constraints["model_override_provider"]`), this adapter also passes `--oss
 --local-provider ollama` to force Codex's own reasoning through that local
 backend; any other provider (including a custom local `api_base`, e.g.
 `llama-server`) gets plain `-m <model>` only, since Codex has no flag to
-point `--local-provider` at an arbitrary endpoint - a known, named
-limitation, not silently assumed to work.
+point `--local-provider` at an arbitrary endpoint.
 """
 
 import json

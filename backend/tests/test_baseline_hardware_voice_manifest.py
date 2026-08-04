@@ -63,8 +63,7 @@ def test_parse_fallback_manifest_has_no_files():
 
 
 def test_all_48_real_shipped_manifests_parse_cleanly():
-    # every canonical profile x function combination this project actually
-    # ships - a real regression check, not a synthetic sample.
+    # every canonical profile x function combination this project ships.
     profiles = [
         "windows-x64-cpu", "windows-x64-gpu", "windows-x64-cuda",
         "windows-arm64-cpu", "windows-arm64-gpu", "windows-arm64-qnn",
@@ -77,7 +76,7 @@ def test_all_48_real_shipped_manifests_parse_cleanly():
             manifest = load_hardware_voice_manifest(path)
             assert manifest.function == function
             assert manifest.profile == profile
-            # every manifest either has real files or a real fallback - never neither
+            # every manifest either has files or a fallback - never neither
             assert manifest.files or manifest.fallback_to
 
 

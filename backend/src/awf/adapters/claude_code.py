@@ -6,7 +6,7 @@ permission mode equivalent to `acceptEdits`. `--dangerously-skip-permissions`
 escalation - this adapter never passes it.
 
 `constraints["model_override"]` (ADR-0005), when set, is passed through
-`--model` - confirmed real and live-tested against the installed CLI.
+`--model`.
 """
 
 import json

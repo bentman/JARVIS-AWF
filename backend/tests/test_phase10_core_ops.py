@@ -206,7 +206,7 @@ def test_registry_publish_agent_manifest_writes_data_registry_and_index(tmp_path
 
 
 def test_registry_list_agents_finds_the_real_shipped_config_defaults():
-    # ADR-0002: closes /agents' previously-permanent empty state.
+    # ADR-0002: /agents lists the shipped config defaults.
     listed = op_registry_list(REPO_ROOT, kind="agents")
 
     names = {row["name"] for row in listed if row["source"] == "config"}
@@ -335,11 +335,11 @@ def publish_workflow(repo_root, raw: dict) -> None:
 
 
 def test_op_run_start_fails_cleanly_for_an_unknown_activity_name(tmp_path):
-    # All eight Section 12.2 node types now have a real executor - this
-    # exercises the same "MUST NOT let an exception escape uncaught" safety
-    # net via a genuine runtime error instead (an `activity` node naming a
-    # function that isn't registered): op_run_start still marks the Run
-    # FAILED cleanly rather than propagating the raw exception.
+    # All eight Section 12.2 node types have an executor - this exercises
+    # the same "MUST NOT let an exception escape uncaught" safety net via a
+    # runtime error instead (an `activity` node naming a function that
+    # isn't registered): op_run_start still marks the Run FAILED cleanly
+    # rather than propagating the raw exception.
     repo_root, conn = make_git_repo(tmp_path)
     publish_workflow(
         repo_root,
@@ -519,9 +519,9 @@ def test_op_run_start_runs_a_real_map_node_fanning_out_to_three_children(tmp_pat
 
 def test_op_run_start_runs_a_real_loop_node_until_max_iterations(tmp_path):
     # The trivial gate child always passes, so `conditionField: "passed"`
-    # never goes false - proving the loop genuinely re-runs a real child
-    # Run each iteration and correctly waits for operator disposition
-    # instead of looping forever or silently succeeding.
+    # never goes false - the loop re-runs a child Run each iteration and
+    # waits for operator disposition instead of looping forever or
+    # silently succeeding.
     repo_root, conn = make_git_repo(tmp_path)
     publish_trivial_gate_workflow(repo_root, name="child-ok")
     publish_workflow(

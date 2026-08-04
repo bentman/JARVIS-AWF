@@ -13,7 +13,7 @@ Success/failure is determined primarily by the process exit code, not event
 contents.
 
 `constraints["model_override"]` (ADR-0005), when set, is passed through
-`--model` - confirmed real and live-tested against the installed CLI.
+`--model`.
 """
 
 import json

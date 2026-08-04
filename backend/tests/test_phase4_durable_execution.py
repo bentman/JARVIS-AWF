@@ -70,7 +70,7 @@ def test_mid_run_crash_and_resume_no_duplicate_side_effects(tmp_path):
         capture_output=True,
         text=True,
     )
-    assert start.returncode == 137  # process was genuinely killed, not returned normally
+    assert start.returncode == 137  # process was killed (SIGKILL), not returned normally
 
     conn = get_connection(db_path)
     run_row = conn.execute("SELECT status FROM runs WHERE run_id = 'run-crash-1'").fetchone()

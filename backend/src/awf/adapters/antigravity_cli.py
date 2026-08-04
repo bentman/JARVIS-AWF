@@ -7,19 +7,18 @@ never an implicit interactive default), native OS-level terminal sandbox
 outside an explicit container/VM escalation.
 
 `agy` does not bind to the caller's cwd by default - it writes into its own
-scratch project unless `--add-dir <workspace_root> --new-project` is passed
-(confirmed by probing the installed CLI; not documented in the spec text).
+scratch project unless `--add-dir <workspace_root> --new-project` is passed.
 
-`agy` compiles in a real, headful-by-default Playwright browser tool suite
-(`open_browser_url`, `read_browser_page`, `browser_click_element`, etc.) -
-live-verified to be reachable during a plain research objective, popping a
-real, visible window. `JETSKI_BROWSER_HEADLESS=true` (confirmed via the
-installed CLI's own self-inspection) forces headless without disabling the
-tool outright - set unconditionally here, since a Run's adapter subprocess
-must never surface a visible UI element on the operator's desktop.
+`agy` compiles in a headful-by-default Playwright browser tool suite
+(`open_browser_url`, `read_browser_page`, `browser_click_element`, etc.),
+reachable during a plain research objective and capable of opening a
+visible window. `JETSKI_BROWSER_HEADLESS=true` forces headless without
+disabling the tool outright - set unconditionally here, since a Run's
+adapter subprocess must never surface a visible UI element on the
+operator's desktop.
 
 `constraints["model_override"]` (ADR-0005), when set, is passed through
-`--model` - confirmed real and live-tested against the installed CLI.
+`--model`.
 """
 
 import json

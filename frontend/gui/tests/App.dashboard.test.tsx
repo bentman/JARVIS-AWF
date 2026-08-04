@@ -3,8 +3,8 @@ import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../src/renderer/App.js";
 
-describe("App dashboard wiring (runList/approvalList were previously dead IPC channels)", () => {
-  it("calls onRunList/onApprovalList on mount and renders the real results", async () => {
+describe("App dashboard wiring (runList/approvalList IPC channels)", () => {
+  it("calls onRunList/onApprovalList on mount and renders the results", async () => {
     const onRunList = vi.fn().mockResolvedValue([
       { run_id: "run-1", workflow_ref: "demo@1.0.0", status: "SUCCEEDED", created_at: "t", updated_at: "t" },
     ]);
@@ -19,7 +19,7 @@ describe("App dashboard wiring (runList/approvalList were previously dead IPC ch
     expect(await screen.findByText(/demo@1.0.0/)).toBeTruthy();
   });
 
-  it("a real pending approval from approvalList reaches the on-screen ApprovalConfirmation UI - previously unreachable", async () => {
+  it("a pending approval from approvalList reaches the on-screen ApprovalConfirmation UI", async () => {
     const onApprovalList = vi.fn().mockResolvedValue([
       {
         approval_id: "ap-1", run_id: "run-1", step_id: "step-1", action_digest: "sha256:deadbeef",

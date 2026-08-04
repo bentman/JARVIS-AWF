@@ -26,7 +26,7 @@ describe("Dashboard", () => {
     expect(screen.getByText(/R2/)).toBeTruthy();
   });
 
-  it("shows empty-state text, not nothing, when there is genuinely no data", () => {
+  it("shows empty-state text, not nothing, when there is no data", () => {
     render(<Dashboard runs={[]} approvals={[]} onRefresh={vi.fn()} refreshing={false} />);
 
     expect(screen.getByText("No runs yet.")).toBeTruthy();

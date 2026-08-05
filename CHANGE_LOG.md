@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-05 19:42
+  - Host class(es): Linux/WSL2, AMD64, NVIDIA GeForce RTX 3060
+  - Summary: Environment finding during ADR-0008 implementation - constructing an ONNX Runtime session with `CUDAExecutionProvider` segfaults the process on this host once `onnxruntime-gpu` is installed, because the venv also carries a CUDA 13.x toolchain (`nvidia-cudnn-cu13`, `cuda-toolkit` 13.0.3) pulled in transitively through `torch`, which arrives via `silero-vad`'s own dependency - a native ABI mismatch a Python `try`/`except` cannot catch. `hardware/preflight.py` no longer constructs any ONNX Runtime session as a result; provider availability (`ep:<provider>`) plus the corresponding hardware fact is what selects a device, and a real backend failure now surfaces at the adapter's own first use instead.
+  - Scope: `backend/src/awf/hardware/preflight.py`, `backend/src/awf/hardware/readiness.py`, `docs/adr/0008-profile-provision-preflight-readiness.md`.
+  - Validation: reproduced directly (`onnxruntime.InferenceSession(..., providers=["CUDAExecutionProvider"])` segfaults the interpreter on this host); `awf-setup --verify` is where this state is visible going forward - it reports the installed distribution, version, and available providers without ever attempting session construction.
+  - Notes: `kokoro-onnx`, `openwakeword`, and `faster-whisper` each hard-pin the base `onnxruntime` distribution name regardless of which accelerator extra is selected, so `awf-setup --install` uninstalls the non-selected distribution and force-reinstalls the selected one after the main install, keeping pip's own bookkeeping accurate rather than leaving both distributions listed.
+
 - Timestamp: 2026-08-05 10:18
   - Host class(es): Linux/WSL2, AMD64
   - Summary: ADR-0006 follow-up - fixed `validate_backend.py`'s `runtime` command reporting PASS when every `live` test skips, wired pytest's own cache into `cache/validate_backend/`, and marked three host-probing tests in `test_phase12_hardware_profiler.py` `live` so `ci` no longer runs them.

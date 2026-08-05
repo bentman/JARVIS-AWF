@@ -115,7 +115,7 @@ def test_cli_rotate_key_updates_env_and_data(fake_repo, monkeypatch):
 
     assert new_key != old_key
 
-    conn = get_connection(secrets_cli._db_path(fake_repo))
+    conn = get_connection(secrets_cli.db_path(fake_repo))
     try:
         assert get_secret(conn, "api-key", new_key) == "sekret-value"
         with pytest.raises(InvalidToken):

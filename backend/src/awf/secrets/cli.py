@@ -14,11 +14,8 @@ from pathlib import Path
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.envfile import get_env_value, set_env_value
+from awf.paths import REPO_ROOT, db_path
 from awf.secrets.store import get_secret, list_secret_names, rotate_key, set_secret
-
-
-def _db_path(repo_root: Path) -> Path:
-    return repo_root / "data" / "awf_db" / "awf.db"
 
 
 def _load_key(repo_root: Path) -> bytes:
@@ -27,7 +24,7 @@ def _load_key(repo_root: Path) -> bytes:
 
 def cmd_set(args: argparse.Namespace, repo_root: Path) -> int:
     plaintext = getpass.getpass(f"value for '{args.name}': ")
-    conn = get_connection(_db_path(repo_root))
+    conn = get_connection(db_path(repo_root))
     try:
         set_secret(conn, args.name, plaintext, _load_key(repo_root))
     finally:
@@ -36,7 +33,7 @@ def cmd_set(args: argparse.Namespace, repo_root: Path) -> int:
 
 
 def cmd_list(args: argparse.Namespace, repo_root: Path) -> int:
-    conn = get_connection(_db_path(repo_root))
+    conn = get_connection(db_path(repo_root))
     try:
         for name in list_secret_names(conn):
             print(name)
@@ -47,7 +44,7 @@ def cmd_list(args: argparse.Namespace, repo_root: Path) -> int:
 
 def cmd_rotate_key(args: argparse.Namespace, repo_root: Path) -> int:
     new_key = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
-    conn = get_connection(_db_path(repo_root))
+    conn = get_connection(db_path(repo_root))
     try:
         rotate_key(conn, _load_key(repo_root), new_key.encode("ascii"))
     finally:
@@ -75,17 +72,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(argv: list[str], repo_root: Path) -> int:
     args = build_parser().parse_args(argv)
-    init_db(_db_path(repo_root))
+    init_db(db_path(repo_root))
     return args.func(args, repo_root)
 
 
-def _repo_root() -> Path:
-    # backend/src/awf/secrets/cli.py -> secrets -> awf -> src -> backend -> <repo root>
-    return Path(__file__).resolve().parents[4]
-
-
 def main() -> int:
-    return run(sys.argv[1:], _repo_root())
+    return run(sys.argv[1:], REPO_ROOT)
 
 
 if __name__ == "__main__":

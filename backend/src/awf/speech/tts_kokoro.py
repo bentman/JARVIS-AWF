@@ -1,4 +1,4 @@
-"""TTS adapter (Section 16.4): Kokoro-82M via kokoro-onnx.
+"""TTS adapter (Section 16.4, ADR-0008): Kokoro-82M via kokoro-onnx.
 
 Text + voice_id in -> audio out. Model files are operator-downloaded into
 `models/tts/` (gitignored) at Phase 12 setup, never bundled.
@@ -8,6 +8,13 @@ import wave
 from pathlib import Path
 
 import numpy as np
+
+# TTS readiness device -> the ONNX Runtime execution provider it verified.
+_DEVICE_TO_PROVIDER = {
+    "cuda": "CUDAExecutionProvider",
+    "directml": "DmlExecutionProvider",
+    "qnn": "QNNExecutionProvider",
+}
 
 
 class TtsAdapterError(RuntimeError):
@@ -20,12 +27,21 @@ def synthesize(
     *,
     model_path: Path,
     voices_path: Path,
+    device: str = "cpu",
     speed: float = 1.0,
 ) -> tuple[np.ndarray, int]:
     """Returns (samples: float32 ndarray, sample_rate: int)."""
     from kokoro_onnx import Kokoro
 
-    kokoro = Kokoro(str(model_path), str(voices_path))
+    if device == "cpu":
+        kokoro = Kokoro(str(model_path), str(voices_path))
+    else:
+        import onnxruntime as ort
+
+        provider = _DEVICE_TO_PROVIDER[device]
+        session = ort.InferenceSession(str(model_path), providers=[provider, "CPUExecutionProvider"])
+        kokoro = Kokoro.from_session(session, str(voices_path))
+
     samples, sample_rate = kokoro.create(text, voice=voice_id, speed=speed)
     return samples, sample_rate
 

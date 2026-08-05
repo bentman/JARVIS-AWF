@@ -1,9 +1,9 @@
-"""Voice artifact resolution, acquisition, and verification (ADR-0007).
+"""Voice artifact resolution and acquisition (ADR-0007, ADR-0008).
 
-Maps a canonical Hardware Profiler profile ID to artifact paths under
-`models/<function>/` and to STT runtime parameters, acquires whatever is
-missing, and verifies what is present. `speech/cli.py` and `speech/pipeline.py`
-read from this module rather than holding model paths as literals.
+Maps a device (an `awf.hardware.readiness` result, not a profile ID) to STT
+runtime parameters, and acquires whatever `models/<function>/` artifacts are
+missing. `speech/cli.py` and `speech/pipeline.py` read from this module
+rather than holding model paths as literals.
 """
 
 import importlib.resources
@@ -12,15 +12,15 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+from awf.paths import models_dir
 from awf.registry.hardware_voice_manifest import (
     FUNCTIONS,
     HardwareVoiceManifest,
     HardwareVoiceManifestError,
+    artifact_paths,
     load_hardware_voice_manifest,
     resolve_hardware_voice_manifest_path,
 )
-
-ACCELERATION_CLASSES = ("cpu", "gpu", "cuda", "qnn")
 
 # Files-bearing functions (tts/vad/wake); stt names its artifacts through
 # `classes`, not `files`, and is acquired through `WhisperModel`'s own cache
@@ -35,28 +35,13 @@ class SttRuntime:
     compute_type: str
 
 
-def acceleration_class(profile_id: str) -> str:
-    candidate = profile_id.rsplit("-", 1)[-1]
-    if candidate not in ACCELERATION_CLASSES:
-        raise HardwareVoiceManifestError(
-            f"profile id '{profile_id}' has no recognized acceleration class in {ACCELERATION_CLASSES}"
-        )
-    return candidate
-
-
 def load_voice_manifest(repo_root: Path, function: str) -> HardwareVoiceManifest:
     return load_hardware_voice_manifest(resolve_hardware_voice_manifest_path(repo_root, function))
 
 
-def artifact_paths(repo_root: Path, function: str) -> dict[str, Path]:
-    manifest = load_voice_manifest(repo_root, function)
-    models_dir = repo_root / "models" / function
-    return {file.name: models_dir / file.name for file in manifest.files}
-
-
-def stt_runtime(repo_root: Path, profile_id: str) -> SttRuntime:
+def stt_runtime(repo_root: Path, device: str) -> SttRuntime:
     manifest = load_voice_manifest(repo_root, "stt")
-    stt_class = manifest.classes.get(acceleration_class(profile_id), manifest.classes["cpu"])
+    stt_class = manifest.classes.get(device, manifest.classes["cpu"])
     return SttRuntime(model=stt_class.model, device=stt_class.device, compute_type=stt_class.compute_type)
 
 
@@ -91,13 +76,13 @@ def _acquire_file(file, target: Path) -> None:
             shutil.copyfileobj(source, out)
 
 
-def sync_models(repo_root: Path, profile_id: str) -> list[dict]:
+def sync_models(repo_root: Path, stt_device: str) -> list[dict]:
     results = []
     for function in _FILE_FUNCTIONS:
         manifest = load_voice_manifest(repo_root, function)
-        models_dir = repo_root / "models" / function
+        target_dir = models_dir(repo_root, function)
         for file in manifest.files:
-            target = models_dir / file.name
+            target = target_dir / file.name
             if target.is_file():
                 results.append({"function": function, "name": file.name, "path": str(target), "status": "PRESENT"})
                 continue
@@ -106,8 +91,8 @@ def sync_models(repo_root: Path, profile_id: str) -> list[dict]:
 
     from faster_whisper import WhisperModel
 
-    runtime = stt_runtime(repo_root, profile_id)
-    download_root = repo_root / "models" / "stt"
+    runtime = stt_runtime(repo_root, stt_device)
+    download_root = models_dir(repo_root, "stt")
     download_root.mkdir(parents=True, exist_ok=True)
     WhisperModel(runtime.model, download_root=str(download_root))
     results.append({"function": "stt", "name": runtime.model, "path": str(download_root), "status": "SYNCED"})
@@ -115,10 +100,10 @@ def sync_models(repo_root: Path, profile_id: str) -> list[dict]:
     return results
 
 
-def verify_models(repo_root: Path, _profile_id: str) -> list[dict]:
+def verify_models(repo_root: Path) -> list[dict]:
     # every canonical profile shares the same tts/vad/wake artifacts, and stt
-    # has no named files - the parameter exists for signature symmetry with
-    # `sync_models`/`stt_runtime`, which do vary by profile.
+    # has no named files to check presence of - it's warmed by `sync_models`,
+    # not presence-checked here.
     results = []
     for function in _FILE_FUNCTIONS:
         paths = artifact_paths(repo_root, function)

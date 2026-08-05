@@ -11,8 +11,6 @@ dependencies = [
   "PyYAML>=6",
   "cryptography>=42",
   "litellm>=1.94",
-  "onnxruntime>=1.28",
-  "onnx>=1.22",
   "openwakeword>=0.4",
   "faster-whisper>=1.2",
   "kokoro-onnx>=0.5",
@@ -21,7 +19,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "onnx>=1.22"]
+hw-ort-cpu = ["onnxruntime>=1.28"]
+hw-ort-cuda = ["onnxruntime-gpu>=1.28"]
+hw-ort-directml = ["onnxruntime-directml>=1.28; sys_platform=='win32'"]
+hw-ort-qnn = [
+  "onnxruntime>=1.28; platform_machine=='ARM64' and sys_platform=='win32'",
+  "onnxruntime-qnn>=2.3; platform_machine=='ARM64' and sys_platform=='win32'",
+]
 
 [project.scripts]
 awf-setup = "awf.setup:main"

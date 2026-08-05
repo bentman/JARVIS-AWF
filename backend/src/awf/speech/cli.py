@@ -1,4 +1,4 @@
-"""`awf-speech` console entry point (Section 16.4).
+"""`awf-speech` console entry point (Section 16.4, ADR-0008).
 
 `round-trip` is a standalone entry point for `run_voice_round_trip`, so a
 non-Python caller (the Electron GUI's main process) can invoke it the same
@@ -7,9 +7,9 @@ object from stdout. This is push-to-talk-by-file: the caller supplies a
 wake-word audio file and a command audio file rather than a live microphone
 stream.
 
-`models sync`/`models verify` resolve the host's canonical Hardware Profiler
-profile, then acquire or check presence of the artifacts
-`config/voice/{stt,tts,vad,wake}.yaml` name for it.
+`models sync`/`models verify` resolve STT readiness (the only readiness
+result `speech.models` needs), then acquire or check presence of the
+artifacts `config/voice/{stt,tts,vad,wake}.yaml` name.
 """
 
 import argparse
@@ -19,13 +19,9 @@ from pathlib import Path
 
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
+from awf.paths import REPO_ROOT, db_path
 from awf.speech.models import artifact_paths, sync_models, verify_models
 from awf.speech.pipeline import VoicePipelineError, run_voice_round_trip
-
-
-def _repo_root() -> Path:
-    # backend/src/awf/speech/cli.py -> speech -> awf -> src -> backend -> <repo root>
-    return Path(__file__).resolve().parents[4]
 
 
 def _echo_core(command_text: str) -> str:
@@ -55,9 +51,9 @@ def _run_round_trip(args: argparse.Namespace, repo_root: Path) -> int:
     vad_paths = artifact_paths(repo_root, "vad")
     tts_paths = artifact_paths(repo_root, "tts")
 
-    db_path = repo_root / "data" / "awf_db" / "awf.db"
-    init_db(db_path)
-    conn = get_connection(db_path)
+    conn_db_path = db_path(repo_root)
+    init_db(conn_db_path)
+    conn = get_connection(conn_db_path)
 
     try:
         result = run_voice_round_trip(
@@ -103,18 +99,22 @@ def _run_round_trip(args: argparse.Namespace, repo_root: Path) -> int:
 
 
 def _run_models(args: argparse.Namespace, repo_root: Path) -> int:
-    from awf.hardware.profiler import resolve_hardware_profile_id
+    from awf.hardware.preflight import collect_preflight_tokens
+    from awf.hardware.profiler import collect_inventory
+    from awf.hardware.readiness import derive_stt_readiness
 
-    profile_id, _evidence = resolve_hardware_profile_id()
+    inventory = collect_inventory()
+    tokens = collect_preflight_tokens(inventory)
+    stt_device = derive_stt_readiness(inventory, tokens).device
 
     if args.models_command == "sync":
-        results = sync_models(repo_root, profile_id)
+        results = sync_models(repo_root, stt_device)
         ok = True
     else:
-        results = verify_models(repo_root, profile_id)
+        results = verify_models(repo_root)
         ok = all(result["status"] == "OK" for result in results)
 
-    print(json.dumps({"profile_id": profile_id, "results": results}))
+    print(json.dumps({"stt_device": stt_device, "results": results}))
     return 0 if ok else 1
 
 
@@ -129,7 +129,7 @@ def run(argv: list[str], repo_root: Path) -> int:
 
 
 def main() -> int:
-    return run(sys.argv[1:], _repo_root())
+    return run(sys.argv[1:], REPO_ROOT)
 
 
 if __name__ == "__main__":

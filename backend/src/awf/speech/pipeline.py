@@ -20,14 +20,21 @@ files already passed in, logging the result to the `events` table.
 
 import json
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable
 
 from awf.clock import utc_now_rfc3339
 from awf.events.writer import write_event
-from awf.hardware.profiler import SYSTEM_RUN_ID, run_hardware_profiler
-from awf.speech.models import stt_runtime, verify_models
+from awf.hardware.preflight import collect_preflight_tokens
+from awf.hardware.profiler import SYSTEM_RUN_ID, collect_inventory, run_hardware_profiler
+from awf.hardware.readiness import (
+    derive_stt_readiness,
+    derive_tts_readiness,
+    derive_vad_readiness,
+    derive_wake_readiness,
+)
+from awf.speech.models import artifact_paths, stt_runtime, verify_models
 from awf.speech.stt_whisper import transcribe
 from awf.speech.tts_kokoro import synthesize
 from awf.speech.vad_silero import speech_segments
@@ -52,18 +59,26 @@ class VoiceRoundTripResult:
     response_audio: "tuple"  # (samples: np.ndarray, sample_rate: int)
 
 
-def _verify_and_log_pinned_models(conn: sqlite3.Connection, repo_root: Path, profile_id: str) -> None:
+def _verify_and_log_pinned_models(
+    conn: sqlite3.Connection, repo_root: Path, profile_id: str, readiness: dict
+) -> None:
     """Section 16.4's pinned manifests (`config/voice/*`) exist and are
     checked here, but a missing artifact is logged, not raised - this is an
     audit record of what's actually installed against what's named, the
     same "every probe result and fallback decision is written to the
     events table" contract the Hardware Profiler's own resolution already
     follows, not a hard gate on whether the round trip may proceed."""
-    verifications = verify_models(repo_root, profile_id)
+    verifications = verify_models(repo_root)
     write_event(
         conn, run_id=SYSTEM_RUN_ID, new_status="VERIFIED", actor="hardware_profiler",
         reason_code="pinned_model_verification",
-        payload_json=json.dumps({"profile_id": profile_id, "verifications": verifications}),
+        payload_json=json.dumps(
+            {
+                "profile_id": profile_id,
+                "verifications": verifications,
+                "readiness": {name: asdict(result) for name, result in readiness.items()},
+            }
+        ),
     )
 
 
@@ -89,11 +104,23 @@ def run_voice_round_trip(
     speech in the command audio - a real pipeline must not silently proceed
     past either check, mirroring the durability rule's "no silent success."
     """
-    hardware_profile_id = run_hardware_profiler(conn)
-    runtime = stt_runtime(repo_root, hardware_profile_id)
+    hardware_profile_id = run_hardware_profiler(conn, repo_root=repo_root)
+
+    inventory = collect_inventory()
+    tokens = collect_preflight_tokens(inventory)
+    vad_paths = artifact_paths(repo_root, "vad")
+    wake_paths = artifact_paths(repo_root, "wake")
+    readiness = {
+        "stt": derive_stt_readiness(inventory, tokens),
+        "tts": derive_tts_readiness(inventory, tokens),
+        "vad": derive_vad_readiness(inventory, tokens, vad_paths.get("silero_vad.onnx")),
+        "wake": derive_wake_readiness(inventory, tokens, wake_paths),
+    }
+
+    runtime = stt_runtime(repo_root, readiness["stt"].device)
     stt_download_root = repo_root / "models" / "stt"
 
-    _verify_and_log_pinned_models(conn, repo_root, hardware_profile_id)
+    _verify_and_log_pinned_models(conn, repo_root, hardware_profile_id, readiness)
 
     wake_result = detect_wake_word(
         wake_audio_path,
@@ -125,7 +152,7 @@ def run_voice_round_trip(
     response_text = core_fn(command_text)
 
     samples, sample_rate = synthesize(
-        response_text, voice_id, model_path=tts_model_path, voices_path=tts_voices_path
+        response_text, voice_id, model_path=tts_model_path, voices_path=tts_voices_path, device=readiness["tts"].device
     )
 
     return VoiceRoundTripResult(

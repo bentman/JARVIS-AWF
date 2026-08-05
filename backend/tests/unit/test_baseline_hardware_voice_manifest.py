@@ -1,6 +1,5 @@
 import pytest
 
-from awf.hardware.profiler import CANONICAL_PROFILES
 from awf.registry.hardware_voice_manifest import (
     FUNCTIONS,
     HardwareVoiceManifestError,
@@ -8,7 +7,7 @@ from awf.registry.hardware_voice_manifest import (
     parse_hardware_voice_manifest,
     resolve_hardware_voice_manifest_path,
 )
-from awf.speech.models import acceleration_class, artifact_paths, stt_runtime, verify_models
+from awf.speech.models import artifact_paths, stt_runtime, verify_models
 
 FILE_FUNCTIONS = ("tts", "vad", "wake")
 
@@ -79,32 +78,26 @@ def test_every_file_function_resolves_to_a_nonempty_artifact_set(repo_root):
         assert artifact_paths(repo_root, function)
 
 
-def test_every_canonical_profile_resolves_to_an_stt_runtime(repo_root):
-    for profile_id in CANONICAL_PROFILES:
-        runtime = stt_runtime(repo_root, profile_id)
-        assert runtime.model
-        assert runtime.device
-        assert runtime.compute_type
+def test_cpu_device_resolves_to_the_cpu_entry(repo_root):
+    runtime = stt_runtime(repo_root, "cpu")
+    assert runtime.model == "small"
+    assert runtime.device == "cpu"
+    assert runtime.compute_type == "int8"
 
 
-def test_gpu_and_qnn_classes_resolve_to_the_cpu_entry(repo_root):
-    cpu_runtime = stt_runtime(repo_root, "linux-x64-cpu")
-    gpu_runtime = stt_runtime(repo_root, "linux-x64-gpu")
-    qnn_runtime = stt_runtime(repo_root, "linux-arm64-qnn")
+def test_gpu_and_qnn_devices_resolve_to_the_cpu_entry(repo_root):
+    cpu_runtime = stt_runtime(repo_root, "cpu")
+    gpu_runtime = stt_runtime(repo_root, "gpu")
+    qnn_runtime = stt_runtime(repo_root, "qnn")
     assert gpu_runtime == cpu_runtime
     assert qnn_runtime == cpu_runtime
 
 
-def test_cuda_class_resolves_to_the_cuda_entry(repo_root):
-    runtime = stt_runtime(repo_root, "linux-x64-cuda")
+def test_cuda_device_resolves_to_the_cuda_entry(repo_root):
+    runtime = stt_runtime(repo_root, "cuda")
     assert runtime.model == "deepdml/faster-whisper-large-v3-turbo-ct2"
     assert runtime.device == "cuda"
     assert runtime.compute_type == "float16"
-
-
-def test_unknown_acceleration_class_raises():
-    with pytest.raises(HardwareVoiceManifestError):
-        acceleration_class("linux-x64-potato")
 
 
 @pytest.mark.live
@@ -115,7 +108,7 @@ def test_verify_models_against_the_real_shipped_manifests(repo_root, models_pres
     ):
         pytest.skip("voice models not present under models/ on this host")
 
-    results = verify_models(repo_root, "linux-x64-cpu")
+    results = verify_models(repo_root)
 
     assert results
     assert all(result["status"] == "OK" for result in results)

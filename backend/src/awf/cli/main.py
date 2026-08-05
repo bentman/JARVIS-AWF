@@ -15,16 +15,8 @@ from awf.cli import core_ops as ops
 from awf.cli.core_ops import CoreOpError
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
+from awf.paths import REPO_ROOT, db_path
 from awf.secrets import cli as secrets_cli
-
-
-def _repo_root() -> Path:
-    # backend/src/awf/cli/main.py -> cli -> awf -> src -> backend -> <repo root>
-    return Path(__file__).resolve().parents[4]
-
-
-def _db_path(repo_root: Path) -> Path:
-    return repo_root / "data" / "awf_db" / "awf.db"
 
 
 def _print(obj) -> None:
@@ -144,9 +136,9 @@ def run(argv: list[str], repo_root: Path) -> int:
     if getattr(args, "is_secret", False):
         return secrets_cli.run(args.secret_args, repo_root)
 
-    db_path = _db_path(repo_root)
-    init_db(db_path)
-    conn = get_connection(db_path)
+    conn_db_path = db_path(repo_root)
+    init_db(conn_db_path)
+    conn = get_connection(conn_db_path)
     try:
         try:
             return args.func(args, repo_root, conn)
@@ -158,7 +150,7 @@ def run(argv: list[str], repo_root: Path) -> int:
 
 
 def main() -> int:
-    return run(sys.argv[1:], _repo_root())
+    return run(sys.argv[1:], REPO_ROOT)
 
 
 if __name__ == "__main__":

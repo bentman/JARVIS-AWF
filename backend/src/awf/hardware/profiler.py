@@ -1,36 +1,28 @@
-"""Hardware Profiler (Section 16.4).
+"""Hardware Profiler (Section 16.4, ADR-0008).
 
-Resolves the host to exactly one canonical profile ID. Public contract:
+Resolves the host to exactly one canonical profile ID, as a summary of four
+per-speech-function `hardware.readiness` results. Public contract:
 `CANONICAL_PROFILES`, `SYSTEM_RUN_ID`, `_detect_os`, `_detect_arch`,
-`_probe_evidence(arch)`, `resolve_hardware_profile_id() -> (profile_id, evidence)`,
-and `run_hardware_profiler(conn) -> profile_id`, which writes one
-`hardware_profile_resolved` event whose payload carries `profile_id`. Callers:
-`speech/pipeline.py`, `workflow/activities.py` (the `hardware_probe` activity).
+`resolve_hardware_profile_id(repo_root) -> (profile_id, payload)`, and
+`run_hardware_profiler(conn, *, repo_root=None, refresh=False) -> profile_id`,
+which writes one `hardware_profile_resolved` event whose payload carries
+`profile_id`, `inventory`, `tokens`, and `readiness`. Callers:
+`speech/pipeline.py`, `workflow/activities.py` (the `hardware_probe`
+activity, which calls `run_hardware_profiler(conn)` with no other arguments -
+`repo_root` defaults to `awf.paths.REPO_ROOT`).
 
-Every claim is probe-derived, never assumed:
-
-- A full host **inventory** (OS/device class, CPU, memory, GPU vendor/VRAM,
-  CUDA driver, NPU vendor), each detector independently fault-isolated, and
-  a content-addressed `inventory_id` over the inventory's own fields so two
-  identical hosts hash identically and a changed host is visible as a
-  changed digest. The inventory is recorded as event evidence; it never
-  decides the profile on its own.
-- **QNN provider activation** before the QNN probe. On a Snapdragon host
-  `QNNExecutionProvider` is frequently absent from
-  `get_available_providers()` until its provider library is registered and
-  its DLL directory is added; probing availability alone reports a false
-  negative and silently drops the host to its CPU floor.
-- **Per-platform GPU execution-provider candidates** (DirectML on Windows,
-  ROCm/MIGraphX/OpenVINO on Linux x64) instead of one fixed provider name,
-  plus, on arm64, a direct OpenCL platform probe for the Adreno path that
-  Section 16.4 names but that ONNX Runtime exposes no execution provider
-  for.
-- **Timeouts on every external command**, so a hung `powershell`/`nvidia-smi`
-  cannot stall a Run (this module is reachable mid-Run through the
-  `hardware_probe` activity, not only at voice setup).
-- A **process-lifetime inventory cache**, since the Windows CIM/PnP queries
-  cost real seconds and this runs on every voice round trip. Provider
-  verification is not cached - it is the part that decides the profile.
+Every claim is probe-derived, never assumed. This module owns exactly the
+**profile** stage: a full host **inventory** (OS/device class, CPU, memory,
+GPU vendor/VRAM, CUDA driver, NPU vendor), each detector independently
+fault-isolated, and a content-addressed `inventory_id` over the inventory's
+own fields so two identical hosts hash identically and a changed host is
+visible as a changed digest. `collect_inventory` is this stage's whole
+output - it never decides the profile on its own: whether the installed
+environment can actually reach an accelerator is
+`hardware.preflight.collect_preflight_tokens`'s job, and which device each
+speech function gets is `hardware.readiness`'s job. The canonical profile ID
+is the strongest device any function's readiness selected, mapped onto the
+Section 16.4 enum, keeping the `*64-cpu` floor.
 
 Identifier note: `profile_id` always means the canonical Section 16.4 enum
 value (e.g. `windows-arm64-qnn`). The host inventory's own content-hash
@@ -55,6 +47,15 @@ from pathlib import Path
 
 from awf.clock import utc_now_rfc3339
 from awf.events.writer import write_event
+from awf.hardware.preflight import collect_preflight_tokens, reset_preflight_cache
+from awf.hardware.readiness import (
+    derive_stt_readiness,
+    derive_tts_readiness,
+    derive_vad_readiness,
+    derive_wake_readiness,
+)
+from awf.paths import REPO_ROOT
+from awf.registry.hardware_voice_manifest import artifact_paths
 
 CANONICAL_PROFILES = (
     "windows-x64-cpu",
@@ -76,25 +77,9 @@ SYSTEM_WORKFLOW_REF = "system@0.0.0"
 
 COMMAND_TIMEOUT_SECONDS = 10
 
-# ONNX Runtime execution providers that count as a probe-verified,
-# non-CUDA GPU path per platform (Section 16.4: on x64 `-gpu` is DirectML on
-# Windows / the vendor GPU EP on Linux). Ordered - the first that genuinely
-# initializes wins and is recorded by name in the evidence.
-GPU_PROVIDER_CANDIDATES = {
-    ("windows", "x64"): ("DmlExecutionProvider",),
-    ("linux", "x64"): ("ROCMExecutionProvider", "MIGraphXExecutionProvider", "OpenVINOExecutionProvider"),
-    ("windows", "arm64"): ("DmlExecutionProvider",),
-    ("linux", "arm64"): (),
-}
-
 # Chassis types the SMBIOS spec assigns to portable enclosures.
 _LAPTOP_CHASSIS_TYPES = {8, 9, 10, 11, 12, 14, 18, 21, 30, 31, 32}
 
-_QNN_PROVIDER = "QNNExecutionProvider"
-_CUDA_PROVIDER = "CUDAExecutionProvider"
-
-# Registered DLL directory handles must outlive the call that added them.
-_DLL_DIRECTORY_HANDLES: list[object] = []
 _INVENTORY_CACHE: "HardwareInventory | None" = None
 
 
@@ -132,15 +117,6 @@ class HardwareInventory:
     detector_errors: dict[str, str] = field(default_factory=dict)
     inventory_id: str = "unknown"
     profiled_at: str = "unknown"
-
-
-@dataclass(frozen=True)
-class QnnActivation:
-    provider_registered: bool
-    provider_library_path: str | None = None
-    dll_directory_path: str | None = None
-    backend_path: str | None = None
-    error: str | None = None
 
 
 def _run_command(command: list[str], timeout: int = COMMAND_TIMEOUT_SECONDS) -> str:
@@ -548,284 +524,44 @@ def reset_inventory_cache() -> None:
     _INVENTORY_CACHE = None
 
 
-def _available_providers() -> list[str]:
-    ort = _load_optional("onnxruntime")
-    if ort is None:
-        return []
-    try:
-        return list(ort.get_available_providers())
-    except Exception:
-        return []
 
-
-def _verify_provider_loads(provider: str, provider_options: dict | None = None) -> bool:
-    """Probe-verify (not just list) that an ONNX Runtime execution provider
-    actually loads, by constructing a session that requests it."""
-    ort = _load_optional("onnxruntime")
-    if ort is None or provider not in _available_providers():
-        return False
-
-    onnx_helper = _load_optional("onnx.helper")
-    onnx_module = _load_optional("onnx")
-    if onnx_helper is None or onnx_module is None:
-        return False
-
-    # A minimal valid ONNX model (single Identity node) - enough to prove the
-    # provider genuinely initializes, not just that its package exists.
-    try:
-        float_type = onnx_module.TensorProto.FLOAT
-        node = onnx_helper.make_node("Identity", ["x"], ["y"])
-        graph = onnx_helper.make_graph(
-            [node],
-            "probe",
-            [onnx_helper.make_tensor_value_info("x", float_type, [1])],
-            [onnx_helper.make_tensor_value_info("y", float_type, [1])],
-        )
-        model = onnx_helper.make_model(graph)
-        if provider_options:
-            session = ort.InferenceSession(
-                model.SerializeToString(), providers=[provider], provider_options=[provider_options]
-            )
-        else:
-            session = ort.InferenceSession(model.SerializeToString(), providers=[provider])
-        return provider in session.get_providers()
-    except Exception:
-        return False
-
-
-def _qnn_package_root(module) -> Path | None:
-    lib_dir = getattr(module, "LIB_DIR_FULL_PATH", None)
-    if lib_dir:
-        return Path(lib_dir).resolve()
-    module_file = getattr(module, "__file__", None)
-    return Path(module_file).resolve().parent if module_file else None
-
-
-def _qnn_provider_library_path(module) -> Path | None:
-    get_library_path = getattr(module, "get_library_path", None)
-    if callable(get_library_path):
-        try:
-            candidate = Path(get_library_path()).resolve()
-            if candidate.is_file():
-                return candidate
-        except Exception:
-            pass
-    root = _qnn_package_root(module)
-    if root is None:
-        return None
-    candidate = root / "onnxruntime_providers_qnn.dll"
-    return candidate if candidate.is_file() else None
-
-
-def resolve_qnn_backend_path() -> Path | None:
-    """Locate `QnnHtp.dll` - the QNN backend library the provider needs as an
-    explicit option. Searched in the installed onnxruntime packages, then in
-    an operator-supplied `QAIRT_SDK_PATH`."""
-    for module_name in ("onnxruntime_qnn", "onnxruntime"):
-        module = _load_optional(module_name)
-        if module is None:
-            continue
-        helper_fn = getattr(module, "get_qnn_htp_path", None)
-        if callable(helper_fn):
-            try:
-                candidate = Path(helper_fn()).resolve()
-                if candidate.is_file():
-                    return candidate
-            except Exception:
-                pass
-        root = _qnn_package_root(module)
-        if root is None:
-            continue
-        try:
-            found = next((p for p in root.rglob("QnnHtp.dll") if p.is_file()), None)
-        except OSError:
-            found = None
-        if found is not None:
-            return found
-
-    sdk_path = os.getenv("QAIRT_SDK_PATH")
-    if sdk_path:
-        sdk_root = Path(sdk_path)
-        for directory in (sdk_root, sdk_root / "bin", sdk_root / "lib"):
-            candidate = directory / "QnnHtp.dll"
-            if candidate.is_file():
-                return candidate
-    return None
-
-
-def activate_qnn_execution_provider() -> QnnActivation:
-    """Register the QNN execution provider library if ONNX Runtime hasn't
-    already exposed it.
-
-    Without this, a genuine Snapdragon NPU host reports no
-    `QNNExecutionProvider` in `get_available_providers()` and resolves to its
-    CPU floor - a false negative, not a hardware fact.
-    """
-    backend_path = resolve_qnn_backend_path()
-    backend_str = str(backend_path) if backend_path else None
-
-    if _QNN_PROVIDER in _available_providers():
-        return QnnActivation(provider_registered=True, backend_path=backend_str)
-
-    qnn_module = _load_optional("onnxruntime_qnn")
-    if qnn_module is None:
-        return QnnActivation(
-            provider_registered=False, backend_path=backend_str, error="onnxruntime_qnn import failed"
-        )
-
-    library_path = _qnn_provider_library_path(qnn_module)
-    if library_path is None:
-        return QnnActivation(
-            provider_registered=False,
-            backend_path=backend_str,
-            error="onnxruntime_qnn provider library not found",
-        )
-
-    dll_directory = _qnn_package_root(qnn_module)
-    add_dll_directory = getattr(os, "add_dll_directory", None)
-    if dll_directory is not None and add_dll_directory is not None:
-        try:
-            _DLL_DIRECTORY_HANDLES.append(add_dll_directory(str(dll_directory)))
-        except Exception as exc:
-            return QnnActivation(
-                provider_registered=False,
-                provider_library_path=str(library_path),
-                dll_directory_path=str(dll_directory),
-                backend_path=backend_str,
-                error=f"add_dll_directory failed: {exc}",
-            )
-
-    ort = _load_optional("onnxruntime")
-    register = getattr(ort, "register_execution_provider_library", None) if ort else None
-    if not callable(register):
-        return QnnActivation(
-            provider_registered=False,
-            provider_library_path=str(library_path),
-            dll_directory_path=str(dll_directory) if dll_directory else None,
-            backend_path=backend_str,
-            error="onnxruntime register_execution_provider_library unavailable",
-        )
-
-    try:
-        register(_QNN_PROVIDER, str(library_path))
-    except Exception as exc:
-        return QnnActivation(
-            provider_registered=False,
-            provider_library_path=str(library_path),
-            dll_directory_path=str(dll_directory) if dll_directory else None,
-            backend_path=backend_str,
-            error=f"{_QNN_PROVIDER} registration failed: {exc}",
-        )
-
-    registered = _QNN_PROVIDER in _available_providers()
-    return QnnActivation(
-        provider_registered=registered,
-        provider_library_path=str(library_path),
-        dll_directory_path=str(dll_directory) if dll_directory else None,
-        backend_path=backend_str,
-        error=None if registered else f"{_QNN_PROVIDER} not exposed after registration",
-    )
-
-
-def _opencl_platform_count() -> int:
-    """Count OpenCL platforms the host can actually enumerate.
-
-    Section 16.4 defines arm64 `-gpu` as Adreno via OpenCL, for which ONNX
-    Runtime publishes no execution provider - so this is probed directly
-    rather than inferred from a device name.
-    """
-    library_names = ("OpenCL.dll",) if platform.system() == "Windows" else ("libOpenCL.so.1", "libOpenCL.so")
-    for name in library_names:
-        try:
-            library = ctypes.CDLL(name)
-        except OSError:
-            continue
-        try:
-            count = ctypes.c_uint(0)
-            status = library.clGetPlatformIDs(0, None, ctypes.byref(count))
-        except Exception:
-            continue
-        if status == 0 and count.value > 0:
-            return int(count.value)
-    return 0
-
-
-def _verify_gpu_provider(os_name: str, arch: str) -> tuple[bool, str | None]:
-    for provider in GPU_PROVIDER_CANDIDATES.get((os_name, arch), ()):
-        if _verify_provider_loads(provider):
-            return True, provider
-    return False, None
-
-
-def _probe_evidence(arch: str) -> dict:
-    """Accelerator evidence for `arch` on this host. Same arity as the
-    existing profiler's own `_probe_evidence(arch)` so callers and tests that
-    substitute it keep working; the returned dict is a superset of that
-    module's keys (`available_providers`, `cuda_verified`, `gpu_verified`,
-    `qnn_verified`).
-    """
-    os_name = _detect_os()
-    inventory = collect_inventory()
-    evidence: dict = {
-        "os": os_name,
-        "arch": arch,
-        "available_providers": _available_providers(),
-        "cuda_verified": False,
-        "gpu_verified": False,
-        "qnn_verified": False,
-        "gpu_provider": None,
-        "inventory_id": inventory.inventory_id,
-    }
-
-    if arch == "arm64":
-        activation = activate_qnn_execution_provider()
-        evidence["qnn_activation"] = asdict(activation)
-        provider_options = {"backend_path": activation.backend_path} if activation.backend_path else None
-        evidence["qnn_verified"] = activation.provider_registered and _verify_provider_loads(
-            _QNN_PROVIDER, provider_options
-        )
-        # Re-read: registration mutates what ONNX Runtime reports.
-        evidence["available_providers"] = _available_providers()
-    else:
-        evidence["cuda_verified"] = _verify_provider_loads(_CUDA_PROVIDER)
-
-    gpu_verified, gpu_provider = _verify_gpu_provider(os_name, arch)
-    if not gpu_verified and arch == "arm64":
-        platform_count = _opencl_platform_count()
-        evidence["opencl_platforms"] = platform_count
-        # Adreno OpenCL counts only when the GPU is actually Qualcomm's -
-        # an enumerable OpenCL platform alone can be a CPU runtime.
-        if platform_count > 0 and inventory.gpu_vendor == "qualcomm":
-            gpu_verified, gpu_provider = True, "opencl:adreno"
-
-    evidence["gpu_verified"] = gpu_verified
-    evidence["gpu_provider"] = gpu_provider
-    return evidence
-
-
-def resolve_hardware_profile_id() -> tuple[str, dict]:
-    """Resolve the host to exactly one canonical profile ID.
+def resolve_hardware_profile_id(repo_root: Path) -> tuple[str, dict]:
+    """Resolve the host to exactly one canonical profile ID, as a summary of
+    four per-function `hardware.readiness` results.
 
     Order per Section 16.4 is QNN/CUDA -> GPU -> CPU, and every profile falls
-    back to its arch's `*64-cpu` floor. A profile above `-cpu` is returned
-    only when its execution provider was probe-verified to load.
+    back to its arch's `*64-cpu` floor: the suffix is `qnn` if any function's
+    readiness selected `qnn`, else `cuda` if any selected `cuda`, else `gpu`
+    if any selected `directml` or an Adreno OpenCL platform was found, else
+    `cpu`. VAD and wake readiness need artifact paths, hence `repo_root`.
     """
     os_name = _detect_os()
     arch = _detect_arch()
-    evidence = _probe_evidence(arch)
+    inventory = collect_inventory()
+    tokens = collect_preflight_tokens(inventory)
 
-    if arch == "x64":
-        if evidence.get("cuda_verified"):
-            return f"{os_name}-{arch}-cuda", evidence
-        if evidence.get("gpu_verified"):
-            return f"{os_name}-{arch}-gpu", evidence
-        return f"{os_name}-{arch}-cpu", evidence
+    vad_paths = artifact_paths(repo_root, "vad")
+    wake_paths = artifact_paths(repo_root, "wake")
 
-    if evidence.get("qnn_verified"):
-        return f"{os_name}-{arch}-qnn", evidence
-    if evidence.get("gpu_verified"):
-        return f"{os_name}-{arch}-gpu", evidence
-    return f"{os_name}-{arch}-cpu", evidence
+    readiness = {
+        "stt": derive_stt_readiness(inventory, tokens),
+        "tts": derive_tts_readiness(inventory, tokens),
+        "vad": derive_vad_readiness(inventory, tokens, vad_paths.get("silero_vad.onnx")),
+        "wake": derive_wake_readiness(inventory, tokens, wake_paths),
+    }
+
+    devices = {name: result.device for name, result in readiness.items()}
+    if "qnn" in devices.values():
+        suffix = "qnn"
+    elif "cuda" in devices.values():
+        suffix = "cuda"
+    elif "directml" in devices.values() or "opencl:adreno" in tokens:
+        suffix = "gpu"
+    else:
+        suffix = "cpu"
+
+    profile_id = f"{os_name}-{arch}-{suffix}"
+    return profile_id, {"inventory": inventory, "tokens": tokens, "readiness": readiness}
 
 
 def _ensure_system_run(conn: sqlite3.Connection) -> None:
@@ -841,11 +577,15 @@ def _ensure_system_run(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def run_hardware_profiler(conn: sqlite3.Connection, *, refresh: bool = False) -> str:
-    """Resolve the host's canonical profile ID and write the resolution, its
-    probe evidence, and the host inventory to the `events` table (Section
-    16.4), anchored to the permanent sentinel "system" Run since probing
-    isn't scoped to any one Run.
+def run_hardware_profiler(conn: sqlite3.Connection, *, repo_root: Path | None = None, refresh: bool = False) -> str:
+    """Resolve the host's canonical profile ID and write the resolution -
+    the host inventory, the preflight tokens, and all four readiness results
+    - to the `events` table (Section 16.4), anchored to the permanent
+    sentinel "system" Run since probing isn't scoped to any one Run.
+
+    `repo_root` defaults to `awf.paths.REPO_ROOT` - not a signature change
+    for existing callers (`refresh` was already keyword-only with a
+    default; `repo_root` is added the same way).
 
     Returns the profile ID. The event payload's `profile_id` key and the
     `hardware_profile_resolved` reason code match the existing profiler
@@ -853,8 +593,10 @@ def run_hardware_profiler(conn: sqlite3.Connection, *, refresh: bool = False) ->
     """
     if refresh:
         reset_inventory_cache()
-    profile_id, evidence = resolve_hardware_profile_id()
-    inventory = collect_inventory()
+        reset_preflight_cache()
+    if repo_root is None:
+        repo_root = REPO_ROOT
+    profile_id, payload = resolve_hardware_profile_id(repo_root)
     _ensure_system_run(conn)
     write_event(
         conn,
@@ -863,7 +605,12 @@ def run_hardware_profiler(conn: sqlite3.Connection, *, refresh: bool = False) ->
         actor="hardware_profiler",
         reason_code="hardware_profile_resolved",
         payload_json=json.dumps(
-            {"profile_id": profile_id, "evidence": evidence, "inventory": asdict(inventory)},
+            {
+                "profile_id": profile_id,
+                "inventory": asdict(payload["inventory"]),
+                "tokens": payload["tokens"],
+                "readiness": {name: asdict(result) for name, result in payload["readiness"].items()},
+            },
             default=str,
         ),
     )

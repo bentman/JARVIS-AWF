@@ -4,6 +4,7 @@ import pytest
 
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
+from awf.hardware.preflight import reset_preflight_cache
 from awf.hardware.profiler import (
     CANONICAL_PROFILES,
     SYSTEM_RUN_ID,
@@ -16,48 +17,77 @@ from awf.hardware.profiler import (
     resolve_hardware_profile_id,
     run_hardware_profiler,
 )
+from awf.hardware.readiness import Readiness
 
 
 @pytest.fixture(autouse=True)
-def _clean_inventory_cache():
-    # The inventory is cached for the process lifetime (Part A, ADR-0006) -
-    # reset around every test in this module so one test's detector patches
-    # never leak into the next.
+def _clean_hardware_caches():
+    # Both the inventory and preflight results are cached for the process
+    # lifetime - reset around every test in this module so one test's
+    # detector/readiness patches never leak into the next.
     reset_inventory_cache()
+    reset_preflight_cache()
     yield
     reset_inventory_cache()
+    reset_preflight_cache()
 
 
 @pytest.mark.live
-def test_resolve_hardware_profile_id_returns_a_canonical_profile():
-    profile_id, evidence = resolve_hardware_profile_id()
+def test_resolve_hardware_profile_id_returns_a_canonical_profile(repo_root):
+    profile_id, payload = resolve_hardware_profile_id(repo_root)
     assert profile_id in CANONICAL_PROFILES
-    assert isinstance(evidence, dict)
+    assert isinstance(payload, dict)
 
 
 @pytest.mark.live
-def test_resolved_profile_matches_detected_os_and_arch():
-    profile_id, _evidence = resolve_hardware_profile_id()
+def test_resolved_profile_matches_detected_os_and_arch(repo_root):
+    profile_id, _payload = resolve_hardware_profile_id(repo_root)
     os_name = _detect_os()
     arch = _detect_arch()
     assert profile_id.startswith(f"{os_name}-{arch}-")
 
 
-def test_profile_falls_back_to_cpu_floor_when_no_provider_verified(monkeypatch):
+@pytest.mark.live
+def test_resolve_hardware_profile_id_payload_carries_the_required_keys(repo_root):
+    _profile_id, payload = resolve_hardware_profile_id(repo_root)
+    assert set(payload.keys()) == {"inventory", "tokens", "readiness"}
+    assert isinstance(payload["tokens"], list)
+    assert set(payload["readiness"].keys()) == {"stt", "tts", "vad", "wake"}
+
+
+@pytest.mark.parametrize(
+    "stt_device,tts_device,expected_suffix",
+    [
+        ("cuda", "cpu", "cuda"),
+        ("cpu", "cuda", "cuda"),
+        ("cpu", "directml", "gpu"),
+        ("cpu", "qnn", "qnn"),
+        ("cpu", "cpu", "cpu"),
+    ],
+)
+def test_resolution_ladder_uses_the_strongest_readiness_device(
+    monkeypatch, repo_root, stt_device, tts_device, expected_suffix
+):
     import awf.hardware.profiler as profiler
 
-    monkeypatch.setattr(profiler, "_probe_evidence", lambda arch: {"cuda_verified": False, "gpu_verified": False})
-    profile_id, _evidence = resolve_hardware_profile_id()
-    assert profile_id.endswith("-cpu")
+    monkeypatch.setattr(profiler, "derive_stt_readiness", lambda inventory, tokens: Readiness(stt_device, True, "test"))
+    monkeypatch.setattr(profiler, "derive_tts_readiness", lambda inventory, tokens: Readiness(tts_device, True, "test"))
+
+    profile_id, _payload = resolve_hardware_profile_id(repo_root)
+
+    assert profile_id.endswith(f"-{expected_suffix}")
 
 
-def test_profile_escalates_to_cuda_when_verified(monkeypatch):
+def test_resolution_ladder_uses_opencl_adreno_token_for_gpu_suffix(monkeypatch, repo_root):
     import awf.hardware.profiler as profiler
 
-    monkeypatch.setattr(profiler, "_detect_arch", lambda: "x64")
-    monkeypatch.setattr(profiler, "_probe_evidence", lambda arch: {"cuda_verified": True, "gpu_verified": False})
-    profile_id, _evidence = resolve_hardware_profile_id()
-    assert profile_id.endswith("-cuda")
+    monkeypatch.setattr(profiler, "derive_stt_readiness", lambda inventory, tokens: Readiness("cpu", True, "test"))
+    monkeypatch.setattr(profiler, "derive_tts_readiness", lambda inventory, tokens: Readiness("cpu", True, "test"))
+    monkeypatch.setattr(profiler, "collect_preflight_tokens", lambda inventory, **kwargs: ["opencl:adreno"])
+
+    profile_id, _payload = resolve_hardware_profile_id(repo_root)
+
+    assert profile_id.endswith("-gpu")
 
 
 def test_run_hardware_profiler_writes_event_and_creates_system_run(tmp_path):
@@ -76,6 +106,8 @@ def test_run_hardware_profiler_writes_event_and_creates_system_run(tmp_path):
     assert event_row is not None
     payload = json.loads(event_row["payload_json"])
     assert payload["profile_id"] == profile_id
+    assert set(payload.keys()) == {"profile_id", "inventory", "tokens", "readiness"}
+    assert set(payload["readiness"].keys()) == {"stt", "tts", "vad", "wake"}
 
 
 def test_run_hardware_profiler_reuses_existing_system_run(tmp_path):
@@ -180,52 +212,3 @@ def test_a_raising_detector_lands_in_detector_errors_without_failing_the_profile
     assert "gpu" in inventory.detector_errors
     assert "boom" in inventory.detector_errors["gpu"]
     assert inventory.gpu_available is False
-
-
-@pytest.mark.live
-def test_probe_evidence_carries_the_required_keys():
-    import awf.hardware.profiler as profiler
-
-    evidence = profiler._probe_evidence(_detect_arch())
-
-    for key in ("available_providers", "cuda_verified", "gpu_verified", "qnn_verified"):
-        assert key in evidence
-    assert isinstance(evidence["available_providers"], list)
-
-
-@pytest.mark.parametrize(
-    "evidence,expected_suffix",
-    [
-        ({"cuda_verified": True, "gpu_verified": False}, "cuda"),
-        ({"cuda_verified": False, "gpu_verified": True}, "gpu"),
-        ({"cuda_verified": False, "gpu_verified": False}, "cpu"),
-    ],
-)
-def test_resolution_ladder_on_x64(monkeypatch, evidence, expected_suffix):
-    import awf.hardware.profiler as profiler
-
-    monkeypatch.setattr(profiler, "_detect_arch", lambda: "x64")
-    monkeypatch.setattr(profiler, "_probe_evidence", lambda arch: evidence)
-
-    profile_id, _evidence = resolve_hardware_profile_id()
-
-    assert profile_id.endswith(f"-{expected_suffix}")
-
-
-@pytest.mark.parametrize(
-    "evidence,expected_suffix",
-    [
-        ({"qnn_verified": True, "gpu_verified": False}, "qnn"),
-        ({"qnn_verified": False, "gpu_verified": True}, "gpu"),
-        ({"qnn_verified": False, "gpu_verified": False}, "cpu"),
-    ],
-)
-def test_resolution_ladder_on_arm64(monkeypatch, evidence, expected_suffix):
-    import awf.hardware.profiler as profiler
-
-    monkeypatch.setattr(profiler, "_detect_arch", lambda: "arm64")
-    monkeypatch.setattr(profiler, "_probe_evidence", lambda arch: evidence)
-
-    profile_id, _evidence = resolve_hardware_profile_id()
-
-    assert profile_id.endswith(f"-{expected_suffix}")

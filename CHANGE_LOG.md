@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-05 09:39
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0006 (canonical Hardware Profiler module, single project file, tiered test suite, and validation harness).
+  - Scope: see `docs/adr/0006-hardware-profiler-and-update-tests-harness.md` for full detail.
+  - Validation: `pytest backend/tests` → 364 passed (up from 341 baseline); `-m "not live"` selects 348, `-m live` selects 16, matching the full count; `pip install -e .[dev]` verified from a clean venv; all six `scripts/validate_backend.py` commands returned a code from the documented exit-code contract.
+  - Notes: none.
+
 - Timestamp: 2026-08-04 10:24
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Implemented ADR-0005 (AgentManifest.model_profile wiring) - a manifest's `modelProfile` field now resolves to a real Model Profile, picks its winning enabled candidate, and threads the candidate's model name into the adapter's own real `--model`/`-m` flag; Codex additionally gets `--oss --local-provider ollama` when the winning candidate's provider is `ollama`.

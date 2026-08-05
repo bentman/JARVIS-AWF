@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from awf.registry.agent_manifest import (
@@ -8,8 +6,10 @@ from awf.registry.agent_manifest import (
     parse_agent_manifest,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-AGENTS_ROOT = REPO_ROOT / "config" / "app_registry" / "agents"
+
+@pytest.fixture
+def agents_root(repo_root):
+    return repo_root / "config" / "app_registry" / "agents"
 
 
 def minimal_raw(**overrides):
@@ -91,8 +91,8 @@ def test_load_real_file_carries_instructions_body(tmp_path):
         ("adversary", "antigravity", "adversary"),
     ],
 )
-def test_load_real_shipped_default_manifest(name, expected_adapter, expected_role):
-    manifest = load_agent_manifest(AGENTS_ROOT / name / "1.0.0.md")
+def test_load_real_shipped_default_manifest(name, expected_adapter, expected_role, agents_root):
+    manifest = load_agent_manifest(agents_root / name / "1.0.0.md")
     assert manifest.name == name
     assert manifest.adapter == expected_adapter
     assert manifest.role == expected_role

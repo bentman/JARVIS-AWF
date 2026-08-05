@@ -1,5 +1,4 @@
 import hashlib
-from pathlib import Path
 
 import pytest
 
@@ -12,8 +11,6 @@ from awf.registry.hardware_voice_manifest import (
     verify_pinned_files,
     verify_profile_models,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_parse_url_acquisition():
@@ -62,7 +59,7 @@ def test_parse_fallback_manifest_has_no_files():
     assert manifest.fallback_to == "linux-arm64-cpu"
 
 
-def test_all_48_real_shipped_manifests_parse_cleanly():
+def test_all_48_real_shipped_manifests_parse_cleanly(repo_root):
     # every canonical profile x function combination this project ships.
     profiles = [
         "windows-x64-cpu", "windows-x64-gpu", "windows-x64-cuda",
@@ -72,7 +69,7 @@ def test_all_48_real_shipped_manifests_parse_cleanly():
     ]
     for function in ("stt", "tts", "vad", "wake"):
         for profile in profiles:
-            path = resolve_hardware_voice_manifest_path(REPO_ROOT, function, profile)
+            path = resolve_hardware_voice_manifest_path(repo_root, function, profile)
             manifest = load_hardware_voice_manifest(path)
             assert manifest.function == function
             assert manifest.profile == profile
@@ -128,24 +125,27 @@ def test_verify_pinned_files_skips_files_with_no_hash(tmp_path):
     assert verify_pinned_files(tmp_path, manifest) == []
 
 
-def test_verify_profile_models_against_the_real_shipped_linux_x64_cpu_wake_manifest(tmp_path):
-    # the real, currently-resolved profile on this host, against the real
+@pytest.mark.live
+def test_verify_profile_models_against_the_real_shipped_linux_x64_cpu_wake_manifest(
+    tmp_path, repo_root, models_present
+):
+    # the currently-resolved profile on this host, against the
     # already-downloaded model files.
-    models_root = REPO_ROOT / "models" / "wake"
-    if not models_root.is_dir():
+    if not models_present("wake"):
         pytest.skip("models/wake/ not present on this host")
+    models_root = repo_root / "models" / "wake"
 
-    result = verify_profile_models(REPO_ROOT, "wake", "linux-x64-cpu", models_root)
+    result = verify_profile_models(repo_root, "wake", "linux-x64-cpu", models_root)
 
     assert result["resolved_profile_id"] == "linux-x64-cpu"
     assert result["results"]
     assert all(r["status"] == "OK" for r in result["results"])
 
 
-def test_verify_profile_models_follows_fallback_to_cpu(tmp_path):
+def test_verify_profile_models_follows_fallback_to_cpu(tmp_path, repo_root):
     # linux-arm64-qnn's STT manifest has no real files - it must resolve to
     # linux-arm64-cpu's real pin instead of reporting nothing.
-    result = verify_profile_models(REPO_ROOT, "stt", "linux-arm64-qnn", tmp_path)
+    result = verify_profile_models(repo_root, "stt", "linux-arm64-qnn", tmp_path)
     assert result["profile_id"] == "linux-arm64-qnn"
     assert result["resolved_profile_id"] == "linux-arm64-cpu"
     assert result["results"][0]["status"] == "MISSING"  # tmp_path has nothing in it

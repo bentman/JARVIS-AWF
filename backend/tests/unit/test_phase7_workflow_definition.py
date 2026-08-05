@@ -1,16 +1,9 @@
-from pathlib import Path
-
 import pytest
 
 from awf.workflow.definition import (
     WorkflowValidationError,
     load_workflow,
     parse_workflow,
-)
-
-REAL_WORKFLOW = (
-    Path(__file__).resolve().parents[2]
-    / "config" / "app_registry" / "workflows" / "produce-gate-repair-demo" / "1.0.0.yaml"
 )
 
 
@@ -81,8 +74,11 @@ def test_node_lookup_raises_for_unknown_id():
         workflow.node("does-not-exist")
 
 
-def test_load_real_example_workflow():
-    workflow = load_workflow(REAL_WORKFLOW)
+def test_load_real_example_workflow(repo_root):
+    real_workflow = (
+        repo_root / "config" / "app_registry" / "workflows" / "produce-gate-repair-demo" / "1.0.0.yaml"
+    )
+    workflow = load_workflow(real_workflow)
     assert workflow.ref == "produce-gate-repair-demo@1.0.0"
     assert [n["id"] for n in workflow.nodes] == ["produce", "check", "repair"]
     assert workflow.budgets["maxRepairIterations"] == 3

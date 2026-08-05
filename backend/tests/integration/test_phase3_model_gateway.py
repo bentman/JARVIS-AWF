@@ -1,4 +1,3 @@
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -14,9 +13,6 @@ from awf.registry.model_profile import (
 )
 from awf.secrets.store import set_secret
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-EXAMPLE_PROFILES_ROOT = REPO_ROOT / "config" / "app_registry" / "model-profiles"
-
 # ADR-0001: these are reference examples, never resolved by a real Run
 # (registry/resolve.py::DATA_ONLY_KINDS) - tests load them directly by path.
 EXAMPLE_PROFILE_NAMES = (
@@ -28,29 +24,30 @@ EXAMPLE_PROFILE_NAMES = (
 )
 
 
-def load_example_profile(name: str, version: str = "1.0.0"):
-    return load_model_profile(EXAMPLE_PROFILES_ROOT / name / f"{version}.yaml")
+def load_example_profile(repo_root, name: str, version: str = "1.0.0"):
+    examples_root = repo_root / "config" / "app_registry" / "model-profiles"
+    return load_model_profile(examples_root / name / f"{version}.yaml")
 
 
 @pytest.mark.parametrize("name", EXAMPLE_PROFILE_NAMES)
-def test_every_example_profile_parses(name):
-    profile = load_example_profile(name)
+def test_every_example_profile_parses(name, repo_root):
+    profile = load_example_profile(repo_root, name)
     assert profile.enabled_candidates_by_priority()
 
 
-def test_load_example_ollama_general_reasoning_profile():
-    profile = load_example_profile("example-ollama-general")
+def test_load_example_ollama_general_reasoning_profile(repo_root):
+    profile = load_example_profile(repo_root, "example-ollama-general")
     assert profile.purpose == "general-reasoning"
     candidate = profile.enabled_candidates_by_priority()[0]
     assert candidate.litellm_model == "ollama/phi4-mini:latest"
     assert candidate.api_base == "http://localhost:11434"
 
 
-def test_example_judge_and_adversary_profiles_use_different_provider_families():
+def test_example_judge_and_adversary_profiles_use_different_provider_families(repo_root):
     # Section 12.3: Adversary MUST resolve to a different model family than
     # the Builder; these two examples demonstrate that pairing.
-    judge = load_example_profile("example-anthropic-judge")
-    adversary = load_example_profile("example-openai-adversary")
+    judge = load_example_profile(repo_root, "example-anthropic-judge")
+    adversary = load_example_profile(repo_root, "example-openai-adversary")
     judge_candidate = judge.enabled_candidates_by_priority()[0]
     adversary_candidate = adversary.enabled_candidates_by_priority()[0]
     assert judge_candidate.provider != adversary_candidate.provider
@@ -78,8 +75,8 @@ def _fake_response(text: str):
     return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=text))])
 
 
-def test_complete_calls_litellm_with_candidate_fields(monkeypatch):
-    profile = load_example_profile("example-ollama-general")
+def test_complete_calls_litellm_with_candidate_fields(monkeypatch, repo_root):
+    profile = load_example_profile(repo_root, "example-ollama-general")
     captured = {}
 
     def fake_completion(**kwargs):

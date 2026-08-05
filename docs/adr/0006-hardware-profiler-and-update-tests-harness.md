@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. Not implemented.
+Implemented.
 
 ## Context
 
@@ -213,7 +213,7 @@ preserved across the move (`git mv`, no renames).
 | `profile` | environment fingerprint, no tests | `reports/diagnostics/<ts>-profile.txt` |
 | `unit` | `python -m pytest -q backend/tests/unit` | — |
 | `integration` | `python -m pytest -q backend/tests/integration` | — |
-| `runtime` | `python -m pytest -q -m live backend/tests/runtime` | — |
+| `runtime` | `python -m pytest -q -m live backend/tests` | — |
 | `regression` | the always-safe minimal set, starting at `backend/tests/unit` | `reports/validation/<ts>-regression.txt` |
 | `ci` | `python -m pytest -q -m "not live" backend/tests` | — |
 
@@ -370,14 +370,21 @@ stays; that directory is not part of this layout.
 - Host-dependent tests are excluded from `ci` by marker, so adding one leaves
   every other host's result unchanged.
 
-## Open decisions
+## Decisions resolved
 
-- **Backup location.** `backend/src/awf/hardware/profiler.py.bak` with a
-  `*.bak` ignore rule, or `cache/validate_backend/profiler.py.bak`, which is
-  already untracked and needs no ignore rule.
-- **Migration batching.** All 43 modules move in one change, or the tiers and
-  harness land first against `unit/` and the remaining modules move in
-  batches. The first leaves one reviewable diff; the second keeps
-  `backend/tests/` split across two shapes until it completes.
-- **`regression` target set.** `backend/tests/unit` as written, or a narrower
-  named subset once tier runtimes are measured.
+- **Backup location.** `backend/src/awf/hardware/profiler.py.bak`, with a
+  `*.bak` ignore rule; removed once the migrated suite matched the baseline.
+- **Migration batching.** All 42 test modules moved into their tier in one
+  change.
+- **`regression` target set.** `backend/tests/unit` as written.
+- **Tier assignment is per module, not per directory.** A module whose tests
+  are otherwise deterministic keeps its one environment-gated test marked
+  `live` in place, in whichever tier fits the module's dominant subject,
+  rather than the whole module moving to `runtime/` for one test. Three
+  modules land this way: `test_baseline_hardware_voice_manifest.py`,
+  `test_baseline_skill.py` (`unit/`), and `test_phase8_gpu_sampler.py`
+  (`unit/`, three of its four tests are fully mocked). `scripts/validate_backend.py`'s
+  `runtime` command therefore runs `pytest -q -m live backend/tests` (the
+  whole tree, filtered by marker) rather than restricting the path to
+  `backend/tests/runtime/`, so it still selects every host-dependent check
+  regardless of which tier directory the module sits in.

@@ -29,4 +29,13 @@ awf = "awf.cli.main:main"
 awf-speech = "awf.speech.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["backend/src"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+markers = [
+  "live: requires live external resources",
+  "slow: longer-running test",
+  "runtime: runtime or environment validation",
+]

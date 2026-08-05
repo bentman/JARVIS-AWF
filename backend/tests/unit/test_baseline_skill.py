@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from awf.registry.skill import (
@@ -8,8 +6,6 @@ from awf.registry.skill import (
     load_skill,
     parse_skill,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_parse_minimal_skill():
@@ -90,11 +86,12 @@ def test_load_rejects_name_directory_mismatch(tmp_path):
         load_skill(skill_dir / "SKILL.md")
 
 
-def test_load_the_real_shipped_demo_skill():
-    path = REPO_ROOT / "data" / "registry" / "skills" / "demo-skill" / "1.0.0" / "SKILL.md"
-    if not path.is_file():
-        pytest.skip("real demo-skill fixture not present on this host")
-    skill = load_skill(path)
+@pytest.mark.live
+def test_load_the_real_shipped_demo_skill(repo_file_present, repo_root):
+    relative_path = "data/registry/skills/demo-skill/1.0.0/SKILL.md"
+    if not repo_file_present(relative_path):
+        pytest.skip("demo-skill fixture not present on this host")
+    skill = load_skill(repo_root / relative_path)
     assert skill.ref == "demo-skill@1.0.0"
 
 

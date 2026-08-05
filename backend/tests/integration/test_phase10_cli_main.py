@@ -130,11 +130,9 @@ def test_secret_subcommand_delegates_to_secrets_cli(tmp_path, monkeypatch):
     assert captured["argv"] == ["list"]
 
 
-def test_registry_validate_command(tmp_path, capsys):
-    from pathlib import Path
-
+def test_registry_validate_command(tmp_path, capsys, fixtures_dir):
     repo_root = make_repo(tmp_path)
-    fixture = Path(__file__).resolve().parent / "fixtures" / "test_phase1" / "test_phase1_read_file_r0.yaml"
+    fixture = fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml"
 
     exit_code = cli_main.run(["registry", "validate", str(fixture)], repo_root)
 

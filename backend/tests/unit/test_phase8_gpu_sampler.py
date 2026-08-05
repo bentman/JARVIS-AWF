@@ -16,13 +16,12 @@ def test_exceeds_ceiling():
     assert exceeds_ceiling(0.0) is False
 
 
-def test_sample_gpu_utilization_returns_fraction_in_range_or_raises():
-    try:
-        utilization = sample_gpu_utilization()
-    except GpuSamplerUnavailable:
+@pytest.mark.live
+def test_sample_gpu_utilization_returns_fraction_in_range_or_raises(gpu_available):
+    if not gpu_available:
         pytest.skip("no nvidia-smi/GPU on this host")
-    else:
-        assert 0.0 <= utilization <= 1.0
+    utilization = sample_gpu_utilization()
+    assert 0.0 <= utilization <= 1.0
 
 
 def test_unavailable_when_nvidia_smi_missing(monkeypatch):

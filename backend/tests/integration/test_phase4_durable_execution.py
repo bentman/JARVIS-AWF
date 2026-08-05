@@ -1,14 +1,11 @@
 import subprocess
 import sys
-from pathlib import Path
 
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.executor import run_step, run_workflow
 from awf.engine.recovery import scan_incomplete_runs
 from awf.engine.run import create_run, create_step
-
-CRASH_RUNNER = Path(__file__).resolve().parent / "scripts" / "test_phase4_mid_run_crash_runner.py"
 
 
 def make_db(tmp_path):
@@ -61,12 +58,13 @@ def test_scan_incomplete_runs_excludes_terminal_statuses(tmp_path):
     assert scan_incomplete_runs(conn) == ["run-running"]
 
 
-def test_mid_run_crash_and_resume_no_duplicate_side_effects(tmp_path):
+def test_mid_run_crash_and_resume_no_duplicate_side_effects(tmp_path, repo_root):
+    crash_runner = repo_root / "backend" / "tests" / "scripts" / "test_phase4_mid_run_crash_runner.py"
     db_path = tmp_path / "awf.db"
     counter_path = tmp_path / "counter.txt"
 
     start = subprocess.run(
-        [sys.executable, str(CRASH_RUNNER), "start", str(db_path), str(counter_path)],
+        [sys.executable, str(crash_runner), "start", str(db_path), str(counter_path)],
         capture_output=True,
         text=True,
     )
@@ -85,7 +83,7 @@ def test_mid_run_crash_and_resume_no_duplicate_side_effects(tmp_path):
     assert counter_path.read_text() == "1"
 
     resume = subprocess.run(
-        [sys.executable, str(CRASH_RUNNER), "resume", str(db_path), str(counter_path)],
+        [sys.executable, str(crash_runner), "resume", str(db_path), str(counter_path)],
         capture_output=True,
         text=True,
     )

@@ -28,8 +28,29 @@ from awf.gates.artifacts import write_finding_artifact
 from awf.gates.schema import Finding
 from awf.ids import uuid7
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
-REPO_ROOT = Path(__file__).resolve().parents[2]
+
+@pytest.fixture
+def real_repo_root(repo_root):
+    # This module's own test bodies use `repo_root` as a local name for
+    # `make_repo(tmp_path)`'s fake registry root, so the real project root
+    # (the `repo_root` conftest fixture) is aliased here to avoid a name
+    # clash with that convention.
+    return repo_root
+
+
+@pytest.fixture
+def real_agent_manifest(real_repo_root):
+    return real_repo_root / "config" / "app_registry" / "agents" / "builder" / "1.0.0.md"
+
+
+@pytest.fixture
+def real_mcp_server(real_repo_root):
+    return real_repo_root / "config" / "app_registry" / "mcp" / "context7" / "1.0.0.yaml"
+
+
+@pytest.fixture
+def real_skill_dir(real_repo_root):
+    return real_repo_root / "data" / "registry" / "skills" / "demo-skill" / "1.0.0"
 
 
 def make_repo(tmp_path):
@@ -128,8 +149,8 @@ def test_artifact_list_and_read(tmp_path):
     assert '"summary": "ok"' in read["content"]
 
 
-def test_registry_validate_recognizes_capability_record():
-    result = op_registry_validate(FIXTURES / "test_phase1" / "test_phase1_read_file_r0.yaml")
+def test_registry_validate_recognizes_capability_record(fixtures_dir):
+    result = op_registry_validate(fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml")
     assert result["kind"] == "CapabilityRecord"
     assert result["valid"] is True
 
@@ -141,9 +162,9 @@ def test_registry_validate_rejects_garbage(tmp_path):
         op_registry_validate(bad)
 
 
-def test_registry_publish_capability_record_writes_data_registry_and_index(tmp_path):
+def test_registry_publish_capability_record_writes_data_registry_and_index(tmp_path, fixtures_dir):
     repo_root, conn = make_repo(tmp_path)
-    source = FIXTURES / "test_phase1" / "test_phase1_read_file_r0.yaml"
+    source = fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml"
 
     result = op_registry_publish(repo_root, conn, path=source)
 
@@ -161,9 +182,9 @@ def test_registry_publish_capability_record_writes_data_registry_and_index(tmp_p
     assert row["digest"] == result["digest"]
 
 
-def test_registry_publish_then_list_and_get_find_it(tmp_path):
+def test_registry_publish_then_list_and_get_find_it(tmp_path, fixtures_dir):
     repo_root, conn = make_repo(tmp_path)
-    source = FIXTURES / "test_phase1" / "test_phase1_read_file_r0.yaml"
+    source = fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml"
     published = op_registry_publish(repo_root, conn, path=source)
 
     listed = op_registry_list(repo_root, kind="capabilities")
@@ -173,26 +194,23 @@ def test_registry_publish_then_list_and_get_find_it(tmp_path):
     assert fetched["source"] == "data"
 
 
-REAL_AGENT_MANIFEST = REPO_ROOT / "config" / "app_registry" / "agents" / "builder" / "1.0.0.md"
-
-
-def test_registry_validate_recognizes_agent_manifest():
-    result = op_registry_validate(REAL_AGENT_MANIFEST)
+def test_registry_validate_recognizes_agent_manifest(real_agent_manifest):
+    result = op_registry_validate(real_agent_manifest)
     assert result["kind"] == "AgentManifest"
     assert result["ref"] == "builder@1.0.0"
     assert result["valid"] is True
 
 
-def test_registry_publish_agent_manifest_writes_data_registry_and_index(tmp_path):
+def test_registry_publish_agent_manifest_writes_data_registry_and_index(tmp_path, real_agent_manifest):
     repo_root, conn = make_repo(tmp_path)
 
-    result = op_registry_publish(repo_root, conn, path=REAL_AGENT_MANIFEST)
+    result = op_registry_publish(repo_root, conn, path=real_agent_manifest)
 
     assert result["kind"] == "agents"
     assert result["name"] == "builder"
     published_path = Path(result["path"])
     assert published_path.suffix == ".md"
-    assert published_path.read_bytes() == REAL_AGENT_MANIFEST.read_bytes()
+    assert published_path.read_bytes() == real_agent_manifest.read_bytes()
 
     row = conn.execute(
         "SELECT * FROM registry_index WHERE kind = ? AND name = ? AND version = ?",
@@ -205,33 +223,30 @@ def test_registry_publish_agent_manifest_writes_data_registry_and_index(tmp_path
     assert fetched["source"] == "data"
 
 
-def test_registry_list_agents_finds_the_real_shipped_config_defaults():
+def test_registry_list_agents_finds_the_real_shipped_config_defaults(real_repo_root):
     # ADR-0002: /agents lists the shipped config defaults.
-    listed = op_registry_list(REPO_ROOT, kind="agents")
+    listed = op_registry_list(real_repo_root, kind="agents")
 
     names = {row["name"] for row in listed if row["source"] == "config"}
     assert {"builder", "verifier", "adversary"} <= names
 
 
-REAL_MCP_SERVER = REPO_ROOT / "config" / "app_registry" / "mcp" / "context7" / "1.0.0.yaml"
-
-
-def test_registry_validate_recognizes_mcp_server():
-    result = op_registry_validate(REAL_MCP_SERVER)
+def test_registry_validate_recognizes_mcp_server(real_mcp_server):
+    result = op_registry_validate(real_mcp_server)
     assert result["kind"] == "McpServer"
     assert result["ref"] == "context7@1.0.0"
     assert result["valid"] is True
 
 
-def test_registry_publish_mcp_server_writes_data_registry_and_index(tmp_path):
+def test_registry_publish_mcp_server_writes_data_registry_and_index(tmp_path, real_mcp_server):
     repo_root, conn = make_repo(tmp_path)
 
-    result = op_registry_publish(repo_root, conn, path=REAL_MCP_SERVER)
+    result = op_registry_publish(repo_root, conn, path=real_mcp_server)
 
     assert result["kind"] == "mcp"
     assert result["name"] == "context7"
     published_path = Path(result["path"])
-    assert published_path.read_bytes() == REAL_MCP_SERVER.read_bytes()
+    assert published_path.read_bytes() == real_mcp_server.read_bytes()
 
     row = conn.execute(
         "SELECT * FROM registry_index WHERE kind = ? AND name = ? AND version = ?",
@@ -241,25 +256,22 @@ def test_registry_publish_mcp_server_writes_data_registry_and_index(tmp_path):
     assert row["digest"] == result["digest"]
 
 
-def test_registry_list_mcp_finds_the_real_shipped_config_defaults():
-    listed = op_registry_list(REPO_ROOT, kind="mcp")
+def test_registry_list_mcp_finds_the_real_shipped_config_defaults(real_repo_root):
+    listed = op_registry_list(real_repo_root, kind="mcp")
 
     names = {row["name"] for row in listed if row["source"] == "config"}
     assert {"context7"} <= names
 
 
-REAL_SKILL_DIR = REPO_ROOT / "data" / "registry" / "skills" / "demo-skill" / "1.0.0"
-
-
-def test_registry_validate_recognizes_skill_directory():
-    result = op_registry_validate(REAL_SKILL_DIR)
+def test_registry_validate_recognizes_skill_directory(real_skill_dir):
+    result = op_registry_validate(real_skill_dir)
     assert result["kind"] == "Skill"
     assert result["ref"] == "demo-skill@1.0.0"
     assert result["valid"] is True
 
 
-def test_registry_validate_recognizes_skill_md_file():
-    result = op_registry_validate(REAL_SKILL_DIR / "SKILL.md")
+def test_registry_validate_recognizes_skill_md_file(real_skill_dir):
+    result = op_registry_validate(real_skill_dir / "SKILL.md")
     assert result["kind"] == "Skill"
     assert result["ref"] == "demo-skill@1.0.0"
 

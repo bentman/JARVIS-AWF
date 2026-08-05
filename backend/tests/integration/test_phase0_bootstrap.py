@@ -1,6 +1,5 @@
 import shutil
 import sqlite3
-from pathlib import Path
 
 import pytest
 
@@ -9,8 +8,6 @@ from awf.db.schema import EXPECTED_TABLES
 from awf.events.writer import write_event
 from awf.ids import uuid7
 from awf.setup import PLACEHOLDER, bootstrap_repo
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_init_db_creates_all_tables(tmp_path):
@@ -126,8 +123,8 @@ def test_write_event_appends_row(tmp_path):
 
 
 @pytest.fixture
-def fake_repo(tmp_path):
-    shutil.copy(REPO_ROOT / ".env.example", tmp_path / ".env.example")
+def fake_repo(tmp_path, repo_root):
+    shutil.copy(repo_root / ".env.example", tmp_path / ".env.example")
     return tmp_path
 
 

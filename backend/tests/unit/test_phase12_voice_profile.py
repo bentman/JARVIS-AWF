@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from awf.registry.voice_profile import (
@@ -8,9 +6,10 @@ from awf.registry.voice_profile import (
     parse_voice_profile,
 )
 
-VOICE_PROFILES_ROOT = (
-    Path(__file__).resolve().parents[2] / "config" / "app_registry" / "voice-profiles"
-)
+
+@pytest.fixture
+def voice_profiles_root(repo_root):
+    return repo_root / "config" / "app_registry" / "voice-profiles"
 
 
 def minimal_raw(**overrides):
@@ -66,16 +65,16 @@ def test_parse_rejects_invalid_fallback_mode():
         ("adversary", "bm_george"),
     ],
 )
-def test_load_real_shipped_voice_profile(name, expected_voice_id):
-    profile = load_voice_profile(VOICE_PROFILES_ROOT / name / "1.0.0.yaml")
+def test_load_real_shipped_voice_profile(name, expected_voice_id, voice_profiles_root):
+    profile = load_voice_profile(voice_profiles_root / name / "1.0.0.yaml")
     candidate = profile.enabled_candidates_by_priority()[0]
     assert candidate.voice_id == expected_voice_id
     assert candidate.engine == "kokoro"
 
 
-def test_all_four_default_voice_profiles_use_distinct_voice_ids():
+def test_all_four_default_voice_profiles_use_distinct_voice_ids(voice_profiles_root):
     voice_ids = set()
     for name in ("narrator", "builder", "verifier", "adversary"):
-        profile = load_voice_profile(VOICE_PROFILES_ROOT / name / "1.0.0.yaml")
+        profile = load_voice_profile(voice_profiles_root / name / "1.0.0.yaml")
         voice_ids.add(profile.enabled_candidates_by_priority()[0].voice_id)
     assert len(voice_ids) == 4

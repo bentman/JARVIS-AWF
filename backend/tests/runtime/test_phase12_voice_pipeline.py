@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from awf.db.bootstrap import init_db
@@ -10,19 +8,32 @@ from awf.speech.pipeline import (
     run_voice_round_trip,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
-MODELS = REPO_ROOT / "models"
+pytestmark = pytest.mark.live
 
-WAKE_MODEL = MODELS / "wake" / "hey_jarvis_v0.1.onnx"
-VAD_MODEL = MODELS / "vad" / "silero_vad.onnx"
-TTS_MODEL = MODELS / "tts" / "kokoro-v1.0.onnx"
-TTS_VOICES = MODELS / "tts" / "voices-v1.0.bin"
-
-pytestmark = pytest.mark.skipif(
-    not (WAKE_MODEL.is_file() and VAD_MODEL.is_file() and TTS_MODEL.is_file() and TTS_VOICES.is_file()),
-    reason="voice models not present under models/ - run Phase 12 setup first",
+_MODEL_RELATIVE_PATHS = (
+    "wake/hey_jarvis_v0.1.onnx",
+    "vad/silero_vad.onnx",
+    "tts/kokoro-v1.0.onnx",
+    "tts/voices-v1.0.bin",
 )
+
+
+@pytest.fixture(autouse=True)
+def _require_voice_models(models_present):
+    if not models_present(*_MODEL_RELATIVE_PATHS):
+        pytest.skip("voice models not present under models/ - run Phase 12 setup first")
+
+
+@pytest.fixture
+def voice_models(repo_root):
+    models = repo_root / "models"
+    return {
+        "wake": models / "wake" / "hey_jarvis_v0.1.onnx",
+        "vad": models / "vad" / "silero_vad.onnx",
+        "tts_model": models / "tts" / "kokoro-v1.0.onnx",
+        "tts_voices": models / "tts" / "voices-v1.0.bin",
+        "stt_download_root": models / "stt",
+    }
 
 
 def test_stt_device_selection_uses_cuda_only_when_profile_says_cuda():
@@ -39,7 +50,7 @@ def make_conn(tmp_path):
     return get_connection(db_path)
 
 
-def test_full_round_trip_wake_stt_response_tts(tmp_path):
+def test_full_round_trip_wake_stt_response_tts(tmp_path, fixtures_dir, voice_models):
     """Exercises the full chain: the Hardware Profiler, wake-word detection
     on hey_jarvis.wav, VAD + STT on hello_world.wav, a trivial core
     response, and Kokoro synthesis."""
@@ -50,15 +61,15 @@ def test_full_round_trip_wake_stt_response_tts(tmp_path):
 
     result = run_voice_round_trip(
         conn,
-        wake_audio_path=FIXTURES / "hey_jarvis.wav",
-        command_audio_path=FIXTURES / "hello_world.wav",
-        wake_model_path=WAKE_MODEL,
-        vad_model_path=VAD_MODEL,
-        tts_model_path=TTS_MODEL,
-        tts_voices_path=TTS_VOICES,
+        wake_audio_path=fixtures_dir / "hey_jarvis.wav",
+        command_audio_path=fixtures_dir / "hello_world.wav",
+        wake_model_path=voice_models["wake"],
+        vad_model_path=voice_models["vad"],
+        tts_model_path=voice_models["tts_model"],
+        tts_voices_path=voice_models["tts_voices"],
         voice_id="bf_isabella",
         core_fn=core_fn,
-        stt_download_root=MODELS / "stt",
+        stt_download_root=voice_models["stt_download_root"],
     )
 
     assert result.hardware_profile_id  # e.g. linux-x64-cpu, resolved by the hardware profiler, not stubbed
@@ -79,23 +90,25 @@ def test_full_round_trip_wake_stt_response_tts(tmp_path):
     assert len(samples) > 0
 
 
-def test_round_trip_with_repo_root_verifies_real_pinned_models_and_logs_it(tmp_path):
+def test_round_trip_with_repo_root_verifies_real_pinned_models_and_logs_it(
+    tmp_path, repo_root, fixtures_dir, voice_models
+):
     # A round trip against the already-downloaded models on this host,
     # checked against the shipped config/voice/*/linux-x64-*.yaml pins.
     conn = make_conn(tmp_path)
 
     run_voice_round_trip(
         conn,
-        wake_audio_path=FIXTURES / "hey_jarvis.wav",
-        command_audio_path=FIXTURES / "hello_world.wav",
-        wake_model_path=WAKE_MODEL,
-        vad_model_path=VAD_MODEL,
-        tts_model_path=TTS_MODEL,
-        tts_voices_path=TTS_VOICES,
+        wake_audio_path=fixtures_dir / "hey_jarvis.wav",
+        command_audio_path=fixtures_dir / "hello_world.wav",
+        wake_model_path=voice_models["wake"],
+        vad_model_path=voice_models["vad"],
+        tts_model_path=voice_models["tts_model"],
+        tts_voices_path=voice_models["tts_voices"],
         voice_id="bf_isabella",
         core_fn=lambda text: "ok",
-        stt_download_root=MODELS / "stt",
-        repo_root=REPO_ROOT,
+        stt_download_root=voice_models["stt_download_root"],
+        repo_root=repo_root,
     )
 
     event = conn.execute(
@@ -113,7 +126,7 @@ def test_round_trip_with_repo_root_verifies_real_pinned_models_and_logs_it(tmp_p
             assert result["status"] == "OK", verification
 
 
-def test_round_trip_raises_when_wake_word_does_not_fire(tmp_path):
+def test_round_trip_raises_when_wake_word_does_not_fire(tmp_path, fixtures_dir, voice_models):
     conn = make_conn(tmp_path)
 
     def core_fn(command_text: str) -> str:
@@ -122,19 +135,21 @@ def test_round_trip_raises_when_wake_word_does_not_fire(tmp_path):
     with pytest.raises(VoicePipelineError, match="wake word did not fire"):
         run_voice_round_trip(
             conn,
-            wake_audio_path=FIXTURES / "hello_world.wav",  # not a wake-word utterance
-            command_audio_path=FIXTURES / "hello_world.wav",
-            wake_model_path=WAKE_MODEL,
-            vad_model_path=VAD_MODEL,
-            tts_model_path=TTS_MODEL,
-            tts_voices_path=TTS_VOICES,
+            wake_audio_path=fixtures_dir / "hello_world.wav",  # not a wake-word utterance
+            command_audio_path=fixtures_dir / "hello_world.wav",
+            wake_model_path=voice_models["wake"],
+            vad_model_path=voice_models["vad"],
+            tts_model_path=voice_models["tts_model"],
+            tts_voices_path=voice_models["tts_voices"],
             voice_id="bf_isabella",
             core_fn=core_fn,
-            stt_download_root=MODELS / "stt",
+            stt_download_root=voice_models["stt_download_root"],
         )
 
 
-def test_round_trip_carries_core_fn_response_verbatim_into_tts_input(tmp_path, monkeypatch):
+def test_round_trip_carries_core_fn_response_verbatim_into_tts_input(
+    tmp_path, monkeypatch, fixtures_dir, voice_models
+):
     # The full chain (wake -> VAD -> STT -> TTS) is exercised by
     # test_full_round_trip_wake_stt_response_tts above - this test only
     # checks that core_fn's response is what reaches synthesize, so the
@@ -164,15 +179,15 @@ def test_round_trip_carries_core_fn_response_verbatim_into_tts_input(tmp_path, m
 
     result = run_voice_round_trip(
         conn,
-        wake_audio_path=FIXTURES / "hey_jarvis.wav",
-        command_audio_path=FIXTURES / "hello_world.wav",
-        wake_model_path=WAKE_MODEL,
-        vad_model_path=VAD_MODEL,
-        tts_model_path=TTS_MODEL,
-        tts_voices_path=TTS_VOICES,
+        wake_audio_path=fixtures_dir / "hey_jarvis.wav",
+        command_audio_path=fixtures_dir / "hello_world.wav",
+        wake_model_path=voice_models["wake"],
+        vad_model_path=voice_models["vad"],
+        tts_model_path=voice_models["tts_model"],
+        tts_voices_path=voice_models["tts_voices"],
         voice_id="am_michael",
         core_fn=core_fn,
-        stt_download_root=MODELS / "stt",
+        stt_download_root=voice_models["stt_download_root"],
     )
 
     assert "hello" in seen_text["value"].lower()

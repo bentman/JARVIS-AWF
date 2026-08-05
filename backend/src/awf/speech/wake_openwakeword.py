@@ -31,11 +31,26 @@ def _read_wav_int16(path: Path) -> np.ndarray:
     return np.frombuffer(raw, dtype=np.int16)
 
 
-def detect_wake_word(audio_path: Path, model_path: Path, threshold: float = DEFAULT_THRESHOLD) -> dict:
-    """Returns {"detected": bool, "score": float, "model_key": str}."""
+def detect_wake_word(
+    audio_path: Path,
+    model_path: Path,
+    *,
+    melspec_model_path: Path,
+    embedding_model_path: Path,
+    threshold: float = DEFAULT_THRESHOLD,
+) -> dict:
+    """Returns {"detected": bool, "score": float, "model_key": str}.
+
+    Loads every artifact `config/voice/wake.yaml` names explicitly, rather
+    than falling back to openWakeWord's own bundled package defaults, so
+    `awf-speech models sync`/`verify` govern what's actually loaded."""
     from openwakeword.model import Model
 
-    model = Model(wakeword_model_paths=[str(model_path)])
+    model = Model(
+        wakeword_model_paths=[str(model_path)],
+        melspec_onnx_model_path=str(melspec_model_path),
+        embedding_onnx_model_path=str(embedding_model_path),
+    )
     audio = _read_wav_int16(audio_path)
 
     max_score = 0.0

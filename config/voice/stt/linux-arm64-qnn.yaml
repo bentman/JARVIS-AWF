@@ -1,7 +1,0 @@
-function: stt
-profile: linux-arm64-qnn
-files: []
-fallback_to: linux-arm64-cpu
-notes: No sherpa-onnx Whisper QNN build exists upstream. sherpa-onnx's GitHub releases publish QNN-tagged
-  assets only for a different model family ('sense-voice', not Whisper). Falls back to the arch's *64-cpu
-  profile per Section 16.4's fallback rule.

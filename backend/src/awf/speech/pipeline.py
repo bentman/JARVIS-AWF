@@ -5,18 +5,17 @@ Chains the four speech adapters in this package (`wake_*`, `vad_*`, `stt_*`,
 `tts_*`) into one activation -> command -> response cycle, carrying real
 output from each step into the next. Section 16.4: the Hardware Profiler
 runs "before any voice model is downloaded or loaded" - it resolves first,
-and its result actually selects the STT device/compute_type rather than
-just being logged.
+and its result actually selects the STT model/device/compute_type (via
+`awf.speech.models.stt_runtime`) rather than just being logged.
 
 "core" here is any callable that takes the recognized command text and
 returns a response string - the caller supplies it (a real AWF Run via
 `awf.cli.core_ops`, a trivial echo, or anything else) since the pipeline
 itself has no opinion on what the core does with the text.
 
-`repo_root`, when given, checks the resolved profile's `config/voice/`
-manifests (Section 16.4) against the real model files already passed in,
-logging the result to the `events` table - the manifests exist and are now
-consulted, closing the gap where they were pinned but nothing read them.
+`repo_root` resolves the STT runtime from `config/voice/stt.yaml` and checks
+the resolved profile's `config/voice/` manifests against the real model
+files already passed in, logging the result to the `events` table.
 """
 
 import json
@@ -28,19 +27,13 @@ from typing import Callable
 from awf.clock import utc_now_rfc3339
 from awf.events.writer import write_event
 from awf.hardware.profiler import SYSTEM_RUN_ID, run_hardware_profiler
-from awf.registry.hardware_voice_manifest import verify_profile_models
+from awf.speech.models import stt_runtime, verify_models
 from awf.speech.stt_whisper import transcribe
 from awf.speech.tts_kokoro import synthesize
 from awf.speech.vad_silero import speech_segments
 from awf.speech.wake_openwakeword import detect_wake_word
 
 CoreFn = Callable[[str], str]
-
-# Profiles ending in one of these suffixes have a probe-verified accelerator
-# faster-whisper/CTranslate2 can actually use; anything else falls back to
-# the CPU floor (Section 16.4: "every profile falls back to its arch's
-# `*64-cpu` floor").
-ACCELERATED_STT_DEVICES = {"cuda": ("cuda", "float16")}
 
 
 class VoicePipelineError(RuntimeError):
@@ -59,26 +52,14 @@ class VoiceRoundTripResult:
     response_audio: "tuple"  # (samples: np.ndarray, sample_rate: int)
 
 
-def _stt_device_for_profile(profile_id: str) -> tuple[str, str]:
-    for suffix, (device, compute_type) in ACCELERATED_STT_DEVICES.items():
-        if profile_id.endswith(f"-{suffix}"):
-            return device, compute_type
-    return "cpu", "int8"
-
-
-def _verify_and_log_pinned_models(
-    conn: sqlite3.Connection, repo_root: Path, profile_id: str, models_roots: dict[str, Path]
-) -> None:
+def _verify_and_log_pinned_models(conn: sqlite3.Connection, repo_root: Path, profile_id: str) -> None:
     """Section 16.4's pinned manifests (`config/voice/*`) exist and are
-    checked here, but a hash mismatch is logged, not raised - these are an
-    audit record of what's actually installed against what's pinned, the
+    checked here, but a missing artifact is logged, not raised - this is an
+    audit record of what's actually installed against what's named, the
     same "every probe result and fallback decision is written to the
     events table" contract the Hardware Profiler's own resolution already
     follows, not a hard gate on whether the round trip may proceed."""
-    verifications = [
-        verify_profile_models(repo_root, function, profile_id, models_root)
-        for function, models_root in models_roots.items()
-    ]
+    verifications = verify_models(repo_root, profile_id)
     write_event(
         conn, run_id=SYSTEM_RUN_ID, new_status="VERIFIED", actor="hardware_profiler",
         reason_code="pinned_model_verification",
@@ -89,18 +70,18 @@ def _verify_and_log_pinned_models(
 def run_voice_round_trip(
     conn: sqlite3.Connection,
     *,
+    repo_root: Path,
     wake_audio_path: Path,
     command_audio_path: Path,
     wake_model_path: Path,
+    wake_melspec_model_path: Path,
+    wake_embedding_model_path: Path,
     vad_model_path: Path,
     tts_model_path: Path,
     tts_voices_path: Path,
     voice_id: str,
     core_fn: CoreFn,
-    stt_model_size: str = "small",
-    stt_download_root: Path | None = None,
     wake_threshold: float = 0.5,
-    repo_root: Path | None = None,
 ) -> VoiceRoundTripResult:
     """Runs one full activation -> command -> response cycle.
 
@@ -109,19 +90,18 @@ def run_voice_round_trip(
     past either check, mirroring the durability rule's "no silent success."
     """
     hardware_profile_id = run_hardware_profiler(conn)
-    stt_device, stt_compute_type = _stt_device_for_profile(hardware_profile_id)
+    runtime = stt_runtime(repo_root, hardware_profile_id)
+    stt_download_root = repo_root / "models" / "stt"
 
-    if repo_root is not None:
-        models_roots = {
-            "wake": wake_model_path.parent,
-            "vad": vad_model_path.parent,
-            "tts": tts_model_path.parent,
-        }
-        if stt_download_root is not None:
-            models_roots["stt"] = stt_download_root
-        _verify_and_log_pinned_models(conn, repo_root, hardware_profile_id, models_roots)
+    _verify_and_log_pinned_models(conn, repo_root, hardware_profile_id)
 
-    wake_result = detect_wake_word(wake_audio_path, wake_model_path, threshold=wake_threshold)
+    wake_result = detect_wake_word(
+        wake_audio_path,
+        wake_model_path,
+        melspec_model_path=wake_melspec_model_path,
+        embedding_model_path=wake_embedding_model_path,
+        threshold=wake_threshold,
+    )
     if not wake_result["detected"]:
         raise VoicePipelineError(
             f"wake word did not fire on {wake_audio_path} (score={wake_result['score']:.4f})"
@@ -133,9 +113,9 @@ def run_voice_round_trip(
 
     stt_result = transcribe(
         command_audio_path,
-        model_size=stt_model_size,
-        device=stt_device,
-        compute_type=stt_compute_type,
+        model_size=runtime.model,
+        device=runtime.device,
+        compute_type=runtime.compute_type,
         download_root=stt_download_root,
     )
     command_text = stt_result["text"]

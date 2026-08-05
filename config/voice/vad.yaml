@@ -1,0 +1,4 @@
+function: vad
+files:
+  - name: silero_vad.onnx
+    package: silero-vad

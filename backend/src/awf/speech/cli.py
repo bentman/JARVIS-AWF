@@ -1,10 +1,15 @@
-"""Standalone entry point for `run_voice_round_trip`, so a non-Python caller
-(the Electron GUI's main process, Section 16.4) can invoke it the same way
-it already spawns `awf serve --stdio`: as a subprocess, reading one JSON
-object from stdout.
+"""`awf-speech` console entry point (Section 16.4).
 
-This is push-to-talk-by-file: the caller supplies a wake-word audio file and
-a command audio file rather than a live microphone stream.
+`round-trip` is a standalone entry point for `run_voice_round_trip`, so a
+non-Python caller (the Electron GUI's main process) can invoke it the same
+way it already spawns `awf serve --stdio`: as a subprocess, reading one JSON
+object from stdout. This is push-to-talk-by-file: the caller supplies a
+wake-word audio file and a command audio file rather than a live microphone
+stream.
+
+`models sync`/`models verify` resolve the host's canonical Hardware Profiler
+profile, then acquire or check presence of the artifacts
+`config/voice/{stt,tts,vad,wake}.yaml` name for it.
 """
 
 import argparse
@@ -14,6 +19,7 @@ from pathlib import Path
 
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
+from awf.speech.models import artifact_paths, sync_models, verify_models
 from awf.speech.pipeline import VoicePipelineError, run_voice_round_trip
 
 
@@ -36,12 +42,18 @@ def build_parser() -> argparse.ArgumentParser:
     round_trip.add_argument("--voice-id", default="bf_isabella")
     round_trip.add_argument("--response-audio-out", required=True)
 
+    models = sub.add_parser("models")
+    models_sub = models.add_subparsers(dest="models_command", required=True)
+    models_sub.add_parser("sync")
+    models_sub.add_parser("verify")
+
     return parser
 
 
-def run(argv: list[str], repo_root: Path) -> int:
-    args = build_parser().parse_args(argv)
-    models = repo_root / "models"
+def _run_round_trip(args: argparse.Namespace, repo_root: Path) -> int:
+    wake_paths = artifact_paths(repo_root, "wake")
+    vad_paths = artifact_paths(repo_root, "vad")
+    tts_paths = artifact_paths(repo_root, "tts")
 
     db_path = repo_root / "data" / "awf_db" / "awf.db"
     init_db(db_path)
@@ -50,15 +62,17 @@ def run(argv: list[str], repo_root: Path) -> int:
     try:
         result = run_voice_round_trip(
             conn,
+            repo_root=repo_root,
             wake_audio_path=Path(args.wake_audio_path),
             command_audio_path=Path(args.command_audio_path),
-            wake_model_path=models / "wake" / "hey_jarvis_v0.1.onnx",
-            vad_model_path=models / "vad" / "silero_vad.onnx",
-            tts_model_path=models / "tts" / "kokoro-v1.0.onnx",
-            tts_voices_path=models / "tts" / "voices-v1.0.bin",
+            wake_model_path=wake_paths["hey_jarvis_v0.1.onnx"],
+            wake_melspec_model_path=wake_paths["melspectrogram.onnx"],
+            wake_embedding_model_path=wake_paths["embedding_model.onnx"],
+            vad_model_path=vad_paths["silero_vad.onnx"],
+            tts_model_path=tts_paths["kokoro-v1.0.onnx"],
+            tts_voices_path=tts_paths["voices-v1.0.bin"],
             voice_id=args.voice_id,
             core_fn=_echo_core,
-            stt_download_root=models / "stt",
         )
     except VoicePipelineError as exc:
         print(json.dumps({"error": str(exc)}))
@@ -86,6 +100,32 @@ def run(argv: list[str], repo_root: Path) -> int:
         )
     )
     return 0
+
+
+def _run_models(args: argparse.Namespace, repo_root: Path) -> int:
+    from awf.hardware.profiler import resolve_hardware_profile_id
+
+    profile_id, _evidence = resolve_hardware_profile_id()
+
+    if args.models_command == "sync":
+        results = sync_models(repo_root, profile_id)
+        ok = True
+    else:
+        results = verify_models(repo_root, profile_id)
+        ok = all(result["status"] == "OK" for result in results)
+
+    print(json.dumps({"profile_id": profile_id, "results": results}))
+    return 0 if ok else 1
+
+
+def run(argv: list[str], repo_root: Path) -> int:
+    args = build_parser().parse_args(argv)
+
+    if args.command == "round-trip":
+        return _run_round_trip(args, repo_root)
+    if args.command == "models":
+        return _run_models(args, repo_root)
+    raise AssertionError(f"unhandled command: {args.command}")
 
 
 def main() -> int:

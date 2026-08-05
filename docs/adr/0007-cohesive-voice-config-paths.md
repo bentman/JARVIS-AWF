@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. Not implemented.
+Implemented.
 
 ## Context
 
@@ -218,9 +218,14 @@ writing the `pinned_model_verification` event, which stays advisory: a
 needs it.
 
 `wake_openwakeword.detect_wake_word` takes all three wake artifacts and
-constructs `Model(wakeword_models=[...], inference_framework="onnx",
-melspec_model_path=..., embedding_model_path=...)`, so every wake artifact the
-manifest names is an artifact the adapter loads.
+constructs `Model(wakeword_model_paths=[...], melspec_onnx_model_path=...,
+embedding_onnx_model_path=...)` - the installed `openwakeword` version's real
+constructor and `AudioFeatures` kwarg names, which differ from this
+mechanism's original pseudocode (`wakeword_models`, `inference_framework`,
+`melspec_model_path`, `embedding_model_path`: none of these exist on the
+installed version). Every wake artifact the manifest names is an artifact the
+adapter loads, which is the property this mechanism exists for; the exact
+kwarg names are an implementation detail of the installed library version.
 
 `test_phase12_speech_adapters.py` takes its required paths from
 `artifact_paths`. `test_baseline_hardware_voice_manifest.py` covers: the four

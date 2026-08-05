@@ -1,151 +1,121 @@
-import hashlib
-
 import pytest
 
+from awf.hardware.profiler import CANONICAL_PROFILES
 from awf.registry.hardware_voice_manifest import (
+    FUNCTIONS,
     HardwareVoiceManifestError,
     load_hardware_voice_manifest,
     parse_hardware_voice_manifest,
     resolve_hardware_voice_manifest_path,
-    sha256_file,
-    verify_pinned_files,
-    verify_profile_models,
 )
+from awf.speech.models import acceleration_class, artifact_paths, stt_runtime, verify_models
+
+FILE_FUNCTIONS = ("tts", "vad", "wake")
 
 
-def test_parse_url_acquisition():
+def test_parse_url_file():
     manifest = parse_hardware_voice_manifest(
-        {
-            "function": "wake",
-            "profile": "linux-x64-cpu",
-            "files": [
-                {
-                    "acquisition": "url",
-                    "url": "https://example.com/model.onnx",
-                    "target_relative_path": "model.onnx",
-                    "sha256": "abc123",
-                }
-            ],
-        }
+        {"function": "wake", "files": [{"name": "model.onnx", "url": "https://example.com/model.onnx"}]}
     )
     assert manifest.function == "wake"
-    assert manifest.files[0].acquisition == "url"
-    assert manifest.files[0].sha256 == "abc123"
+    assert manifest.files[0].name == "model.onnx"
+    assert manifest.files[0].url == "https://example.com/model.onnx"
+    assert manifest.files[0].package is None
 
 
-def test_parse_rejects_unknown_acquisition():
+def test_parse_package_file():
+    manifest = parse_hardware_voice_manifest(
+        {"function": "vad", "files": [{"name": "silero_vad.onnx", "package": "silero-vad"}]}
+    )
+    assert manifest.files[0].package == "silero-vad"
+    assert manifest.files[0].url is None
+
+
+def test_parse_rejects_file_with_neither_url_nor_package():
+    with pytest.raises(HardwareVoiceManifestError):
+        parse_hardware_voice_manifest({"function": "wake", "files": [{"name": "model.onnx"}]})
+
+
+def test_parse_rejects_file_with_both_url_and_package():
     with pytest.raises(HardwareVoiceManifestError):
         parse_hardware_voice_manifest(
-            {"function": "wake", "profile": "linux-x64-cpu", "files": [{"acquisition": "ftp"}]}
+            {
+                "function": "wake",
+                "files": [{"name": "model.onnx", "url": "https://example.com/x", "package": "x"}],
+            }
         )
 
 
 def test_parse_rejects_unknown_function():
     with pytest.raises(HardwareVoiceManifestError):
-        parse_hardware_voice_manifest({"function": "smell", "profile": "linux-x64-cpu"})
+        parse_hardware_voice_manifest({"function": "smell"})
 
 
-def test_parse_fallback_manifest_has_no_files():
+def test_parse_stt_classes():
     manifest = parse_hardware_voice_manifest(
         {
             "function": "stt",
-            "profile": "linux-arm64-qnn",
-            "files": [],
-            "fallback_to": "linux-arm64-cpu",
-            "notes": "no upstream QNN build exists",
+            "classes": {
+                "cpu": {"model": "small", "device": "cpu", "compute_type": "int8"},
+                "cuda": {"model": "big/model", "device": "cuda", "compute_type": "float16"},
+            },
         }
     )
-    assert manifest.files == ()
-    assert manifest.fallback_to == "linux-arm64-cpu"
+    assert manifest.classes["cpu"].model == "small"
+    assert manifest.classes["cuda"].device == "cuda"
 
 
-def test_all_48_real_shipped_manifests_parse_cleanly(repo_root):
-    # every canonical profile x function combination this project ships.
-    profiles = [
-        "windows-x64-cpu", "windows-x64-gpu", "windows-x64-cuda",
-        "windows-arm64-cpu", "windows-arm64-gpu", "windows-arm64-qnn",
-        "linux-x64-cpu", "linux-x64-gpu", "linux-x64-cuda",
-        "linux-arm64-cpu", "linux-arm64-gpu", "linux-arm64-qnn",
-    ]
-    for function in ("stt", "tts", "vad", "wake"):
-        for profile in profiles:
-            path = resolve_hardware_voice_manifest_path(repo_root, function, profile)
-            manifest = load_hardware_voice_manifest(path)
-            assert manifest.function == function
-            assert manifest.profile == profile
-            # every manifest either has files or a fallback - never neither
-            assert manifest.files or manifest.fallback_to
+def test_four_real_shipped_manifests_parse_cleanly(repo_root):
+    for function in FUNCTIONS:
+        path = resolve_hardware_voice_manifest_path(repo_root, function)
+        manifest = load_hardware_voice_manifest(path)
+        assert manifest.function == function
 
 
-def test_sha256_file_matches_real_hashlib(tmp_path):
-    path = tmp_path / "data.bin"
-    path.write_bytes(b"some real bytes to hash")
-    assert sha256_file(path) == hashlib.sha256(b"some real bytes to hash").hexdigest()
+def test_every_file_function_resolves_to_a_nonempty_artifact_set(repo_root):
+    # tts/vad/wake artifacts don't vary by profile - one non-empty set per
+    # function covers every canonical profile ID.
+    for function in FILE_FUNCTIONS:
+        assert artifact_paths(repo_root, function)
 
 
-def test_verify_pinned_files_reports_missing(tmp_path):
-    manifest = parse_hardware_voice_manifest(
-        {
-            "function": "wake", "profile": "linux-x64-cpu",
-            "files": [{"acquisition": "url", "target_relative_path": "gone.onnx", "sha256": "deadbeef"}],
-        }
-    )
-    results = verify_pinned_files(tmp_path, manifest)
-    assert results == [{"path": str(tmp_path / "gone.onnx"), "status": "MISSING"}]
+def test_every_canonical_profile_resolves_to_an_stt_runtime(repo_root):
+    for profile_id in CANONICAL_PROFILES:
+        runtime = stt_runtime(repo_root, profile_id)
+        assert runtime.model
+        assert runtime.device
+        assert runtime.compute_type
 
 
-def test_verify_pinned_files_reports_ok_and_mismatch(tmp_path):
-    (tmp_path / "real.bin").write_bytes(b"real content")
-    real_hash = hashlib.sha256(b"real content").hexdigest()
-    manifest = parse_hardware_voice_manifest(
-        {
-            "function": "wake", "profile": "linux-x64-cpu",
-            "files": [
-                {"acquisition": "url", "target_relative_path": "real.bin", "sha256": real_hash},
-                {"acquisition": "url", "target_relative_path": "real.bin", "sha256": "wrong-hash"},
-            ],
-        }
-    )
-    results = verify_pinned_files(tmp_path, manifest)
-    assert results[0]["status"] == "OK"
-    assert results[1]["status"] == "HASH_MISMATCH"
-    assert results[1]["expected_sha256"] == "wrong-hash"
-    assert results[1]["actual_sha256"] == real_hash
+def test_gpu_and_qnn_classes_resolve_to_the_cpu_entry(repo_root):
+    cpu_runtime = stt_runtime(repo_root, "linux-x64-cpu")
+    gpu_runtime = stt_runtime(repo_root, "linux-x64-gpu")
+    qnn_runtime = stt_runtime(repo_root, "linux-arm64-qnn")
+    assert gpu_runtime == cpu_runtime
+    assert qnn_runtime == cpu_runtime
 
 
-def test_verify_pinned_files_skips_files_with_no_hash(tmp_path):
-    # the cuda-class STT manifests (HF multi-file repo, no single sha256) -
-    # must not be silently reported as passing or failing.
-    manifest = parse_hardware_voice_manifest(
-        {
-            "function": "stt", "profile": "linux-x64-cuda",
-            "files": [{"acquisition": "huggingface", "repo_id": "x/y", "revision": "main", "sha256": None}],
-        }
-    )
-    assert verify_pinned_files(tmp_path, manifest) == []
+def test_cuda_class_resolves_to_the_cuda_entry(repo_root):
+    runtime = stt_runtime(repo_root, "linux-x64-cuda")
+    assert runtime.model == "deepdml/faster-whisper-large-v3-turbo-ct2"
+    assert runtime.device == "cuda"
+    assert runtime.compute_type == "float16"
+
+
+def test_unknown_acceleration_class_raises():
+    with pytest.raises(HardwareVoiceManifestError):
+        acceleration_class("linux-x64-potato")
 
 
 @pytest.mark.live
-def test_verify_profile_models_against_the_real_shipped_linux_x64_cpu_wake_manifest(
-    tmp_path, repo_root, models_present
-):
-    # the currently-resolved profile on this host, against the
-    # already-downloaded model files.
-    if not models_present("wake"):
-        pytest.skip("models/wake/ not present on this host")
-    models_root = repo_root / "models" / "wake"
+def test_verify_models_against_the_real_shipped_manifests(repo_root, models_present):
+    if not models_present(
+        "wake/hey_jarvis_v0.1.onnx", "wake/melspectrogram.onnx", "wake/embedding_model.onnx",
+        "vad/silero_vad.onnx", "tts/kokoro-v1.0.onnx", "tts/voices-v1.0.bin",
+    ):
+        pytest.skip("voice models not present under models/ on this host")
 
-    result = verify_profile_models(repo_root, "wake", "linux-x64-cpu", models_root)
+    results = verify_models(repo_root, "linux-x64-cpu")
 
-    assert result["resolved_profile_id"] == "linux-x64-cpu"
-    assert result["results"]
-    assert all(r["status"] == "OK" for r in result["results"])
-
-
-def test_verify_profile_models_follows_fallback_to_cpu(tmp_path, repo_root):
-    # linux-arm64-qnn's STT manifest has no real files - it must resolve to
-    # linux-arm64-cpu's real pin instead of reporting nothing.
-    result = verify_profile_models(repo_root, "stt", "linux-arm64-qnn", tmp_path)
-    assert result["profile_id"] == "linux-arm64-qnn"
-    assert result["resolved_profile_id"] == "linux-arm64-cpu"
-    assert result["results"][0]["status"] == "MISSING"  # tmp_path has nothing in it
+    assert results
+    assert all(result["status"] == "OK" for result in results)

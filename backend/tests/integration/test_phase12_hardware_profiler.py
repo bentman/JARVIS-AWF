@@ -28,6 +28,7 @@ def _clean_inventory_cache():
     reset_inventory_cache()
 
 
+@pytest.mark.live
 def test_resolve_hardware_profile_id_returns_a_canonical_profile():
     profile_id, evidence = resolve_hardware_profile_id()
     assert profile_id in CANONICAL_PROFILES
@@ -180,6 +181,7 @@ def test_a_raising_detector_lands_in_detector_errors_without_failing_the_profile
     assert inventory.gpu_available is False
 
 
+@pytest.mark.live
 def test_probe_evidence_carries_the_required_keys():
     import awf.hardware.profiler as profiler
 

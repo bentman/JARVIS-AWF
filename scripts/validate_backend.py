@@ -4,7 +4,11 @@ Six commands, each returning a code from one shared contract:
 
   0 = PASS
   1 = FAIL
-  2 = SKIPPED                  (pytest return code 5, no tests collected)
+  2 = SKIPPED                  (pytest return code 5 with no tests collected,
+                                 or return code 0 with zero tests passed and
+                                 at least one skipped - e.g. every `live`
+                                 test skipping on a host lacking the
+                                 resource it needs)
   3 = ENVIRONMENT_UNSATISFIED  (pytest not importable)
 
 | Command       | Runs                                            | Writes                                |
@@ -26,6 +30,7 @@ what actually selects every host-dependent check.
 import argparse
 import datetime
 import platform
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -33,6 +38,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REPORTS_DIR = REPO_ROOT / "reports"
 CACHE_DIR = REPO_ROOT / "cache" / "validate_backend"
+PYTEST_CACHE_DIR = CACHE_DIR / "pytest"
 
 EXIT_PASS = 0
 EXIT_FAIL = 1
@@ -40,6 +46,7 @@ EXIT_SKIPPED = 2
 EXIT_ENVIRONMENT_UNSATISFIED = 3
 
 _PYTEST_NO_TESTS_COLLECTED = 5
+_SUMMARY_COUNT_RE = re.compile(r"(\d+) (passed|skipped)")
 
 _SUMMARY_BY_CODE = {
     EXIT_PASS: "PASS",
@@ -65,16 +72,29 @@ def _pytest_importable() -> bool:
     return True
 
 
-def _map_pytest_return_code(code: int) -> int:
-    if code == 0:
-        return EXIT_PASS
-    if code == _PYTEST_NO_TESTS_COLLECTED:
+def _parse_pytest_summary_counts(stdout: str) -> dict[str, int]:
+    """Extracts `passed`/`skipped` counts from pytest's final summary line."""
+    lines = [line for line in stdout.strip().splitlines() if line.strip()]
+    summary_line = lines[-1] if lines else ""
+    counts = {"passed": 0, "skipped": 0}
+    for count, label in _SUMMARY_COUNT_RE.findall(summary_line):
+        counts[label] = int(count)
+    return counts
+
+
+def _map_pytest_result(result: subprocess.CompletedProcess) -> int:
+    if result.returncode == _PYTEST_NO_TESTS_COLLECTED:
         return EXIT_SKIPPED
-    return EXIT_FAIL
+    if result.returncode != 0:
+        return EXIT_FAIL
+    counts = _parse_pytest_summary_counts(result.stdout)
+    if counts["passed"] == 0 and counts["skipped"] > 0:
+        return EXIT_SKIPPED
+    return EXIT_PASS
 
 
 def _run_pytest(args: list[str]) -> subprocess.CompletedProcess:
-    command = [sys.executable, "-m", "pytest", *args]
+    command = [sys.executable, "-m", "pytest", "-o", f"cache_dir={PYTEST_CACHE_DIR}", *args]
     return subprocess.run(command, cwd=REPO_ROOT, capture_output=True, text=True)
 
 
@@ -85,7 +105,7 @@ def _run_pytest_command(args: list[str]) -> int:
     result = _run_pytest(args)
     print(result.stdout, end="")
     print(result.stderr, end="", file=sys.stderr)
-    return _map_pytest_return_code(result.returncode)
+    return _map_pytest_result(result)
 
 
 def cmd_profile(_args: argparse.Namespace) -> int:
@@ -143,7 +163,7 @@ def cmd_regression(_args: argparse.Namespace) -> int:
     else:
         result = _run_pytest(["-q", "backend/tests/unit"])
         pytest_return_code = result.returncode
-        validator_return_code = _map_pytest_return_code(result.returncode)
+        validator_return_code = _map_pytest_result(result)
         stdout, stderr = result.stdout, result.stderr
 
     validation_dir = REPORTS_DIR / "validation"
@@ -175,7 +195,6 @@ COMMANDS = {
 
 
 def main(argv: list[str] | None = None) -> int:
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
     parser = argparse.ArgumentParser(description="AWF backend validation harness (ADR-0006)")
     parser.add_argument("command", choices=sorted(COMMANDS))
     args = parser.parse_args(argv)

@@ -222,9 +222,18 @@ Exit codes, shared by every command:
 ```text
 0 = PASS
 1 = FAIL
-2 = SKIPPED                  (pytest return code 5, no tests collected, maps here)
+2 = SKIPPED                  (pytest return code 5 with no tests collected,
+                               or return code 0 with zero tests passed and
+                               at least one skipped)
 3 = ENVIRONMENT_UNSATISFIED  (pytest not importable)
 ```
+
+The second `SKIPPED` case exists because `runtime` is marker-scoped across the
+whole tree, not directory-scoped to `backend/tests/runtime/` (`live`-marked
+tests also live in `unit/` and `integration/`, per the tier-assignment note
+above) - pytest collects and runs them, each one's own fixture skips it, and
+pytest itself exits `0`. Mapping that bare `0` to `PASS` would report success
+having executed nothing; the zero-passed/any-skipped rule catches it.
 
 Timestamps are UTC: `2026-08-04T19:13:00Z` in report content,
 `YYYYMMDDHHMMSS-<stem>.txt` for filenames, e.g.
@@ -342,8 +351,9 @@ stays; that directory is not part of this layout.
 - `regression` writes one timestamped file under `reports/validation/`
   containing every field listed in Part D.
 - `ci` collects zero `live` tests, shown by its own deselection count.
-- `runtime` on a host lacking the required resources returns `2`, and every
-  skip states a reason.
+- `runtime` on a host lacking the required resources returns `2` by way of
+  the zero-passed/any-skipped rule (every `live` test is collected and run,
+  each one's own fixture skips it), and every skip states a reason.
 - With pytest unimportable, a command returns `3` and still writes the report
   its definition names.
 - The profile ID in the `profile` report matches the `profile_id` written to

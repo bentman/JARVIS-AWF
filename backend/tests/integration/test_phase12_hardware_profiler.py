@@ -35,6 +35,7 @@ def test_resolve_hardware_profile_id_returns_a_canonical_profile():
     assert isinstance(evidence, dict)
 
 
+@pytest.mark.live
 def test_resolved_profile_matches_detected_os_and_arch():
     profile_id, _evidence = resolve_hardware_profile_id()
     os_name = _detect_os()

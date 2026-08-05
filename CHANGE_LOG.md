@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-05 10:18
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: ADR-0006 follow-up - fixed `validate_backend.py`'s `runtime` command reporting PASS when every `live` test skips, wired pytest's own cache into `cache/validate_backend/`, and marked three host-probing tests in `test_phase12_hardware_profiler.py` `live` so `ci` no longer runs them.
+  - Scope: `scripts/validate_backend.py`, `backend/tests/integration/test_phase12_hardware_profiler.py`, `docs/adr/0006-hardware-profiler-and-update-tests-harness.md`.
+  - Validation: `pytest backend/tests` → 364 passed; `-m "not live"` selects 345, `-m live` selects 19.
+  - Notes: none.
+
 - Timestamp: 2026-08-05 09:39
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Implemented ADR-0006 (canonical Hardware Profiler module, single project file, tiered test suite, and validation harness).

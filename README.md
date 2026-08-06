@@ -2,22 +2,26 @@
 
 ## 📋 Description
 
-JARVIS-AWF is the reference implementation of the Agentic Workflow Fabric (AWF): a durable, local-first control system for running AI coding/research agents against explicit, versioned Workflow definitions. It is built and used by one operator, on their own machines.
+JARVIS-AWF is the reference implementation of the Agentic Workflow Fabric (AWF): a durable, local-first control system for running AI coding and research agents against explicit, versioned Workflow definitions. It is built and used by one operator, on their own machines.
 
-The unit of operation is a Run of a versioned Workflow Definition. Agents are bounded executors inside a Run; the durable orchestrator is AWF itself, which invokes them, records what they did, verifies the result, and keeps the audit trail.
+The unit of operation is a Run of a versioned Workflow. Agents are bounded executors inside a Run; AWF is the durable layer above them — it invokes them, records what they did, verifies the result, and keeps the audit trail.
+
+## 🚀 Quick Start
+
+Coming soon.
 
 ## 🏗️ Architecture
 
-All durable state lives in one SQLite database (`data/awf_db/awf.db`) plus content-addressed files under `data/`, which is relocatable to another machine. AWF processes are operator-started and may exit at any time; `awf resume` scans for Runs in a non-terminal state and picks up from the last completed Step.
+Everything durable lives in one SQLite database plus content-addressed files under `data/`, which can be copied to another machine as a unit. Processes are operator-started and may exit at any time; a resume command picks up from the last completed step.
 
-- **Workflows and Steps.** A Workflow's nodes are one of eight types: `activity`, `agent`, `approval`, `gate`, `subworkflow`, `map`, `loop`, and `handoff`. Every non-deterministic operation — a model call, a tool call, a subprocess — runs as a Step whose input and output are persisted before the workflow advances, and each attempt is its own immutable row.
-- **Registry.** Workflows, Agents, Capabilities, MCP servers, Model Profiles, Voice Profiles, and Skills are git-trackable YAML/Markdown under `data/registry/`, semantic-versioned and pinned by SHA-256 digest. Objects from community sources enter as `quarantined` and require explicit promotion to `trusted`.
-- **Authorization.** A Capability Guard — a deterministic Python module, not a service — resolves each requested action against its Capability Record (risk class R0–R3) and the invoking agent's declared allowlist, returning allow/deny/approval-required and writing the decision to the `events` table before the action runs.
-- **Agent execution.** Named CLI coding agents (Claude Code, OpenAI Codex CLI, Google Antigravity CLI, GitHub Copilot CLI, Cline CLI) are driven through one adapter contract: an `AgentInvocation` in, an `AgentResult` out. A generic contract admits more adapters without a spec revision.
-- **Isolation.** Each mutating Run gets a dedicated Git worktree plus a disposable scratch directory at `cache/sandbox/<run_id>/`, combined with the adapter's own permission/sandbox system. A rootless container is the documented escalation tier for explicitly untrusted content.
-- **Verification.** Gates are tiered. The default tier runs Builder + Verifier; the high-risk tier adds an Adversary/Optimizer for the full Trifecta. Roles run in fresh contexts on separate adapters, no role assesses its own output, and the final Verdict is written by deterministic control code aggregating structured Findings. The repair loop is bounded (default 3 iterations).
-- **Model access.** LiteLLM is used as an in-process library. Routing, limits, and privacy class are declared per Model Profile in the registry; API keys resolve by name from an encrypted `secrets` table whose key lives in a machine-local `.env`.
-- **Observability.** Every state transition, Guard decision, approval, and Verdict writes a row to the append-only `events` table, queryable with plain SQL.
+- **Workflows and Steps.** A Workflow is a graph of typed nodes. Every non-deterministic operation runs as a Step whose input and output are written down before the workflow moves on, so a crash resumes rather than restarts.
+- **Registry.** Workflows, Agents, Capabilities, MCP servers, Model Profiles, Voice Profiles, and Skills are versioned files. Repository defaults ship with the project; operator additions live alongside them and take precedence.
+- **Authorization.** A Capability Guard resolves every requested action against its declared risk class and the calling agent's allowlist, returning allow, deny, or approval-required — and recording the decision before the action runs.
+- **Agent execution.** Named CLI coding agents are driven through one adapter contract, so adding another agent doesn't change the system around it.
+- **Isolation.** Each mutating Run gets its own Git worktree and a disposable scratch directory, on top of whatever sandbox the agent tool provides.
+- **Verification.** Gates are tiered. The default runs a builder and an independent verifier; high-risk work adds an adversary. No role assesses its own output, and the final verdict is written by control code, not by an agent.
+- **Model access.** Routing, limits, and privacy class are declared per Model Profile. API keys resolve by name from an encrypted store whose key stays machine-local.
+- **Observability.** Every state change, authorization decision, approval, and verdict is appended to one event log, queryable with plain SQL.
 
 The full normative design is in [`docs/AGENTIC_WORKFLOW_FABRIC_SPEC.md`](docs/AGENTIC_WORKFLOW_FABRIC_SPEC.md).
 
@@ -39,19 +43,25 @@ flowchart LR
     B --> I[Run terminal state]
 ```
 
-Every path through a node passes the Capability Guard, and every transition is written to `events` before the next node begins.
+Every path through a node passes the Capability Guard, and every transition is recorded before the next node begins.
 
 ## 🖥️ Interfaces
 
-One Python core with three surfaces. `awf` is the headless, scriptable CLI and the only component that touches durable state; `awf serve --stdio` exposes it over JSON-RPC 2.0, shaped on the Agent Client Protocol. **AWF-CLI** is an npm-distributed inline terminal UI with a slash-command surface, where registry Skills surface directly as `/<skill-name>`. **AWF-GUI** is a desktop voice app — wake word or push-to-talk → VAD → STT → core → TTS — in which agent roles carry assignable personas and audibly distinct voices. Both frontends are presentation layers speaking the same protocol into the same core code paths; approvals above R1 require on-screen confirmation of the exact action digest.
+One core with three surfaces. A headless command-line tool is the scriptable base and the only component that touches durable state. **AWF-CLI** is a terminal UI with a slash-command surface, where registry Skills appear directly as commands. **AWF-GUI** is a desktop voice app — wake word or push-to-talk in, spoken response out — in which agent roles carry distinct personas and voices.
+
+Both frontends are presentation layers over the same core. High-risk approvals always require on-screen confirmation of the exact action.
 
 ## 🧰 Platform
 
-Python `>=3.12,<3.15` for the core, Node `>=22` for the frontends. Supported targets are Linux (including WSL2), Windows AMD64 with NVIDIA CUDA, and Windows ARM64 with Qualcomm Adreno/OpenCL or QNN NPU, each with a CPU floor on every host. Acceleration is resolved by a hardware probe at setup and recorded as evidence, never assumed. Speech models are operator-downloaded at setup into a gitignored `models/` tree against pinned URLs and digests.
+Python for the core, Node for the frontends. Supported targets are Linux (including WSL2), Windows x64, and Windows ARM64, with CPU as the guaranteed floor on every host.
+
+Acceleration is resolved by a hardware probe at setup — hardware facts and installed runtime capability are checked separately, then recorded as evidence rather than assumed. Speech models are operator-downloaded into a gitignored tree at setup.
 
 ## 🚦 Status
 
-Specification stage. The spec defines a mandatory 13-phase build sequence (Phase 0 bootstrap through Phase 12 voice GUI), each phase gated on its own passing tests. Implementation has not started; the repository currently holds the spec, governance, and directory layout.
+Working. The mandatory build sequence — bootstrap through the voice GUI — is complete, each phase gated on its own tests. The suite passes, and the voice round trip runs end to end on accelerated and CPU-only hosts alike.
+
+Outstanding: one of the five named CLI adapters, the optional container isolation tier, and a small number of documented deviations recorded under `docs/adr/`.
 
 ## 🤝 Contributions
 
@@ -59,5 +69,6 @@ This is a solo, personal project and isn't set up to take contributions right no
 
 ## 📄 License
 
-Apache License 2.0. See the license text at https://www.apache.org/licenses/LICENSE-2.0.  
-The CLI coding agents driven by an adapter remain under their own upstream licenses.
+Apache License 2.0. See the license text at https://www.apache.org/licenses/LICENSE-2.0.
+Coding agents driven by an adapter remain under their own upstream licenses.
+Voice components and model usage also remain under their own upstream licenses.

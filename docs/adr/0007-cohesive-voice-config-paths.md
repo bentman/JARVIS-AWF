@@ -2,7 +2,25 @@
 
 ## Status
 
-Implemented.
+Implemented. Amended in part by ADR-0008.
+
+## Amended by ADR-0008
+
+ADR-0008 made device selection per speech function, so the STT class key comes
+from a readiness result rather than from the profile ID's final segment.
+Everything not listed stands, including the four-file manifest shape, the
+artifact sourcing, the `stt.yaml` class entries, the wake three-artifact load,
+and the `silero-vad` declaration.
+
+| Stated here | Current |
+|---|---|
+| resolution keys on the final segment of the canonical profile ID (Decision; Rationale) | keys on `hardware.readiness.derive_stt_readiness(...).device` |
+| `ACCELERATION_CLASSES` and `acceleration_class(profile_id)` in `speech/models.py` (Part B) | not present. STT resolves `cpu` or `cuda`, the two devices CTranslate2 offers |
+| `artifact_paths` in `speech/models.py` (Part B; Part C) | lives in `registry/hardware_voice_manifest.py`; `speech/models.py` calls it there, so `hardware/` imports `registry/` and never `speech/` |
+| `stt_runtime(repo_root, profile_id)`, `sync_models(repo_root, profile_id)`, `verify_models(repo_root, profile_id)` (Part B) | `stt_runtime(repo_root, device)`, `sync_models(repo_root, stt_device)`, `verify_models(repo_root)` |
+| TTS, VAD, and wake vary by neither artifact nor device (Context; Rationale) | artifacts still do not vary. TTS device varies through `derive_tts_readiness`, and `tts_kokoro.synthesize` takes a `device` parameter |
+| Acceptance: a `-cuda` profile resolves STT to the turbo model; all twelve profile IDs resolve to an `SttRuntime` | an STT readiness device of `cuda` resolves to `deepdml/faster-whisper-large-v3-turbo-ct2` with `device=cuda`, `compute_type=float16`; any other device resolves to `small` with `device=cpu`, `compute_type=int8` |
+| `pip install -e .[dev]` (Scope step 7) | `pip install -e .[dev,<hw-ort-extra>]`; ONNX Runtime is a hardware extra, named for the host by `awf-setup --provision` |
 
 ## Context
 

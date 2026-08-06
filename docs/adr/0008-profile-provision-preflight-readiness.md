@@ -2,7 +2,8 @@
 
 ## Status
 
-Proposed. Not implemented.
+Implemented. Acceptance run outstanding: the suite count against the 394
+baseline, `awf-setup --provision --verify` output, and the voice round trip.
 
 ## Context
 

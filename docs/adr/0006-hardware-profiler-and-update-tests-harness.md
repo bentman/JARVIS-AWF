@@ -2,7 +2,26 @@
 
 ## Status
 
-Implemented.
+Implemented. Amended in part by ADR-0008.
+
+## Amended by ADR-0008
+
+ADR-0008 split profile resolution into four stages, which retires several
+things this record describes. Everything not listed stands.
+
+| Stated here | Current |
+|---|---|
+| `_probe_evidence(arch)` and its `available_providers` / `cuda_verified` / `gpu_verified` / `qnn_verified` keys (Context; Part A steps 5-6) | removed. `hardware/preflight.py` emits tokens; `hardware/readiness.py` derives a device per speech function |
+| per-platform GPU execution-provider candidates (Context; Rationale) | `GPU_PROVIDER_CANDIDATES` and `_verify_gpu_provider` removed. No installable ONNX Runtime distribution offers the providers that table named |
+| the `_verify_provider_loads` session-construction probe | removed. Provider availability comes from `get_available_providers()` alone; constructing a `CUDAExecutionProvider` session crashed the process natively on a host with a mismatched CUDA toolchain |
+| `hardware_profile_resolved` carrying `inventory` and `evidence` (Consequences) | carries `profile_id`, `inventory`, `tokens`, and four `readiness` results |
+| the `profile` report adding the profile ID "with its probe evidence" (Part D) | adds the profile ID with its tokens and readiness results |
+| `pip install -e .[dev]` (Part B; Scope step 5; Acceptance; Consequences) | `pip install -e .[dev,<hw-ort-extra>]`. ONNX Runtime moved from base dependencies into `hw-ort-cpu`, `hw-ort-cuda`, `hw-ort-directml`, `hw-ort-qnn`; `awf-setup --provision` names the one for the host. `onnx` moved to the `dev` extra |
+
+`activate_qnn_execution_provider`, `resolve_qnn_backend_path`, and the OpenCL
+platform probe moved from `profiler.py` to `hardware/preflight.py` unchanged.
+The module rename, the single project file, the three test tiers, the marker
+set, and the validation harness stand as written.
 
 ## Context
 

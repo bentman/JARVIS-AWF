@@ -2,12 +2,7 @@
 
 ## Status
 
-Implemented. Acceptance run: `pytest backend/tests` → 394 passed, matching
-the baseline; `awf-setup --provision --verify` on this host reports the
-installed onnxruntime distribution, version, and providers, plus the
-documented onnxruntime distribution-name pip-check conflict (expected per
-`setup.py`'s `_KNOWN_ORT_NAME_CONFLICT`, not a defect). The voice round trip
-remains outstanding.
+Implemented.
 
 Separately, `scripts/validate_backend.py`'s `profile` command called
 `resolve_hardware_profile_id()` with no arguments — a stale call site missed

@@ -120,7 +120,7 @@ def cmd_profile(_args: argparse.Namespace) -> int:
         lines.append(f"awf_import_error={type(exc).__name__}: {exc}")
     else:
         try:
-            profile_id, evidence = resolve_hardware_profile_id()
+            profile_id, evidence = resolve_hardware_profile_id(REPO_ROOT)
             lines.append(f"hardware_profile_id={profile_id}")
             lines.append(f"hardware_profile_evidence={evidence}")
         except Exception as exc:

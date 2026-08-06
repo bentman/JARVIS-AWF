@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-06 11:35
+  - Host class(es): Linux/WSL2, AMD64, NVIDIA GeForce RTX 3060
+  - Summary: Fixed a stale call site in `scripts/validate_backend.py`'s `profile` command that predated ADR-0008's addition of a required `repo_root` parameter to `resolve_hardware_profile_id()`, and confirmed two of ADR-0008's three outstanding acceptance items against this host.
+  - Scope: `scripts/validate_backend.py`, `docs/adr/0008-profile-provision-preflight-readiness.md`.
+  - Validation: reproduced the `TypeError: resolve_hardware_profile_id() missing 1 required positional argument: 'repo_root'` recorded in `reports/diagnostics/20260806112237-profile.txt`; after passing the script's own `REPO_ROOT`, `validate_backend.py profile` resolves `linux-x64-cuda` with real inventory/tokens/readiness evidence (`reports/diagnostics/20260806113105-profile.txt`); `pytest backend/tests` → 394 passed, unchanged; `awf-setup --provision --verify` on this host reports the installed onnxruntime distribution, version, providers, and the documented onnxruntime distribution-name pip-check conflict (expected per `setup.py`'s `_KNOWN_ORT_NAME_CONFLICT`, not a defect).
+  - Notes: ADR-0008's voice-round-trip acceptance item remains outstanding.
+
 - Timestamp: 2026-08-05 19:42
   - Host class(es): Linux/WSL2, AMD64, NVIDIA GeForce RTX 3060
   - Summary: Environment finding during ADR-0008 implementation - constructing an ONNX Runtime session with `CUDAExecutionProvider` segfaults the process on this host once `onnxruntime-gpu` is installed, because the venv also carries a CUDA 13.x toolchain (`nvidia-cudnn-cu13`, `cuda-toolkit` 13.0.3) pulled in transitively through `torch`, which arrives via `silero-vad`'s own dependency - a native ABI mismatch a Python `try`/`except` cannot catch. `hardware/preflight.py` no longer constructs any ONNX Runtime session as a result; provider availability (`ep:<provider>`) plus the corresponding hardware fact is what selects a device, and a real backend failure now surfaces at the adapter's own first use instead.

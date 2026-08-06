@@ -2,8 +2,21 @@
 
 ## Status
 
-Implemented. Acceptance run outstanding: the suite count against the 394
-baseline, `awf-setup --provision --verify` output, and the voice round trip.
+Implemented. Acceptance run: `pytest backend/tests` → 394 passed, matching
+the baseline; `awf-setup --provision --verify` on this host reports the
+installed onnxruntime distribution, version, and providers, plus the
+documented onnxruntime distribution-name pip-check conflict (expected per
+`setup.py`'s `_KNOWN_ORT_NAME_CONFLICT`, not a defect). The voice round trip
+remains outstanding.
+
+Separately, `scripts/validate_backend.py`'s `profile` command called
+`resolve_hardware_profile_id()` with no arguments — a stale call site missed
+when this ADR added the required `repo_root` parameter to that function's
+signature (every other call site, including this module's own
+`run_hardware_profiler` and the integration tests, was updated). Fixed to
+pass the script's own `REPO_ROOT`; it now resolves `linux-x64-cuda` on this
+host with full inventory/tokens/readiness evidence, consistent with this
+ADR's acceptance criteria above.
 
 ## Context
 

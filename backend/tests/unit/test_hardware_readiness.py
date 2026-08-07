@@ -63,24 +63,27 @@ def test_tts_resolves_cuda_for_nvidia(arch):
 
 
 @pytest.mark.parametrize("gpu_vendor", ["amd", "intel"])
-def test_tts_resolves_directml_on_windows(gpu_vendor):
-    inventory = _inventory(os_name="windows", gpu_available=True, gpu_vendor=gpu_vendor)
+@pytest.mark.parametrize("arch", ["x64", "arm64"])
+def test_tts_resolves_directml_on_windows(arch, gpu_vendor):
+    inventory = _inventory(arch=arch, os_name="windows", gpu_available=True, gpu_vendor=gpu_vendor)
     tokens = ["import:kokoro_onnx", "ep:DmlExecutionProvider"]
     result = derive_tts_readiness(inventory, tokens)
     assert result.device == "directml"
     assert result.ready is True
 
 
-def test_tts_resolves_qnn_for_qualcomm():
-    inventory = _inventory(arch="arm64", npu_vendor="qualcomm", npu_available=True)
+@pytest.mark.parametrize("arch", ["x64", "arm64"])
+def test_tts_resolves_qnn_for_qualcomm(arch):
+    inventory = _inventory(arch=arch, npu_vendor="qualcomm", npu_available=True)
     tokens = ["import:kokoro_onnx", "ep:QNNExecutionProvider", "dll:QnnHtp"]
     result = derive_tts_readiness(inventory, tokens)
     assert result.device == "qnn"
     assert result.ready is True
 
 
-def test_tts_floors_to_cpu_with_no_accelerator():
-    inventory = _inventory()
+@pytest.mark.parametrize("arch", ["x64", "arm64"])
+def test_tts_floors_to_cpu_with_no_accelerator(arch):
+    inventory = _inventory(arch=arch)
     tokens = ["import:kokoro_onnx"]
     result = derive_tts_readiness(inventory, tokens)
     assert result.device == "cpu"

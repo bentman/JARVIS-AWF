@@ -19,6 +19,7 @@ from pathlib import Path
 from awf.cli import core_ops as ops
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
+from awf.paths import db_path as resolve_db_path
 
 METHOD_NAMES = (
     "awf/run.start",
@@ -126,7 +127,7 @@ def serve_stdio(repo_root: Path, *, in_stream=None, out_stream=None) -> None:
     in_stream = in_stream if in_stream is not None else sys.stdin
     out_stream = out_stream if out_stream is not None else sys.stdout
 
-    db_path = repo_root / "data" / "awf_db" / "awf.db"
+    db_path = resolve_db_path(repo_root)
     init_db(db_path)
     conn = get_connection(db_path)
 

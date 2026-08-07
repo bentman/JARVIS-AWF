@@ -89,10 +89,11 @@ class HardwareProfilerError(RuntimeError):
 
 @dataclass(frozen=True)
 class HardwareInventory:
-    """Descriptive host facts. Informational evidence only - the canonical
-    profile ID is decided by execution-provider verification, never by these
-    fields, so a detector that comes back empty degrades the record's detail
-    and nothing else."""
+    """Descriptive host facts. The canonical profile ID is rolled up from the
+    four per-function readiness results (ADR-0008), which consult these
+    fields alongside preflight tokens - a detector that comes back empty
+    degrades the record's detail and can floor a function's readiness to
+    `cpu`, but decides nothing by itself."""
 
     os_name: str = "unknown"
     os_version: str = "unknown"

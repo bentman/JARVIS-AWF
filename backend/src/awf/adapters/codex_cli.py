@@ -32,10 +32,11 @@ import tomllib
 from pathlib import Path
 
 from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
+from awf.paths import REPO_ROOT
 
 DEFAULT_TIMEOUT_SECONDS = 300
 DANGER_SANDBOX_MODE = "danger-full-access"
-DEFAULT_PROFILE_PATH = Path(__file__).resolve().parents[4] / "config" / "codex" / "awf-default.toml"
+DEFAULT_PROFILE_PATH = REPO_ROOT / "config" / "codex" / "awf-default.toml"
 
 
 class CodexAdapterError(RuntimeError):

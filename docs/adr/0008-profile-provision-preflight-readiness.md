@@ -13,6 +13,20 @@ pass the script's own `REPO_ROOT`; it now resolves `linux-x64-cuda` on this
 host with full inventory/tokens/readiness evidence, consistent with this
 ADR's acceptance criteria above.
 
+A later validation pass found four residual gaps against the "single source
+of truth" and test-coverage claims below, all fixed:
+`backend/src/awf/adapters/codex_cli.py` still derived the repo root by
+counting path parents, uncounted by this ADR's own baseline — repointed at
+`awf.paths.REPO_ROOT`; `server/stdio.py` and `cli/core_ops.py` each
+hardcoded `data/awf_db/awf.db` instead of calling `awf.paths.db_path()` —
+repointed at it; `HardwareInventory`'s docstring still described the
+pre-ADR design where the profile ID came from execution-provider
+verification — reworded to describe the readiness roll-up; and
+`test_hardware_readiness.py`'s directml/qualcomm/no-accelerator cases were
+not parametrized across both architectures as Scope item 10 states, though
+`readiness.py` never reads `inventory.arch` — parametrization added for
+literal coverage.
+
 ## Context
 
 `pyproject.toml` declares `onnxruntime>=1.28` among the base dependencies.

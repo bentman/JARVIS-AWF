@@ -27,6 +27,7 @@ from awf.gates.gate_node import make_trifecta_gate_executor
 from awf.ids import uuid7
 from awf.isolation.scratch import create_scratch_dir, remove_scratch_dir, scratch_path
 from awf.isolation.worktree import create_worktree, remove_worktree, worktree_path
+from awf.paths import db_path as resolve_db_path
 from awf.paths import env_path
 from awf.registry.agent_manifest import load_agent_manifest
 from awf.registry.capability_record import parse_capability_record
@@ -151,7 +152,7 @@ def _make_run_map_item(artifacts_root: Path, repo_root: Path):
 
         from awf.db.connection import get_connection
 
-        db_path = repo_root / "data" / "awf_db" / "awf.db"
+        db_path = resolve_db_path(repo_root)
         item_conn = get_connection(db_path)
         try:
             child_workflow = _resolve_workflow(repo_root, workflow_ref)

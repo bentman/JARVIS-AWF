@@ -38,8 +38,7 @@ export function runVoiceRoundTrip(options: RunVoiceRoundTripOptions): Promise<Vo
       "round-trip",
       options.wakeAudioPath,
       options.commandAudioPath,
-      "--voice-id",
-      options.voiceId ?? "bf_isabella",
+      ...(options.voiceId ? ["--voice-id", options.voiceId] : []),
       "--response-audio-out",
       options.responseAudioOutPath,
     ];

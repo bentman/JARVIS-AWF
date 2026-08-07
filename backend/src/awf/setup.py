@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 from awf.db.bootstrap import init_db
-from awf.paths import REPO_ROOT, db_path
+from awf.paths import REPO_ROOT, db_path, env_path, sandbox_dir, temp_dir
 
 PLACEHOLDER = "<your-secret-key-here>"
 
@@ -33,18 +33,18 @@ def _generate_secret_key() -> str:
 
 
 def bootstrap_repo(repo_root: Path) -> None:
-    env_path = repo_root / ".env"
+    dot_env_path = env_path(repo_root)
     example_path = repo_root / ".env.example"
 
-    if not env_path.exists():
+    if not dot_env_path.exists():
         if not example_path.exists():
             raise FileNotFoundError(f"missing template: {example_path}")
         content = example_path.read_text()
         content = content.replace(PLACEHOLDER, _generate_secret_key())
-        env_path.write_text(content)
+        dot_env_path.write_text(content)
 
-    (repo_root / "cache" / "sandbox").mkdir(parents=True, exist_ok=True)
-    (repo_root / "cache" / "temp").mkdir(parents=True, exist_ok=True)
+    sandbox_dir(repo_root).mkdir(parents=True, exist_ok=True)
+    temp_dir(repo_root).mkdir(parents=True, exist_ok=True)
 
     init_db(db_path(repo_root))
 

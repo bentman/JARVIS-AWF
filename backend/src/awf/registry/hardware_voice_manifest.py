@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from awf.paths import models_dir
+from awf.paths import config_voice_dir, models_dir
 
 FUNCTIONS = ("stt", "tts", "vad", "wake")
 
@@ -90,7 +90,7 @@ def load_hardware_voice_manifest(path: Path) -> HardwareVoiceManifest:
 
 
 def resolve_hardware_voice_manifest_path(repo_root: Path, function: str) -> Path:
-    return repo_root / "config" / "voice" / f"{function}.yaml"
+    return config_voice_dir(repo_root) / f"{function}.yaml"
 
 
 def artifact_paths(repo_root: Path, function: str) -> dict[str, Path]:

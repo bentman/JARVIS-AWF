@@ -60,6 +60,7 @@ from awf.guard.capability_guard import Decision, authorize
 from awf.isolation.scratch import scratch_path
 from awf.isolation.worktree import commit_all_changes
 from awf.mcp.render import RENDERERS
+from awf.paths import env_path
 from awf.registry.agent_manifest import SkillRef
 from awf.registry.capability_record import CapabilityRecord
 from awf.registry.mcp_server import load_mcp_server
@@ -115,7 +116,7 @@ def _resolve_secrets(conn: sqlite3.Connection, repo_root: Path, servers) -> dict
         secret_names.update(server.header_secrets.values())
     if not secret_names:
         return {}
-    secret_key = get_env_value(repo_root / ".env", "AWF_SECRET_KEY").encode("ascii")
+    secret_key = get_env_value(env_path(repo_root), "AWF_SECRET_KEY").encode("ascii")
     return {name: get_secret(conn, name, secret_key) for name in secret_names}
 
 

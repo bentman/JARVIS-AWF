@@ -27,6 +27,28 @@ def test_load_r0_capability_record(load_fixture):
     assert record.ref == "read_file@1.0.0"
 
 
+@pytest.mark.parametrize(
+    "name,expected_provider,expected_risk_class",
+    [
+        ("hardware_probe", "awf", "R0"),
+        ("gpu_utilization_sample", "awf", "R0"),
+        ("claude_code_invoke", "claude-code", "R1"),
+        ("codex_invoke", "codex", "R1"),
+        ("antigravity_invoke", "antigravity", "R1"),
+        ("copilot_invoke", "copilot", "R1"),
+    ],
+)
+def test_load_shipped_adr0009_capability_records(repo_root, name, expected_provider, expected_risk_class):
+    record = load_capability_record(
+        repo_root / "config" / "app_registry" / "capabilities" / name / "1.0.0.yaml"
+    )
+    assert record.identity.name == name
+    assert record.identity.provider == expected_provider
+    assert record.risk_class == expected_risk_class
+    assert record.approval == "never"
+    assert record.ref == f"{name}@1.0.0"
+
+
 def test_load_rejects_missing_field():
     with pytest.raises(RegistryValidationError):
         parse_capability_record({"identity": {"type": "activity"}})

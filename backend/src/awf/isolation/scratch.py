@@ -6,9 +6,11 @@ Nothing durable may be written here - safe to delete at any time, never backed u
 import shutil
 from pathlib import Path
 
+from awf.paths import scratch_dir
+
 
 def scratch_path(repo_root: Path, run_id: str) -> Path:
-    return repo_root / "cache" / "sandbox" / run_id
+    return scratch_dir(repo_root, run_id)
 
 
 def create_scratch_dir(repo_root: Path, run_id: str) -> Path:

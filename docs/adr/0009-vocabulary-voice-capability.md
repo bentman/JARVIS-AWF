@@ -2,9 +2,41 @@
 
 ## Status
 
-Proposed. Not implemented.
+Implemented. All three tasks landed together (each still stands alone;
+none depended on another for its own correctness).
 
-Three independent tasks. Each stands alone; none depends on another.
+Acceptance evidence: `pytest backend/tests` -> 415 passed (up from the 394
+baseline, same 0 skips); all six `scripts/validate_backend.py` commands
+returned exit 0; a repo-wide grep confirms no module under
+`backend/src/awf/` assembles `config/app_registry`, `data/registry`,
+`config/voice`, `cache/sandbox`, `cache/temp`, or `.env` from path segments
+except `awf/paths.py` (this closed two `.env`-assembly sites in
+`cli/core_ops.py` and `secrets/cli.py` that this ADR's own file list didn't
+name but its acceptance criterion covers); `bf_isabella` appears only in
+`config/app_registry/voice-profiles/narrator/1.0.0.yaml` (plus test files
+asserting the real shipped value, and the renderer's own
+`VoiceActivation.tsx` voice-selector dropdown, which enumerates all four
+registered voices rather than restating a default); a live
+`awf-speech round-trip` run with no `--voice-id` produced narrator-voice
+audio and a run with `--voice-id am_michael` produced genuinely
+byte-different audio; `config/app_registry/capabilities/` now holds the six
+records, each loading through `load_capability_record`; an `activity` node
+run with `repo_root` set records an `ALLOW` Guard decision referencing the
+published `hardware_probe@1.0.0` record, and an `activity` node whose
+record is forced to `R3` fails the Step with `failure_class ==
+POLICY_DENIED`; `frontend/gui` - 29 tests passed, `tsc --strict` clean.
+
+One inconsistency between this ADR's text and the codebase was resolved
+before implementation: the `provider` field on `claude_code_invoke`'s
+Mechanism example originally read `claude_code` (underscore), but the real
+registered adapter/actor key in `core_ops.ADAPTER_REGISTRY` and
+`mcp/render.RENDERERS` is `"claude-code"` (hyphen). Confirmed with the
+operator; both the example below and the shipped record use `provider:
+claude-code`, matching the real actor string per this ADR's own stated rule
+("provider matching the adapter key used as actor"). `identity.name`/the
+record's file path stay `claude_code_invoke` as originally specified - that
+is the registry object's own name, not the actor string, and the two are
+allowed to differ.
 
 ## Context
 
@@ -163,7 +195,7 @@ Four adapter-action records, one per named adapter present in
 `awf/adapters/`, with `provider` matching the adapter key used as `actor`:
 
 ```yaml
-identity: {type: cli-adapter-action, provider: claude_code, name: claude_code_invoke, version: 1.0.0}
+identity: {type: cli-adapter-action, provider: claude-code, name: claude_code_invoke, version: 1.0.0}
 schema: {input: "", output: ""}
 effects: {operation: update, reversible: true, idempotent: false, external_side_effect: true}
 risk_class: R1

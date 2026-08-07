@@ -5,7 +5,11 @@ from pathlib import Path
 
 import yaml
 
+from awf.registry.resolve import resolve_registry_object
+
 FALLBACK_MODES = ("none", "ordered")
+
+DEFAULT_VOICE_PROFILE_REF = "narrator@1.0.0"
 
 
 class VoiceProfileValidationError(ValueError):
@@ -113,3 +117,15 @@ def load_voice_profile(path: Path) -> VoiceProfile:
     if not isinstance(raw, dict):
         raise VoiceProfileValidationError(f"{path}: voice profile must be a YAML mapping")
     return parse_voice_profile(raw)
+
+
+def resolve_default_voice_id(repo_root: Path) -> str:
+    name, _, version = DEFAULT_VOICE_PROFILE_REF.partition("@")
+    path, _source = resolve_registry_object(repo_root, "voice-profiles", name, version)
+    profile = load_voice_profile(path)
+    candidates = profile.enabled_candidates_by_priority()
+    if not candidates:
+        raise VoiceProfileValidationError(
+            f"voice profile '{DEFAULT_VOICE_PROFILE_REF}' has no enabled candidates"
+        )
+    return candidates[0].voice_id

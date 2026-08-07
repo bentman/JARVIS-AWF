@@ -9,8 +9,8 @@ back to `config/app_registry/<kind>/<name>/`.
 
 from pathlib import Path
 
-CONFIG_ROOT = "config/app_registry"
-DATA_ROOT = "data/registry"
+from awf.paths import CONFIG_REGISTRY_RELATIVE as CONFIG_ROOT
+from awf.paths import DATA_REGISTRY_RELATIVE as DATA_ROOT
 
 # model-profiles names a specific provider account and budget, so it is
 # always operator-specific and has no config/app_registry/ counterpart.

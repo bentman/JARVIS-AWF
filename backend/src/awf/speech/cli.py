@@ -20,6 +20,7 @@ from pathlib import Path
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.paths import REPO_ROOT, db_path
+from awf.registry.voice_profile import resolve_default_voice_id
 from awf.speech.models import artifact_paths, sync_models, verify_models
 from awf.speech.pipeline import VoicePipelineError, run_voice_round_trip
 
@@ -35,7 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     round_trip = sub.add_parser("round-trip")
     round_trip.add_argument("wake_audio_path")
     round_trip.add_argument("command_audio_path")
-    round_trip.add_argument("--voice-id", default="bf_isabella")
+    round_trip.add_argument("--voice-id", default=None)
     round_trip.add_argument("--response-audio-out", required=True)
 
     models = sub.add_parser("models")
@@ -54,6 +55,7 @@ def _run_round_trip(args: argparse.Namespace, repo_root: Path) -> int:
     conn_db_path = db_path(repo_root)
     init_db(conn_db_path)
     conn = get_connection(conn_db_path)
+    voice_id = args.voice_id or resolve_default_voice_id(repo_root)
 
     try:
         result = run_voice_round_trip(
@@ -67,7 +69,7 @@ def _run_round_trip(args: argparse.Namespace, repo_root: Path) -> int:
             vad_model_path=vad_paths["silero_vad.onnx"],
             tts_model_path=tts_paths["kokoro-v1.0.onnx"],
             tts_voices_path=tts_paths["voices-v1.0.bin"],
-            voice_id=args.voice_id,
+            voice_id=voice_id,
             core_fn=_echo_core,
         )
     except VoicePipelineError as exc:

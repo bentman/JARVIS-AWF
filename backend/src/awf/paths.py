@@ -11,6 +11,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
+CONFIG_REGISTRY_RELATIVE = "config/app_registry"
+DATA_REGISTRY_RELATIVE = "data/registry"
+
 
 def db_path(repo_root: Path) -> Path:
     return repo_root / "data" / "awf_db" / "awf.db"
@@ -18,3 +21,31 @@ def db_path(repo_root: Path) -> Path:
 
 def models_dir(repo_root: Path, function: str) -> Path:
     return repo_root / "models" / function
+
+
+def env_path(repo_root: Path) -> Path:
+    return repo_root / ".env"
+
+
+def config_registry_dir(repo_root: Path) -> Path:
+    return repo_root / CONFIG_REGISTRY_RELATIVE
+
+
+def data_registry_dir(repo_root: Path) -> Path:
+    return repo_root / DATA_REGISTRY_RELATIVE
+
+
+def config_voice_dir(repo_root: Path) -> Path:
+    return repo_root / "config" / "voice"
+
+
+def sandbox_dir(repo_root: Path) -> Path:
+    return repo_root / "cache" / "sandbox"
+
+
+def scratch_dir(repo_root: Path, run_id: str) -> Path:
+    return sandbox_dir(repo_root) / run_id
+
+
+def temp_dir(repo_root: Path) -> Path:
+    return repo_root / "cache" / "temp"

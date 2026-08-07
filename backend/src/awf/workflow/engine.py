@@ -28,6 +28,12 @@ resolve a real, published Capability Record; one that doesn't gets a
 conservative synthesized R1/approval-never record instead, so every
 invocation is still authorized and logged, never skipped.
 
+`activity` nodes pass through the same Guard chokepoint (ADR-0009) when the
+executor is constructed with a `repo_root`: the node's `function` name
+resolves a published `capabilities/<function>/1.0.0` record if one exists,
+else a conservative synthesized activity/R1/approval-never record, mirroring
+the `agent`-node fallback.
+
 A node MAY also declare `agentRef: name@version` (ADR-0002) resolving a
 real Agent Manifest, whose `adapter`/`capabilities`/`role`/`voice` become
 this invocation's defaults - the node's own `adapter`/`role` fields still
@@ -51,12 +57,13 @@ from typing import Callable
 from awf.adapters.base import AgentInvocation
 from awf.clock import utc_now_rfc3339
 from awf.engine.agent_step import run_agent_step
-from awf.engine.executor import run_step
+from awf.engine.executor import StepFailure, run_step
 from awf.engine.run import create_step
 from awf.events.writer import write_event
+from awf.guard.capability_guard import Decision, authorize
 from awf.registry.agent_manifest import AgentManifest, load_agent_manifest
 from awf.registry.capability_record import CapabilityRecord, Effects, Identity, load_capability_record
-from awf.registry.resolve import resolve_registry_object
+from awf.registry.resolve import RegistryObjectNotFoundError, resolve_registry_object
 from awf.workflow.activities import ACTIVITY_REGISTRY, UnknownActivityError
 from awf.workflow.definition import WorkflowDefinition
 from awf.workflow.io_schema import OutputValidationError, render_outputs, validate_output
@@ -152,7 +159,32 @@ def make_agent_node_executor(
     return executor
 
 
-def make_activity_node_executor(activity_registry: dict = ACTIVITY_REGISTRY) -> NodeExecutor:
+def _synthesized_capability_for_activity(node: dict) -> CapabilityRecord:
+    """A conservative stand-in Capability Record for an `activity` node whose
+    function has no published record - the activity counterpart of
+    `_synthesized_capability_for_node`, still real enough to be evaluated
+    and logged by the Guard, never a rubber stamp."""
+    return CapabilityRecord(
+        identity=Identity(type="activity", provider="awf", name=node["function"], version="0.0.0"),
+        schema_input="",
+        schema_output="",
+        effects=Effects(operation="execute", reversible=True, idempotent=True, external_side_effect=False),
+        risk_class="R1",
+        approval="never",
+    )
+
+
+def _resolve_activity_capability(node: dict, repo_root: Path) -> CapabilityRecord:
+    try:
+        path, _source = resolve_registry_object(repo_root, "capabilities", node["function"], "1.0.0")
+    except RegistryObjectNotFoundError:
+        return _synthesized_capability_for_activity(node)
+    return load_capability_record(path)
+
+
+def make_activity_node_executor(
+    activity_registry: dict = ACTIVITY_REGISTRY, repo_root: Path | None = None
+) -> NodeExecutor:
     def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
         def fn(_payload: dict) -> dict:
             activity_fn = activity_registry.get(node["function"])
@@ -160,6 +192,21 @@ def make_activity_node_executor(activity_registry: dict = ACTIVITY_REGISTRY) -> 
                 raise UnknownActivityError(
                     f"node '{node['id']}': no registered activity named '{node['function']}'"
                 )
+            if repo_root is not None:
+                capability = _resolve_activity_capability(node, repo_root)
+                decision = authorize(
+                    conn,
+                    capability=capability,
+                    agent_allowlist=[capability.ref],
+                    run_id=run_id,
+                    actor="awf",
+                    step_id=step_id,
+                )
+                if decision != Decision.ALLOW:
+                    raise StepFailure(
+                        f"blocked by Capability Guard: {decision.value}",
+                        failure_class="POLICY_DENIED",
+                    )
             return activity_fn(conn, node.get("args", {}))
 
         return run_step(conn, step_id=step_id, run_id=run_id, fn=fn, input_payload={})

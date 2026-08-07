@@ -14,12 +14,12 @@ from pathlib import Path
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.envfile import get_env_value, set_env_value
-from awf.paths import REPO_ROOT, db_path
+from awf.paths import REPO_ROOT, db_path, env_path
 from awf.secrets.store import get_secret, list_secret_names, rotate_key, set_secret
 
 
 def _load_key(repo_root: Path) -> bytes:
-    return get_env_value(repo_root / ".env", "AWF_SECRET_KEY").encode("ascii")
+    return get_env_value(env_path(repo_root), "AWF_SECRET_KEY").encode("ascii")
 
 
 def cmd_set(args: argparse.Namespace, repo_root: Path) -> int:
@@ -49,7 +49,7 @@ def cmd_rotate_key(args: argparse.Namespace, repo_root: Path) -> int:
         rotate_key(conn, _load_key(repo_root), new_key.encode("ascii"))
     finally:
         conn.close()
-    set_env_value(repo_root / ".env", "AWF_SECRET_KEY", new_key)
+    set_env_value(env_path(repo_root), "AWF_SECRET_KEY", new_key)
     return 0
 
 

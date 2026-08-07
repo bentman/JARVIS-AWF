@@ -27,6 +27,7 @@ from awf.gates.gate_node import make_trifecta_gate_executor
 from awf.ids import uuid7
 from awf.isolation.scratch import create_scratch_dir, remove_scratch_dir, scratch_path
 from awf.isolation.worktree import create_worktree, remove_worktree, worktree_path
+from awf.paths import env_path
 from awf.registry.agent_manifest import load_agent_manifest
 from awf.registry.capability_record import parse_capability_record
 from awf.registry.mcp_server import parse_mcp_server
@@ -79,7 +80,7 @@ def _resolve_named_review_profile(node: dict, repo_root: Path, field_name: str):
     path, _source = resolve_registry_object(repo_root, "model-profiles", name, version)
     profile = load_model_profile(path)
     try:
-        secret_key = get_env_value(repo_root / ".env", "AWF_SECRET_KEY").encode("ascii")
+        secret_key = get_env_value(env_path(repo_root), "AWF_SECRET_KEY").encode("ascii")
     except (FileNotFoundError, KeyError):
         secret_key = None
     return profile, secret_key
@@ -190,7 +191,7 @@ def _build_node_executors(
     run_map_item = _make_run_map_item(artifacts_root, repo_root)
     executors = {
         "agent": make_agent_node_executor(ADAPTER_REGISTRY, worktree, repo_root),
-        "activity": make_activity_node_executor(),
+        "activity": make_activity_node_executor(repo_root=repo_root),
         "approval": make_approval_node_executor(),
         "subworkflow": make_subworkflow_node_executor(run_child),
         "map": make_map_node_executor(run_map_item, worktree_path=worktree, repo_root=repo_root),
@@ -532,7 +533,7 @@ def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path
 
 
 def op_secret_set(repo_root: Path, conn: sqlite3.Connection, *, name: str, value: str) -> dict:
-    key = get_env_value(repo_root / ".env", "AWF_SECRET_KEY").encode("ascii")
+    key = get_env_value(env_path(repo_root), "AWF_SECRET_KEY").encode("ascii")
     set_secret(conn, name, value, key)
     return {"name": name, "status": "set"}
 

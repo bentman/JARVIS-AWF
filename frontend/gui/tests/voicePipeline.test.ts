@@ -67,6 +67,49 @@ describe("runVoiceRoundTrip", () => {
     expect(result.wake_detected).toBe(true);
   });
 
+  it("omits --voice-id entirely when voiceId is not supplied, letting the CLI resolve its own default", async () => {
+    const { runVoiceRoundTrip } = await import("../src/main/voicePipeline.js");
+    const child = makeFakeChild();
+    spawnMock.mockReturnValue(child);
+
+    const promise = runVoiceRoundTrip({
+      cwd: "/repo",
+      wakeAudioPath: "/repo/hey_jarvis.wav",
+      commandAudioPath: "/repo/hello_world.wav",
+      responseAudioOutPath: "/tmp/out.wav",
+    });
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      "awf-speech",
+      [
+        "round-trip",
+        "/repo/hey_jarvis.wav",
+        "/repo/hello_world.wav",
+        "--response-audio-out",
+        "/tmp/out.wav",
+      ],
+      { cwd: "/repo" },
+    );
+
+    child.stdout.emit(
+      "data",
+      Buffer.from(
+        JSON.stringify({
+          wake_detected: true,
+          wake_score: 0.96,
+          speech_segments: [[0.64, 1.34]],
+          command_text: "Hello world.",
+          command_language: "en",
+          response_text: "Acknowledged: Hello world.",
+          response_audio_path: "/tmp/out.wav",
+        }) + "\n",
+      ),
+    );
+    child.emit("close", 0);
+
+    await promise;
+  });
+
   it("rejects with the pipeline's error message when the wake word never fires", async () => {
     const { runVoiceRoundTrip } = await import("../src/main/voicePipeline.js");
     const child = makeFakeChild();

@@ -2,6 +2,7 @@ import pytest
 
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
+from awf.engine.executor import StepFailure
 from awf.engine.run import create_run, create_step
 from awf.workflow.activities import UnknownActivityError
 from awf.workflow.engine import make_activity_node_executor
@@ -60,3 +61,47 @@ def test_activity_replay_after_succeeded_returns_cached_output_without_reprobing
 
     assert second == first
     assert calls == []  # run_step's SUCCEEDED cache short-circuited before the activity re-ran
+
+
+def test_activity_node_with_repo_root_authorizes_through_the_published_record(conn, repo_root):
+    create_step(conn, step_id="step-1", run_id="run-1", node_id="probe")
+    executor = make_activity_node_executor(repo_root=repo_root)
+
+    executor(conn, "run-1", "step-1", {"id": "probe", "type": "activity", "function": "hardware_probe"})
+
+    decision_event = conn.execute(
+        "SELECT * FROM events WHERE actor = 'awf' AND new_status = 'allow'"
+    ).fetchone()
+    assert decision_event is not None
+    assert '"capability_ref": "hardware_probe@1.0.0"' in decision_event["payload_json"]
+    assert '"risk_class": "R0"' in decision_event["payload_json"]
+
+
+def test_activity_node_denies_when_published_record_is_r3(conn, tmp_path, monkeypatch):
+    override_dir = tmp_path / "data" / "registry" / "capabilities" / "hardware_probe"
+    override_dir.mkdir(parents=True)
+    (override_dir / "1.0.0.yaml").write_text(
+        "identity: {type: activity, provider: awf, name: hardware_probe, version: 1.0.0}\n"
+        'schema: {input: "", output: ""}\n'
+        "effects: {operation: read, reversible: true, idempotent: true, external_side_effect: false}\n"
+        "risk_class: R3\n"
+        "approval: per-invocation\n"
+    )
+
+    calls = []
+    monkeypatch.setattr(
+        "awf.workflow.activities.run_hardware_profiler",
+        lambda conn: calls.append(1) or "should-not-be-called",
+    )
+
+    create_step(conn, step_id="step-1", run_id="run-1", node_id="probe")
+    executor = make_activity_node_executor(repo_root=tmp_path)
+
+    with pytest.raises(StepFailure):
+        executor(conn, "run-1", "step-1", {"id": "probe", "type": "activity", "function": "hardware_probe"})
+
+    assert calls == []  # the Guard denial short-circuited before the activity ran
+
+    row = conn.execute("SELECT status, failure_class FROM steps WHERE step_id = 'step-1'").fetchone()
+    assert row["status"] == "FAILED"
+    assert row["failure_class"] == "POLICY_DENIED"

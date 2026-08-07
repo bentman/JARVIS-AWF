@@ -74,19 +74,6 @@ dist-ssr/
 *.local
 
 # ------------------------------------------------------------
-# Desktop / Tauri
-# ------------------------------------------------------------
-/desktop/node_modules/
-/desktop/dist/
-/desktop/src-tauri/target/
-/desktop/src-tauri/gen/
-
-# ------------------------------------------------------------
-# Docker overrides (local only)
-# ------------------------------------------------------------
-/docker-compose.override.yml
-
-# ------------------------------------------------------------
 # IDE / editor / OS
 # ------------------------------------------------------------
 .vscode/
@@ -103,8 +90,7 @@ Thumbs.db
 # base gate: block everything under /data/
 /data/*
 
-# re-include tree roots documented in repo_tree.md
-# (directories must be re-included before their contents)
+# re-include tree roots (directories must be re-included before their contents)
 !/data/artifacts/
 !/data/awf_db/
 !/data/registry
@@ -163,15 +149,12 @@ Thumbs.db
 
 
 # ------------------------------------------------------------
-# Top-level cache/ (Redis local persistence, temp outputs)
+# Top-level cache/ (sandbox scratch space)
 # ------------------------------------------------------------
 /cache/*
 /cache/sandbox/*
 !/cache/sandbox/
 !/cache/sandbox/.gitkeep
-/cache/temp/*
-!/cache/temp/
-!/cache/temp/.gitkeep
 
 # ------------------------------------------------------------
 # Backup files
@@ -197,19 +180,14 @@ Thumbs.db
 !/reports/benchmarks/.gitkeep
 /reports/diagnostics/*
 !/reports/diagnostics/.gitkeep
-/reports/tests/*
-!/reports/tests/.gitkeep
 /reports/validation/*
 !/reports/validation/.gitkeep
 !/reports/.gitkeep
-!/reports/validation/slice_h
 
 # ------------------------------------------------------------
 # Model artifacts (per-folder allowlist; prevent large binary commits
 # but permit `.gitkeep` placeholders)
 # ------------------------------------------------------------
-/models/llm/*
-!/models/llm/.gitkeep
 /models/stt/*
 !/models/stt/.gitkeep
 /models/tts/*
@@ -233,8 +211,3 @@ Thumbs.db
 **/*.pth
 **/*.ckpt
 **/*.ppn
-
-# Local runtime binaries are operator-acquired artifacts, not source.
-/runtimes/llama.cpp/*
-/**/llama-server
-/**/llama-server.exe

@@ -7,7 +7,6 @@ from awf.paths import (
     models_dir,
     sandbox_dir,
     scratch_dir,
-    temp_dir,
 )
 
 
@@ -41,7 +40,3 @@ def test_sandbox_dir(tmp_path):
 
 def test_scratch_dir(tmp_path):
     assert scratch_dir(tmp_path, "run-123") == tmp_path / "cache" / "sandbox" / "run-123"
-
-
-def test_temp_dir(tmp_path):
-    assert temp_dir(tmp_path) == tmp_path / "cache" / "temp"

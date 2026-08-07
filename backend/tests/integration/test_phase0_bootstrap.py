@@ -140,7 +140,6 @@ def test_bootstrap_repo_creates_cache_and_db(fake_repo):
     bootstrap_repo(fake_repo)
 
     assert (fake_repo / "cache" / "sandbox").is_dir()
-    assert (fake_repo / "cache" / "temp").is_dir()
     assert (fake_repo / "data" / "awf_db" / "awf.db").is_file()
 
 

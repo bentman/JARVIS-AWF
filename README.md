@@ -8,7 +8,16 @@ The unit of operation is a Run of a versioned Workflow. Agents are bounded execu
 
 ## 🚀 Quick Start
 
-Coming soon.
+```bash
+git clone <this-repo> && cd JARVIS-AWF
+python3.12 -m venv backend/.venv
+backend/.venv/bin/pip install -e .[dev]
+backend/.venv/bin/awf-setup            # populate .env, cache/sandbox/, data/awf_db/awf.db
+backend/.venv/bin/awf-setup --provision --verify   # explain, then check, the accelerator extra for this host
+backend/.venv/bin/pytest backend/tests
+```
+
+Windows (pwsh) uses `py -m venv .\backend\.venv` and `.\backend\.venv\Scripts\` in place of the Linux paths above.
 
 ## 🏗️ Architecture
 
@@ -59,7 +68,7 @@ Acceleration is resolved by a hardware probe at setup — hardware facts and ins
 
 ## 🚦 Status
 
-Working. The mandatory build sequence — bootstrap through the voice GUI — is complete, each phase gated on its own tests. The suite passes, and the voice round trip runs end to end on accelerated and CPU-only hosts alike.
+Working. The mandatory build sequence — bootstrap through the voice GUI — is complete, each phase gated on its own tests. The suite passes, the voice round trip runs end to end on accelerated and CPU-only hosts alike, and the repository tree matches the layout it documents.
 
 Outstanding: one of the five named CLI adapters, the optional container isolation tier, and a small number of documented deviations recorded under `docs/adr/`.
 

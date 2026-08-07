@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 from awf.db.bootstrap import init_db
-from awf.paths import REPO_ROOT, db_path, env_path, sandbox_dir, temp_dir
+from awf.paths import REPO_ROOT, db_path, env_path, sandbox_dir
 
 PLACEHOLDER = "<your-secret-key-here>"
 
@@ -44,7 +44,6 @@ def bootstrap_repo(repo_root: Path) -> None:
         dot_env_path.write_text(content)
 
     sandbox_dir(repo_root).mkdir(parents=True, exist_ok=True)
-    temp_dir(repo_root).mkdir(parents=True, exist_ok=True)
 
     init_db(db_path(repo_root))
 
@@ -178,16 +177,20 @@ def build_parser() -> argparse.ArgumentParser:
 def run(argv: list[str], repo_root: Path) -> int:
     args = build_parser().parse_args(argv)
 
+    commands = []
     if args.provision:
-        return cmd_provision(repo_root)
+        commands.append(cmd_provision)
     if args.install:
-        return cmd_install(repo_root)
+        commands.append(cmd_install)
     if args.verify:
-        return cmd_verify(repo_root)
+        commands.append(cmd_verify)
 
-    bootstrap_repo(repo_root)
-    print(f"AWF bootstrap complete: {db_path(repo_root)}")
-    return 0
+    if not commands:
+        bootstrap_repo(repo_root)
+        print(f"AWF bootstrap complete: {db_path(repo_root)}")
+        return 0
+
+    return max(command(repo_root) for command in commands)
 
 
 def main() -> int:

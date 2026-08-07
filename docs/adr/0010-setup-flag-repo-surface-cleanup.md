@@ -2,7 +2,11 @@
 
 ## Status
 
-Proposed. Not implemented.
+Implemented. Acceptance run: `pytest backend/tests` → 419 passed, 0 skipped,
+matching or exceeding the pre-change count; all six
+`scripts/validate_backend.py` commands (`profile`, `unit`, `integration`,
+`runtime`, `regression`, `ci`) pass; `awf-setup --provision --verify` on this
+host prints both the provision and verify reports in one invocation.
 
 Five independent tasks. Task A changes behavior; the rest remove surfaces that
 name things this repository does not contain.

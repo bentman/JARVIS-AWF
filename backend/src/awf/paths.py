@@ -45,7 +45,3 @@ def sandbox_dir(repo_root: Path) -> Path:
 
 def scratch_dir(repo_root: Path, run_id: str) -> Path:
     return sandbox_dir(repo_root) / run_id
-
-
-def temp_dir(repo_root: Path) -> Path:
-    return repo_root / "cache" / "temp"

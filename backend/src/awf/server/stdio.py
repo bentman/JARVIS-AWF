@@ -19,6 +19,7 @@ from pathlib import Path
 from awf.cli import core_ops as ops
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
+from awf.paths import artifacts_dir
 from awf.paths import db_path as resolve_db_path
 
 METHOD_NAMES = (
@@ -76,16 +77,16 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
         return ops.op_artifact_list(conn, run_id=params["runId"])
     if method == "awf/artifact.read":
         return ops.op_artifact_read(
-            conn, artifact_id=params["artifactId"], artifacts_root=repo_root / "data" / "artifacts"
+            conn, artifact_id=params["artifactId"], artifacts_root=artifacts_dir(repo_root)
         )
     if method == "awf/registry.list":
         return ops.op_registry_list(repo_root, kind=params["kind"])
     if method == "awf/registry.get":
         return ops.op_registry_get(repo_root, kind=params["kind"], name=params["name"], version=params["version"])
     if method == "awf/registry.validate":
-        return ops.op_registry_validate(Path(params["path"]))
+        return ops.op_registry_validate(Path(params["path"]), kind=params.get("kind"))
     if method == "awf/registry.publish":
-        return ops.op_registry_publish(repo_root, conn, path=Path(params["path"]))
+        return ops.op_registry_publish(repo_root, conn, path=Path(params["path"]), kind=params["kind"])
     if method == "awf/secret.set":
         return ops.op_secret_set(repo_root, conn, name=params["name"], value=params["value"])
     if method == "awf/secret.listNames":

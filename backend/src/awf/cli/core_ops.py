@@ -27,13 +27,19 @@ from awf.gates.gate_node import make_trifecta_gate_executor
 from awf.ids import uuid7
 from awf.isolation.scratch import create_scratch_dir, remove_scratch_dir, scratch_path
 from awf.isolation.worktree import create_worktree, remove_worktree, worktree_path
+from awf.paths import artifacts_dir
 from awf.paths import db_path as resolve_db_path
 from awf.paths import env_path
 from awf.registry.agent_manifest import load_agent_manifest
 from awf.registry.capability_record import parse_capability_record
+from awf.registry.kinds import AGENTS, CAPABILITIES, MCP, MODEL_PROFILES, SKILLS, WORKFLOWS
+from awf.registry.kinds import UnknownRegistryKindError
+from awf.registry.kinds import by_key as kind_by_key
+from awf.registry.kinds import object_path as kind_object_path
+from awf.registry.kinds import version_names
 from awf.registry.mcp_server import parse_mcp_server
 from awf.registry.model_profile import load_model_profile, parse_model_profile
-from awf.registry.resolve import CONFIG_ROOT, DATA_ONLY_KINDS, DATA_ROOT, resolve_registry_object
+from awf.registry.resolve import CONFIG_ROOT, DATA_ROOT, resolve_registry_object
 from awf.registry.skill import directory_digest, load_skill
 from awf.secrets.store import list_secret_names, set_secret
 from awf.workflow.approval import make_approval_node_executor
@@ -55,10 +61,6 @@ ADAPTER_REGISTRY = {
 
 class CoreOpError(RuntimeError):
     pass
-
-
-def _artifacts_root(repo_root: Path) -> Path:
-    return repo_root / "data" / "artifacts"
 
 
 def _make_check_fn(node: dict, worktree: Path):
@@ -273,7 +275,7 @@ def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str
 
     worktree = create_worktree(repo_root, run_id)
     run_scratch_dir = create_scratch_dir(repo_root, run_id)
-    node_executors = _build_node_executors(workflow, worktree, _artifacts_root(repo_root), repo_root, run_scratch_dir)
+    node_executors = _build_node_executors(workflow, worktree, artifacts_dir(repo_root), repo_root, run_scratch_dir)
 
     result = _run_workflow_safely(conn, run_id=run_id, workflow=workflow, node_executors=node_executors)
     _cleanup_run_workspace(repo_root, run_id, result)
@@ -305,7 +307,7 @@ def op_run_resume(repo_root: Path, conn: sqlite3.Connection) -> list[dict]:
         worktree = worktree_path(repo_root, run_id)
         run_scratch_dir = scratch_path(repo_root, run_id)
         node_executors = _build_node_executors(
-            workflow, worktree, _artifacts_root(repo_root), repo_root, run_scratch_dir
+            workflow, worktree, artifacts_dir(repo_root), repo_root, run_scratch_dir
         )
         result = _run_workflow_safely(conn, run_id=run_id, workflow=workflow, node_executors=node_executors)
         _cleanup_run_workspace(repo_root, run_id, result)
@@ -392,13 +394,9 @@ def op_artifact_read(conn: sqlite3.Connection, *, artifact_id: str, artifacts_ro
 
 
 def op_registry_list(repo_root: Path, *, kind: str) -> list[dict]:
-    # Skills are published as <name>/<version>/SKILL.md (Section 9.3), not
-    # <name>/<version>.yaml like every other kind; Agent Manifests (ADR-0002)
-    # are <name>/<version>.md - flat like most kinds, but Markdown not YAML.
-    is_skill = kind == "skills"
-    is_agent = kind == "agents"
+    registry_kind = kind_by_key(kind)
     roots = (("data", repo_root / DATA_ROOT), ("config", repo_root / CONFIG_ROOT))
-    if kind in DATA_ONLY_KINDS:
+    if registry_kind.data_only:
         # Section 9.3: this kind has no config/app_registry/ counterpart -
         # anything under config/app_registry/<kind>/ (e.g. reference examples,
         # ADR-0001) is never a real, resolvable registry object and MUST NOT
@@ -410,13 +408,7 @@ def op_registry_list(repo_root: Path, *, kind: str) -> list[dict]:
         if not kind_dir.is_dir():
             continue
         for name_dir in sorted(p for p in kind_dir.iterdir() if p.is_dir()):
-            if is_skill:
-                versions = sorted(p.name for p in name_dir.iterdir() if (p / "SKILL.md").is_file())
-            elif is_agent:
-                versions = sorted(p.stem for p in name_dir.glob("*.md"))
-            else:
-                versions = sorted(p.stem for p in name_dir.glob("*.yaml"))
-            for version in versions:
+            for version in version_names(name_dir, registry_kind):
                 results.append(
                     {"source": source_name, "kind": kind, "name": name_dir.name, "version": version}
                 )
@@ -439,13 +431,45 @@ def _skill_md_path(path: Path) -> Path | None:
     return None
 
 
-def op_registry_validate(path: Path) -> dict:
-    skill_md_path = _skill_md_path(path)
-    if skill_md_path is not None:
+def _kind_from_path_position(path: Path) -> str | None:
+    # Both registry roots are `<root>/<kind>/<name>/...` (CONFIG_ROOT ends in
+    # "app_registry", DATA_ROOT ends in "registry"), so the segment
+    # immediately after either anchor is the kind - unambiguous whenever the
+    # path is actually under one of them.
+    parts = path.parts
+    for anchor in ("app_registry", "registry"):
+        if anchor in parts:
+            index = parts.index(anchor)
+            if index + 1 < len(parts):
+                candidate = parts[index + 1]
+                try:
+                    kind_by_key(candidate)
+                    return candidate
+                except UnknownRegistryKindError:
+                    continue
+    return None
+
+
+def _resolve_validate_publish_kind(path: Path, kind: str | None) -> str:
+    if kind is not None:
+        return kind
+    derived = _kind_from_path_position(path)
+    if derived is None:
+        raise CoreOpError(f"{path}: cannot determine registry kind from its path; pass kind explicitly")
+    return derived
+
+
+def op_registry_validate(path: Path, *, kind: str | None = None) -> dict:
+    registry_kind = kind_by_key(_resolve_validate_publish_kind(path, kind))
+
+    if registry_kind is SKILLS:
+        skill_md_path = _skill_md_path(path)
+        if skill_md_path is None:
+            raise CoreOpError(f"{path}: not a Skill (expected a SKILL.md file or its containing directory)")
         skill = load_skill(skill_md_path)
         return {"kind": "Skill", "ref": skill.ref, "valid": True}
 
-    if path.suffix == ".md":
+    if registry_kind is AGENTS:
         manifest = load_agent_manifest(path)
         return {"kind": "AgentManifest", "ref": manifest.ref, "valid": True}
 
@@ -453,28 +477,32 @@ def op_registry_validate(path: Path) -> dict:
     if not isinstance(raw, dict):
         raise CoreOpError(f"{path}: must be a YAML mapping")
 
-    if raw.get("kind") == "Workflow":
+    if registry_kind is WORKFLOWS:
         workflow = parse_workflow(raw)
         return {"kind": "Workflow", "ref": workflow.ref, "valid": True}
-    if "identity" in raw and "risk_class" in raw:
+    if registry_kind is CAPABILITIES:
         record = parse_capability_record(raw)
         return {"kind": "CapabilityRecord", "ref": record.ref, "valid": True}
-    if "type" in raw and raw.get("type") in ("stdio", "http"):
+    if registry_kind is MCP:
         server = parse_mcp_server(raw)
         return {"kind": "McpServer", "ref": server.ref, "valid": True}
-    if "candidates" in raw and "privacy" in raw:
+    if registry_kind is MODEL_PROFILES:
         parse_model_profile(raw)
         return {"kind": "ModelProfile", "valid": True}
-    raise CoreOpError(f"{path}: unrecognized registry object shape")
+    raise CoreOpError(f"{path}: registry validate does not support kind '{registry_kind.key}'")
 
 
-def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path) -> dict:
-    skill_md_path = _skill_md_path(path)
-    if skill_md_path is not None:
+def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path, kind: str) -> dict:
+    registry_kind = kind_by_key(kind)
+
+    if registry_kind is SKILLS:
+        skill_md_path = _skill_md_path(path)
+        if skill_md_path is None:
+            raise CoreOpError(f"{path}: not a Skill (expected a SKILL.md file or its containing directory)")
         skill = load_skill(skill_md_path)
         skill_dir = skill_md_path.parent
         digest = directory_digest(skill_dir)
-        target_dir = repo_root / DATA_ROOT / "skills" / skill.name / skill.version
+        target_dir = kind_object_path(repo_root / DATA_ROOT / "skills" / skill.name, SKILLS, skill.version).parent
         if target_dir.is_dir():
             shutil.rmtree(target_dir)
         target_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -490,36 +518,34 @@ def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path
         conn.commit()
         return {"kind": "skills", "name": skill.name, "version": skill.version, "digest": digest, "path": str(target_dir)}
 
-    if path.suffix == ".md":
+    if registry_kind is AGENTS:
         manifest = load_agent_manifest(path)
-        kind, name, version, extension = "agents", manifest.name, manifest.version, "md"
+        name, version = manifest.name, manifest.version
     else:
         raw = yaml.safe_load(path.read_text())
         if not isinstance(raw, dict):
             raise CoreOpError(f"{path}: must be a YAML mapping")
 
-        if raw.get("kind") == "Workflow":
+        if registry_kind is WORKFLOWS:
             workflow = parse_workflow(raw)
-            kind, name, version = "workflows", workflow.metadata.name, workflow.metadata.version
-        elif "identity" in raw and "risk_class" in raw:
+            name, version = workflow.metadata.name, workflow.metadata.version
+        elif registry_kind is CAPABILITIES:
             record = parse_capability_record(raw)
-            kind, name, version = "capabilities", record.identity.name, record.identity.version
-        elif "type" in raw and raw.get("type") in ("stdio", "http"):
+            name, version = record.identity.name, record.identity.version
+        elif registry_kind is MCP:
             server = parse_mcp_server(raw)
-            kind, name, version = "mcp", server.name, server.version
+            name, version = server.name, server.version
         else:
             raise CoreOpError(
-                f"{path}: registry publish only supports Workflow, Capability Record, "
-                "MCP Server, and Agent Manifest objects (kinds with self-describing "
-                "name/version) in this phase"
+                f"{path}: registry publish does not support kind '{kind}' "
+                "(supported: workflows, capabilities, mcp, agents, skills)"
             )
-        extension = "yaml"
 
     payload = path.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     target_dir = repo_root / DATA_ROOT / kind / name
     target_dir.mkdir(parents=True, exist_ok=True)
-    target_path = target_dir / f"{version}.{extension}"
+    target_path = kind_object_path(target_dir, registry_kind, version)
     target_path.write_bytes(payload)
 
     conn.execute(

@@ -27,6 +27,7 @@ from awf.engine.run import create_run, create_step
 from awf.gates.artifacts import write_finding_artifact
 from awf.gates.schema import Finding
 from awf.ids import uuid7
+from awf.registry.mcp_server import McpServerValidationError
 
 
 @pytest.fixture
@@ -150,7 +151,9 @@ def test_artifact_list_and_read(tmp_path):
 
 
 def test_registry_validate_recognizes_capability_record(fixtures_dir):
-    result = op_registry_validate(fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml")
+    result = op_registry_validate(
+        fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml", kind="capabilities"
+    )
     assert result["kind"] == "CapabilityRecord"
     assert result["valid"] is True
 
@@ -166,7 +169,7 @@ def test_registry_publish_capability_record_writes_data_registry_and_index(tmp_p
     repo_root, conn = make_repo(tmp_path)
     source = fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml"
 
-    result = op_registry_publish(repo_root, conn, path=source)
+    result = op_registry_publish(repo_root, conn, path=source, kind="capabilities")
 
     assert result["kind"] == "capabilities"
     published_path = Path(result["path"])
@@ -182,10 +185,21 @@ def test_registry_publish_capability_record_writes_data_registry_and_index(tmp_p
     assert row["digest"] == result["digest"]
 
 
+def test_registry_publish_rejects_a_kind_that_does_not_match_the_parsed_object(tmp_path, fixtures_dir):
+    # test_phase1_read_file_r0.yaml is a Capability Record - it has no
+    # "type" field, which the mcp loader requires, so asking to publish it
+    # as kind="mcp" fails through that loader's own validation.
+    repo_root, conn = make_repo(tmp_path)
+    source = fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml"
+
+    with pytest.raises(McpServerValidationError):
+        op_registry_publish(repo_root, conn, path=source, kind="mcp")
+
+
 def test_registry_publish_then_list_and_get_find_it(tmp_path, fixtures_dir):
     repo_root, conn = make_repo(tmp_path)
     source = fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml"
-    published = op_registry_publish(repo_root, conn, path=source)
+    published = op_registry_publish(repo_root, conn, path=source, kind="capabilities")
 
     listed = op_registry_list(repo_root, kind="capabilities")
     assert {"source": "data", "kind": "capabilities", "name": published["name"], "version": published["version"]} in listed
@@ -204,7 +218,7 @@ def test_registry_validate_recognizes_agent_manifest(real_agent_manifest):
 def test_registry_publish_agent_manifest_writes_data_registry_and_index(tmp_path, real_agent_manifest):
     repo_root, conn = make_repo(tmp_path)
 
-    result = op_registry_publish(repo_root, conn, path=real_agent_manifest)
+    result = op_registry_publish(repo_root, conn, path=real_agent_manifest, kind="agents")
 
     assert result["kind"] == "agents"
     assert result["name"] == "builder"
@@ -241,7 +255,7 @@ def test_registry_validate_recognizes_mcp_server(real_mcp_server):
 def test_registry_publish_mcp_server_writes_data_registry_and_index(tmp_path, real_mcp_server):
     repo_root, conn = make_repo(tmp_path)
 
-    result = op_registry_publish(repo_root, conn, path=real_mcp_server)
+    result = op_registry_publish(repo_root, conn, path=real_mcp_server, kind="mcp")
 
     assert result["kind"] == "mcp"
     assert result["name"] == "context7"
@@ -286,7 +300,7 @@ def test_registry_publish_skill_writes_data_registry_and_index(tmp_path):
     (source_dir / "scripts").mkdir()
     (source_dir / "scripts" / "run.sh").write_text("echo hi\n")
 
-    result = op_registry_publish(repo_root, conn, path=source_dir)
+    result = op_registry_publish(repo_root, conn, path=source_dir, kind="skills")
 
     assert result["kind"] == "skills"
     assert result["name"] == "other-skill"

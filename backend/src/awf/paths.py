@@ -35,6 +35,10 @@ def data_registry_dir(repo_root: Path) -> Path:
     return repo_root / DATA_REGISTRY_RELATIVE
 
 
+def artifacts_dir(repo_root: Path) -> Path:
+    return repo_root / "data" / "artifacts"
+
+
 def config_voice_dir(repo_root: Path) -> Path:
     return repo_root / "config" / "voice"
 

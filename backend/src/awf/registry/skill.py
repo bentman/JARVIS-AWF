@@ -10,15 +10,20 @@ parses and validates it, and computes the directory digest ADR-0004's
 import hashlib
 import re
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 
-import yaml
+from awf.registry.schema import require, split_frontmatter
 
 _NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 
 class SkillValidationError(ValueError):
     pass
+
+
+_require = partial(require, error=SkillValidationError)
+_split_frontmatter = partial(split_frontmatter, label="SKILL.md", error=SkillValidationError)
 
 
 @dataclass(frozen=True)
@@ -37,12 +42,6 @@ class Skill:
         return f"{self.name}@{self.version}"
 
 
-def _require(mapping: dict, key: str, context: str) -> object:
-    if key not in mapping:
-        raise SkillValidationError(f"{context}: missing required field '{key}'")
-    return mapping[key]
-
-
 def _validate_name(name: str) -> None:
     if len(name) < 1 or len(name) > 64:
         raise SkillValidationError(f"skill name {name!r} must be 1-64 characters")
@@ -51,22 +50,6 @@ def _validate_name(name: str) -> None:
             f"skill name {name!r} must be lowercase alphanumeric with single hyphens, "
             "no leading/trailing/doubled hyphen"
         )
-
-
-def _split_frontmatter(text: str) -> tuple[dict, str]:
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        raise SkillValidationError("SKILL.md must start with a '---' YAML frontmatter block")
-    try:
-        end = lines[1:].index("---") + 1
-    except ValueError:
-        raise SkillValidationError("SKILL.md frontmatter has no closing '---'") from None
-
-    frontmatter = yaml.safe_load("\n".join(lines[1:end])) or {}
-    if not isinstance(frontmatter, dict):
-        raise SkillValidationError("SKILL.md frontmatter must be a YAML mapping")
-    body = "\n".join(lines[end + 1 :]).strip()
-    return frontmatter, body
 
 
 def parse_skill(raw: dict, *, body: str = "", version: str | None = None) -> Skill:

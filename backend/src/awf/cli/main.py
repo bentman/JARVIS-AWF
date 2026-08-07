@@ -61,12 +61,12 @@ def cmd_artifacts(args: argparse.Namespace, repo_root: Path, conn) -> int:
 
 
 def cmd_registry_validate(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    _print(ops.op_registry_validate(Path(args.definition_file)))
+    _print(ops.op_registry_validate(Path(args.definition_file), kind=args.kind))
     return 0
 
 
 def cmd_registry_publish(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    _print(ops.op_registry_publish(repo_root, conn, path=Path(args.definition_file)))
+    _print(ops.op_registry_publish(repo_root, conn, path=Path(args.definition_file), kind=args.kind))
     return 0
 
 
@@ -114,9 +114,11 @@ def build_parser() -> argparse.ArgumentParser:
     registry_sub = registry_parser.add_subparsers(dest="registry_command", required=True)
     validate_parser = registry_sub.add_parser("validate")
     validate_parser.add_argument("definition_file")
+    validate_parser.add_argument("--kind", required=False, default=None)
     validate_parser.set_defaults(func=cmd_registry_validate)
     publish_parser = registry_sub.add_parser("publish")
     publish_parser.add_argument("definition_file")
+    publish_parser.add_argument("--kind", required=True)
     publish_parser.set_defaults(func=cmd_registry_publish)
 
     secret_parser = sub.add_parser("secret")

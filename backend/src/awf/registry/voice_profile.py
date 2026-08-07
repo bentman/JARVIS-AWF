@@ -1,11 +1,13 @@
 """Voice Profile schema, loading, and validation (Section 16.5)."""
 
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import yaml
 
 from awf.registry.resolve import resolve_registry_object
+from awf.registry.schema import require
 
 FALLBACK_MODES = ("none", "ordered")
 
@@ -14,6 +16,9 @@ DEFAULT_VOICE_PROFILE_REF = "narrator@1.0.0"
 
 class VoiceProfileValidationError(ValueError):
     pass
+
+
+_require = partial(require, error=VoiceProfileValidationError)
 
 
 @dataclass(frozen=True)
@@ -60,12 +65,6 @@ class VoiceProfile:
 
     def enabled_candidates_by_priority(self) -> tuple[TtsCandidate, ...]:
         return tuple(sorted((c for c in self.candidates if c.enabled), key=lambda c: c.priority))
-
-
-def _require(mapping: dict, key: str, context: str) -> object:
-    if key not in mapping:
-        raise VoiceProfileValidationError(f"{context}: missing required field '{key}'")
-    return mapping[key]
 
 
 def parse_voice_profile(raw: dict) -> VoiceProfile:

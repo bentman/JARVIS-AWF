@@ -134,7 +134,7 @@ def test_registry_validate_command(tmp_path, capsys, fixtures_dir):
     repo_root = make_repo(tmp_path)
     fixture = fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml"
 
-    exit_code = cli_main.run(["registry", "validate", str(fixture)], repo_root)
+    exit_code = cli_main.run(["registry", "validate", str(fixture), "--kind", "capabilities"], repo_root)
 
     assert exit_code == 0
     out = json.loads(capsys.readouterr().out)

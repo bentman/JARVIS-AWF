@@ -2,7 +2,14 @@
 
 ## Status
 
-Proposed. Not implemented.
+Implemented. Acceptance run: `pytest backend/tests` → 436 passed (up from
+423 baseline, same 0 skips); all six `scripts/validate_backend.py` commands
+returned exit 0; `awf registry validate` on a real shipped object resolves
+its kind from the path with no `--kind` given, and produces the identical
+result when `--kind mcp` is passed explicitly; a repo-wide grep confirms no
+kind-to-layout mapping (`_object_path`/`DATA_ONLY_KINDS`) and no
+`config/app_registry`/`data/registry` string literal survive outside
+`registry/kinds.py`, and `data/artifacts` is spelled only in `paths.py`.
 
 Covers Task B (items 5–8) and Task C (item 9) of the registry cohesion review.
 Task A and Task D are ADR-0012, which builds on this record.

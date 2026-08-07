@@ -11,33 +11,25 @@ from pathlib import Path
 
 from awf.paths import CONFIG_REGISTRY_RELATIVE as CONFIG_ROOT
 from awf.paths import DATA_REGISTRY_RELATIVE as DATA_ROOT
-
-# model-profiles names a specific provider account and budget, so it is
-# always operator-specific and has no config/app_registry/ counterpart.
-DATA_ONLY_KINDS = ("model-profiles",)
+from awf.registry.kinds import by_key
+from awf.registry.kinds import object_path as _object_path
 
 
 class RegistryObjectNotFoundError(FileNotFoundError):
     pass
 
 
-def _object_path(base_dir: Path, kind: str, version: str) -> Path:
-    if kind == "skills":
-        return base_dir / version / "SKILL.md"
-    if kind == "agents":
-        return base_dir / f"{version}.md"
-    return base_dir / f"{version}.yaml"
-
-
 def resolve_registry_object(
     repo_root: Path, kind: str, name: str, version: str
 ) -> tuple[Path, str]:
     """Return (path, source) for a registry object, source in {"config", "data"}."""
+    registry_kind = by_key(kind)
+
     data_dir = repo_root / DATA_ROOT / kind / name
     if data_dir.is_dir() and any(data_dir.iterdir()):
         # data/ has a presence for this kind+name: resolution is locked to
         # this tree exclusively, even if the requested version isn't in it.
-        path = _object_path(data_dir, kind, version)
+        path = _object_path(data_dir, registry_kind, version)
         if not path.exists():
             raise RegistryObjectNotFoundError(
                 f"{kind}/{name}@{version} not found in {DATA_ROOT} "
@@ -45,10 +37,10 @@ def resolve_registry_object(
             )
         return path, "data"
 
-    if kind not in DATA_ONLY_KINDS:
+    if not registry_kind.data_only:
         config_dir = repo_root / CONFIG_ROOT / kind / name
         if config_dir.is_dir() and any(config_dir.iterdir()):
-            path = _object_path(config_dir, kind, version)
+            path = _object_path(config_dir, registry_kind, version)
             if not path.exists():
                 raise RegistryObjectNotFoundError(
                     f"{kind}/{name}@{version} not found in {CONFIG_ROOT}"

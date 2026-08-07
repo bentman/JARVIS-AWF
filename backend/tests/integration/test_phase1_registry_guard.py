@@ -6,7 +6,7 @@ import pytest
 from awf.db.bootstrap import init_db
 from awf.guard.capability_guard import Decision, authorize, evaluate
 from awf.registry.capability_record import (
-    RegistryValidationError,
+    CapabilityRecordValidationError,
     load_capability_record,
     parse_capability_record,
 )
@@ -50,12 +50,12 @@ def test_load_shipped_adr0009_capability_records(repo_root, name, expected_provi
 
 
 def test_load_rejects_missing_field():
-    with pytest.raises(RegistryValidationError):
+    with pytest.raises(CapabilityRecordValidationError):
         parse_capability_record({"identity": {"type": "activity"}})
 
 
 def test_load_rejects_invalid_risk_class():
-    with pytest.raises(RegistryValidationError):
+    with pytest.raises(CapabilityRecordValidationError):
         parse_capability_record(
             {
                 "identity": {"type": "activity", "provider": "local", "name": "x", "version": "1.0.0"},

@@ -6,15 +6,21 @@ connected to directly (see `awf.mcp.render`).
 """
 
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 
 import yaml
+
+from awf.registry.schema import require
 
 TYPES = ("stdio", "http")
 
 
 class McpServerValidationError(ValueError):
     pass
+
+
+_require = partial(require, error=McpServerValidationError)
 
 
 @dataclass(frozen=True)
@@ -38,12 +44,6 @@ class McpServer:
     @property
     def ref(self) -> str:
         return f"{self.name}@{self.version}"
-
-
-def _require(mapping: dict, key: str, context: str) -> object:
-    if key not in mapping:
-        raise McpServerValidationError(f"{context}: missing required field '{key}'")
-    return mapping[key]
 
 
 def parse_mcp_server(raw: dict) -> McpServer:

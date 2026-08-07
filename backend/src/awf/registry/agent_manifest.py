@@ -15,15 +15,20 @@ needs the same publish-by-content-identity path Capability Records use.
 """
 
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
-import yaml
+from awf.registry.schema import require, split_frontmatter
 
 ROLES = ("builder", "verifier", "adversary")
 
 
 class AgentManifestValidationError(ValueError):
     pass
+
+
+_require = partial(require, error=AgentManifestValidationError)
+_split_frontmatter = partial(split_frontmatter, label="agent manifest", error=AgentManifestValidationError)
 
 
 @dataclass(frozen=True)
@@ -55,30 +60,6 @@ class AgentManifest:
     @property
     def ref(self) -> str:
         return f"{self.name}@{self.version}"
-
-
-def _require(mapping: dict, key: str, context: str) -> object:
-    if key not in mapping:
-        raise AgentManifestValidationError(f"{context}: missing required field '{key}'")
-    return mapping[key]
-
-
-def _split_frontmatter(text: str) -> tuple[dict, str]:
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        raise AgentManifestValidationError(
-            "agent manifest must start with a '---' YAML frontmatter block"
-        )
-    try:
-        end = lines[1:].index("---") + 1
-    except ValueError:
-        raise AgentManifestValidationError("agent manifest frontmatter has no closing '---'") from None
-
-    frontmatter = yaml.safe_load("\n".join(lines[1:end])) or {}
-    if not isinstance(frontmatter, dict):
-        raise AgentManifestValidationError("agent manifest frontmatter must be a YAML mapping")
-    body = "\n".join(lines[end + 1 :]).strip()
-    return frontmatter, body
 
 
 def _parse_skill_ref(item: object) -> SkillRef:

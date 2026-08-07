@@ -1,9 +1,12 @@
 """Model Profile schema, loading, and validation (Section 11)."""
 
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import yaml
+
+from awf.registry.schema import require, require_enum
 
 PURPOSES = ("general-reasoning", "coding", "judge", "adversary", "embedding")
 DATA_CLASSES = ("public", "internal", "confidential")
@@ -12,6 +15,10 @@ FALLBACK_MODES = ("none", "ordered")
 
 class ModelProfileValidationError(ValueError):
     pass
+
+
+_require = partial(require, error=ModelProfileValidationError)
+_require_enum = partial(require_enum, error=ModelProfileValidationError)
 
 
 @dataclass(frozen=True)
@@ -59,18 +66,6 @@ class ModelProfile:
         return tuple(
             sorted((c for c in self.candidates if c.enabled), key=lambda c: c.priority)
         )
-
-
-def _require(mapping: dict, key: str, context: str) -> object:
-    if key not in mapping:
-        raise ModelProfileValidationError(f"{context}: missing required field '{key}'")
-    return mapping[key]
-
-
-def _require_enum(value: object, allowed: tuple[str, ...], context: str) -> str:
-    if value not in allowed:
-        raise ModelProfileValidationError(f"{context}: '{value}' not in {allowed}")
-    return value  # type: ignore[return-value]
 
 
 def parse_model_profile(raw: dict) -> ModelProfile:

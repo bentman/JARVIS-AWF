@@ -1,9 +1,12 @@
 """Capability Record schema, loading, and validation (Section 9.1)."""
 
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import yaml
+
+from awf.registry.schema import require, require_enum
 
 IDENTITY_TYPES = ("mcp-tool", "activity", "cli-adapter-action")
 OPERATIONS = ("read", "create", "update", "delete", "execute", "communicate")
@@ -11,7 +14,7 @@ RISK_CLASSES = ("R0", "R1", "R2", "R3")
 APPROVAL_MODES = ("never", "per-run", "per-invocation")
 
 
-class RegistryValidationError(ValueError):
+class CapabilityRecordValidationError(ValueError):
     pass
 
 
@@ -45,16 +48,8 @@ class CapabilityRecord:
         return f"{self.identity.name}@{self.identity.version}"
 
 
-def _require(mapping: dict, key: str, context: str) -> object:
-    if key not in mapping:
-        raise RegistryValidationError(f"{context}: missing required field '{key}'")
-    return mapping[key]
-
-
-def _require_enum(value: object, allowed: tuple[str, ...], context: str) -> str:
-    if value not in allowed:
-        raise RegistryValidationError(f"{context}: '{value}' not in {allowed}")
-    return value  # type: ignore[return-value]
+_require = partial(require, error=CapabilityRecordValidationError)
+_require_enum = partial(require_enum, error=CapabilityRecordValidationError)
 
 
 def parse_capability_record(raw: dict) -> CapabilityRecord:
@@ -90,5 +85,5 @@ def parse_capability_record(raw: dict) -> CapabilityRecord:
 def load_capability_record(path: Path) -> CapabilityRecord:
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
-        raise RegistryValidationError(f"{path}: capability record must be a YAML mapping")
+        raise CapabilityRecordValidationError(f"{path}: capability record must be a YAML mapping")
     return parse_capability_record(raw)

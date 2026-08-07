@@ -8,16 +8,12 @@ The unit of operation is a Run of a versioned Workflow. Agents are bounded execu
 
 ## 🚀 Quick Start
 
-```bash
-git clone <this-repo> && cd JARVIS-AWF
-python3.12 -m venv backend/.venv
-backend/.venv/bin/pip install -e .[dev]
-backend/.venv/bin/awf-setup            # populate .env, cache/sandbox/, data/awf_db/awf.db
-backend/.venv/bin/awf-setup --provision --verify   # explain, then check, the accelerator extra for this host
-backend/.venv/bin/pytest backend/tests
-```
+Setup is per-platform. Follow the guide for your host:
 
-Windows (pwsh) uses `py -m venv .\backend\.venv` and `.\backend\.venv\Scripts\` in place of the Linux paths above.
+- [`docs/QuickStart-linux.md`](docs/QuickStart-linux.md) — Linux and WSL2
+- [`docs/QuickStart-windows.md`](docs/QuickStart-windows.md) — Windows x64 and ARM64
+
+Both cover the same sequence: create the backend virtual environment, install the hardware-appropriate dependency set, bootstrap local state, acquire the speech models, and validate.
 
 ## 🏗️ Architecture
 

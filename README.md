@@ -75,5 +75,5 @@ This is a solo, personal project and isn't set up to take contributions right no
 ## 📄 License
 
 Apache License 2.0. See the license text at https://www.apache.org/licenses/LICENSE-2.0.
+Voice components and llm model usage remain under their own upstream licenses.
 Coding agents driven by an adapter remain under their own upstream licenses.
-Voice components and model usage also remain under their own upstream licenses.

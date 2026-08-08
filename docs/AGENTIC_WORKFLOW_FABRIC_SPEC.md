@@ -63,7 +63,7 @@ Substituting an alternative for any resolution below requires a new ADR.
 | Model access | LiteLLM used as a Python library, in-process, no proxy server, by default. Self-hosted LiteLLM Proxy (Docker) is documented as an optional escalation for sharing one gateway across machines/clients — never required. Model/routing configuration is stored as durable, versioned registry data under `data/registry/model-profiles/`. |
 | Named CLI adapters | Claude Code, OpenAI Codex CLI, Google Antigravity CLI (`agy`), GitHub Copilot CLI, Cline CLI — each with a documented adapter (Section 10) — plus a generic adapter contract so more can be added later without a spec revision. |
 | Operator interfaces | Two frontends over one Python core. **AWF-CLI**: an npm-distributed, inline (scrollback-preserving) terminal UI with a slash-command surface (Section 16.2), in the style of Claude Code / Codex CLI / Antigravity CLI. **AWF-GUI**: a desktop voice app (STT/TTS) in which agent roles carry assignable personas and audibly distinct voices (Sections 16.4–16.5). Both are pure presentation layers speaking JSON-RPC 2.0 over stdio to the Python core (Section 16.3); neither may bypass the Capability Guard, approvals, or Gates. |
-| Frontend language exception | The AWF core (durable state, policy, execution, adapters) stays Python per AGENTS.md. AWF-CLI and the AWF-GUI shell are TypeScript on Node ≥22 — a bounded exception to AGENTS.md's Python preference, recorded here (no separate ADR required). No durable state or authorization logic may live in frontend code. |
+| Frontend language exception | The AWF core (durable state, policy, execution, adapters) stays Python per AGENTS.md. AWF-CLI and the AWF-GUI shell are TypeScript on Node.js 26+ — a bounded exception to AGENTS.md's Python preference, recorded in ADR-0014. No durable state or authorization logic may live in frontend code. |
 | Voice stack | **One selected engine per function**, all open-source, behind a single speech-adapter contract on an ONNX Runtime base, execution provider chosen by the Hardware Profiler (Section 16.4). Selections: STT = **Whisper** (faster-whisper as the CUDA variant); TTS = **Kokoro-82M** (multi-voice); VAD = **Silero VAD**; wake word = **openWakeWord** (`hey jarvis`). Models are operator-downloaded at Phase 12 setup — never bundled — license accepted at download. A selection is replaced only via ADR against the same contract. Cloud voice is an optional per-profile escalation, never required. |
 | License | Apache License 2.0 for this specification and the reference implementation. Third-party CLI tools driven by an adapter remain under their own upstream licenses (Section 17). |
 | AGENTS.md wiring | `AGENTS.md`'s Source Of Truth list designates this document as the active implementation target. |
@@ -83,7 +83,7 @@ Substituting an alternative for any resolution below requires a new ADR.
 | Repository-scoped agent instructions | AGENTS.md open convention (in use in this repo) | https://agents.md/ |
 | Remote/independently-deployed agents (future extension point only) | Agent2Agent (A2A) 1.0 | https://github.com/a2aproject/A2A/blob/main/docs/specification.md |
 | Model access | LiteLLM Python library (optional: LiteLLM Proxy via Docker) | https://docs.litellm.ai/ |
-| AWF-CLI TUI | Ink 7 (React ≥19.2) + `@inkjs/ui` on Node ≥22, distributed via npm; inline rendering with append-only transcript (Ink `<Static>` pattern) | https://github.com/vercel/ink |
+| AWF-CLI TUI | Ink 7 (React ≥19.2) + `@inkjs/ui` on Node.js 26+, distributed via npm; inline rendering with append-only transcript (Ink `<Static>` pattern) | https://github.com/vercel/ink |
 | Frontend↔core protocol | JSON-RPC 2.0 over stdio, shaped on the Agent Client Protocol (ACP); Python side via the official `agent-client-protocol` PyPI SDK | https://agentclientprotocol.com , https://github.com/agentclientprotocol/python-sdk |
 | AWF-GUI shell | Electron (official Windows ARM64 builds; mature microphone capture), Python core as sidecar | https://www.electronjs.org/docs/latest/tutorial/windows-arm |
 | Speech runtime | ONNX Runtime execution providers per the Section 16.4 hardware-profile enum (cpu/gpu/cuda/qnn across Windows/Linux × x64/arm64; Adreno OpenCL for arm64 `-gpu`), integrated through sherpa-onnx (Apache-2.0) | https://onnxruntime.ai/docs/execution-providers/QNN-ExecutionProvider.html , https://github.com/k2-fsa/sherpa-onnx |
@@ -182,7 +182,7 @@ JARVIS/
       speech/                                     (STT/TTS/VAD/wake adapter contracts — Section 16.4; Phase 12)
     tests/
   frontend/                                       (one npm-workspaces monorepo — Section 16.2)
-    cli/                                          (package awf-cli: TypeScript inline TUI, Node >=22 — Section 16.2)
+    cli/                                          (package awf-cli: TypeScript inline TUI, Node.js 26+ — Section 16.2)
     gui/                                          (package awf-gui: desktop voice app shell — Section 16.4)
     shared/                                       (package @awf/protocol-client: the single TS protocol client — Section 16.3)
   models/                                         <- operator-downloaded model storage, gitignored, re-fetchable
@@ -474,7 +474,7 @@ No command may bypass the Capability Guard, mark a Gate as passed, or invoke an 
 
 ### 16.2 AWF-CLI — inline terminal UI
 
-AWF-CLI is an npm-distributed TypeScript application — npm package **`awf-cli`**, installed binary **`awf-cli`** — at `frontend/cli/` (Node ≥22, Ink 7 + React ≥19.2), in the interaction style of Claude Code, Codex CLI, and Antigravity CLI. It spawns the Python core as a child process (`awf serve --stdio`) and is otherwise stateless.
+AWF-CLI is an npm-distributed TypeScript application — npm package **`awf-cli`**, installed binary **`awf-cli`** — at `frontend/cli/` (Node.js 26+, Ink 7 + React ≥19.2), in the interaction style of Claude Code, Codex CLI, and Antigravity CLI. It spawns the Python core as a child process (`awf serve --stdio`) and is otherwise stateless.
 
 `frontend/` is one npm-workspaces monorepo (root `frontend/package.json`; workspaces `cli`, `gui`, `shared`; package manager: npm; TypeScript `strict: true`). `frontend/shared/` is the package `@awf/protocol-client` — the single TypeScript protocol client (16.3) consumed by both frontends; neither frontend may implement its own protocol layer.
 

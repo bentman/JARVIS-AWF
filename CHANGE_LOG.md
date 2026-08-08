@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-08 07:15
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Recorded the frontend's explicit npm 11 install-script approval for esbuild, so a normal workspace install can provision its platform-specific build binary without trusting unrelated package hooks.
+  - Scope: `frontend/package.json` (`allowScripts` for `esbuild@0.28.1`), `docs/adr/0014-node-26-current-frontend-policy.md`, and `CHANGE_LOG.md`.
+  - Validation: `npm --prefix frontend install-scripts ls` -> `No packages with unreviewed install scripts.`
+  - Notes: ADR-0014 contains the policy, exact version pin, npm precedence behavior, and refresh/review procedure; this entry is deliberately brief.
+
 - Timestamp: 2026-08-08 05:40
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Renamed the shared throwaway-home scratch directory from `agy_home` to `scratch_home` - it was Antigravity-specific but is now shared by Cline and any future home-scoped adapter; the `<actor>` subdirectory keeps each separated.

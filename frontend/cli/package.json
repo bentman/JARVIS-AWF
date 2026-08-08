@@ -14,13 +14,13 @@
     "@awf/protocol-client": "*",
     "ink": "^7.1.1",
     "ink-text-input": "^6.0.0",
-    "react": "^19.2.0"
+    "react": "^19.2.8"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
-    "vitest": "^2.1.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10",
     "ink-testing-library": "^4.0.0",
-    "@types/react": "^19.0.0",
-    "@types/node": "^22.10.0"
+    "@types/react": "^19.2.18",
+    "@types/node": "^26.2.0"
   }
 }

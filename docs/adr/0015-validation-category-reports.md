@@ -32,6 +32,11 @@ If the hardware profiler cannot resolve the host, the header records a short
 `unresolved:<ExceptionClass>` value without changing the command's existing
 failure semantics.
 
+At the end of every harness invocation, the report root is pruned per folder:
+only the newest 35 `.txt` files in each directory under `reports/` are kept.
+This bounds local evidence storage without mixing diagnostics, validation, or
+future report categories.
+
 ## Consequences
 
 Test selection, marker expressions, cache location, and the shared exit-code

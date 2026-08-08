@@ -21,6 +21,10 @@
 
 - Timestamp: 2026-08-08 08:15
   - Host class(es): Linux/WSL2, AMD64
+  - Summary: Capped retained text reports at 35 per report folder; see ADR-0015.
+
+- Timestamp: 2026-08-08 08:15
+  - Host class(es): Linux/WSL2, AMD64
   - Summary: Extended the backend validation harness so every test category streams readable per-test progress and writes a durable category report with host class and outcome counts.
   - Scope: `scripts/validate_backend.py`, `backend/tests/unit/test_validate_backend_script.py`, `docs/adr/0015-validation-category-reports.md`, both QuickStarts, and `CHANGE_LOG.md`.
   - Validation: `profile` wrote its diagnostic report; `unit` -> 213 passed, 1 skipped; `integration` -> 248 passed; `runtime` -> 17 passed, 1 skipped, 456 deselected; `regression` -> 213 passed, 1 skipped; `ci` -> 456 passed, 18 deselected. Each test command wrote a `reports/validation/` report with `host_class_id`, verbose per-test output, and a final summary.

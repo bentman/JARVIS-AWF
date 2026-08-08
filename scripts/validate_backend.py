@@ -39,6 +39,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 REPORTS_DIR = REPO_ROOT / "reports"
 CACHE_DIR = REPO_ROOT / "cache" / "validate_backend"
 PYTEST_CACHE_DIR = CACHE_DIR / "pytest"
+REPORT_FILE_LIMIT = 35
 
 EXIT_PASS = 0
 EXIT_FAIL = 1
@@ -63,6 +64,24 @@ def _timestamp() -> str:
 
 def _utc_now_rfc3339() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _trim_report_files(reports_dir: Path = REPORTS_DIR, max_files: int = REPORT_FILE_LIMIT) -> int:
+    """Keep the newest report text files within each report directory."""
+    removed = 0
+    if not reports_dir.exists():
+        return removed
+    directories = [reports_dir, *(path for path in reports_dir.rglob("*") if path.is_dir())]
+    for directory in sorted(directories):
+        report_files = sorted(
+            directory.glob("*.txt"),
+            key=lambda path: (path.stat().st_mtime_ns, path.name),
+            reverse=True,
+        )
+        for path in report_files[max_files:]:
+            path.unlink()
+            removed += 1
+    return removed
 
 
 def _pytest_importable() -> bool:
@@ -258,7 +277,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="AWF backend validation harness (ADR-0006)")
     parser.add_argument("command", choices=sorted(COMMANDS))
     args = parser.parse_args(argv)
-    return COMMANDS[args.command](args)
+    result = COMMANDS[args.command](args)
+    _trim_report_files()
+    return result
 
 
 if __name__ == "__main__":

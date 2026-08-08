@@ -1,4 +1,5 @@
 import importlib.util
+import os
 from pathlib import Path
 
 
@@ -43,3 +44,23 @@ def test_test_report_has_host_header_output_and_final_summary(repo_root):
     assert "pytest_command: python -u -m pytest -o cache_dir=" in report
     assert "test_example PASSED [100%]" in report
     assert report.endswith("final_summary: PASS passed=1 failed=0 skipped=0 deselected=0 errors=0 warnings=1\n")
+
+
+def test_trim_report_files_keeps_the_newest_files_per_directory(repo_root, tmp_path):
+    validator = _load_validator(repo_root)
+    validation_dir = tmp_path / "validation"
+    diagnostics_dir = tmp_path / "diagnostics"
+    validation_dir.mkdir()
+    diagnostics_dir.mkdir()
+    for index in range(4):
+        path = validation_dir / f"validation-{index}.txt"
+        path.write_text(str(index))
+        os.utime(path, (index, index))
+    diagnostic = diagnostics_dir / "diagnostic.txt"
+    diagnostic.write_text("kept independently")
+
+    removed = validator._trim_report_files(tmp_path, max_files=2)
+
+    assert removed == 2
+    assert {path.name for path in validation_dir.glob("*.txt")} == {"validation-2.txt", "validation-3.txt"}
+    assert diagnostic.exists()

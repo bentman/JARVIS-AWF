@@ -97,7 +97,7 @@ backend/.venv/bin/python scripts/validate_backend.py profile
 backend/.venv/bin/python scripts/validate_backend.py ci
 ```
 
-`profile` writes a timestamped report to `reports/diagnostics/` naming the resolved hardware profile, the preflight tokens, and the per-function readiness results. `ci` runs everything except the tests marked `live`.
+`profile` writes a timestamped report to `reports/diagnostics/` naming the resolved hardware profile, the preflight tokens, and the per-function readiness results. `ci` runs everything except the tests marked `live` and writes its own validation report.
 
 ### 7. Frontends
 
@@ -121,7 +121,7 @@ backend/.venv/bin/python scripts/validate_backend.py ci
 
 Exit codes: `0` pass, `1` fail, `2` skipped, `3` environment unsatisfied. `runtime` runs only the tests marked `live`, which need real hardware and the acquired models; it returns `2` when the host cannot satisfy them.
 
-`profile` and `regression` each write a timestamped report under `reports/`.
+`profile` writes to `reports/diagnostics/`; every test command writes one timestamped report to `reports/validation/`. Test commands stream each test's name, progress, and result, then end with pass/fail/skip/warning counts.
 
 ## Running AWF
 

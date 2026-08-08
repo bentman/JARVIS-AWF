@@ -10,7 +10,7 @@
 
 - If sources conflict, follow higher-priority source and record conflict in implementation notes or final report.
 - `AGENTS.md` may refine repository-local operating rules, but deviations from MUST/MUST NOT requirements in `docs\AGENTIC_WORKFLOW_FABRIC_SPEC.md` require an ADR.  
-- Honor `.agentignore` as a repository contract for files agents should not read, index, embed, or transmit. 
+- Honor `.agentignore` as a repository contract for folders/files agents should not read, index, embed, or transmit. 
 
 ## Development Principles
 

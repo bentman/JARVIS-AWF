@@ -58,17 +58,25 @@ class Limits:
 
 @dataclass(frozen=True)
 class VoiceProfile:
+    name: str
+    version: str
     persona: Persona
     candidates: tuple[TtsCandidate, ...]
     fallback: Fallback
     privacy: Privacy
     limits: Limits
 
+    @property
+    def ref(self) -> str:
+        return f"{self.name}@{self.version}"
+
     def enabled_candidates_by_priority(self) -> tuple[TtsCandidate, ...]:
         return tuple(sorted((c for c in self.candidates if c.enabled), key=lambda c: c.priority))
 
 
 def parse_voice_profile(raw: dict) -> VoiceProfile:
+    name = _require(raw, "name", "voice profile")
+    version = _require(raw, "version", "voice profile")
     persona_raw = _require(raw, "persona", "voice profile")
     tts_raw = _require(raw, "tts", "voice profile")
     privacy_raw = _require(raw, "privacy", "voice profile")
@@ -107,14 +115,32 @@ def parse_voice_profile(raw: dict) -> VoiceProfile:
         max_seconds_per_utterance=int(_require(limits_raw, "max_seconds_per_utterance", "limits"))
     )
 
-    return VoiceProfile(persona=persona, candidates=candidates, fallback=fallback, privacy=privacy, limits=limits)
+    return VoiceProfile(
+        name=name, version=version, persona=persona, candidates=candidates,
+        fallback=fallback, privacy=privacy, limits=limits,
+    )
 
 
 def load_voice_profile(path: Path) -> VoiceProfile:
+    """`path` is `voice-profiles/<name>/<version>.yaml` - the parsed `name`
+    and `version` MUST match the containing directory and the file's own
+    stem, per the rule `load_skill` already applies to `SKILL.md`."""
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise VoiceProfileValidationError(f"{path}: voice profile must be a YAML mapping")
-    return parse_voice_profile(raw)
+    profile = parse_voice_profile(raw)
+
+    expected_name = path.parent.name
+    if profile.name != expected_name:
+        raise VoiceProfileValidationError(
+            f"voice profile name '{profile.name}' does not match its registry directory '{expected_name}'"
+        )
+    expected_version = path.stem
+    if profile.version != expected_version:
+        raise VoiceProfileValidationError(
+            f"voice profile version '{profile.version}' does not match its file name '{expected_version}'"
+        )
+    return profile
 
 
 def resolve_default_voice_id(repo_root: Path) -> str:

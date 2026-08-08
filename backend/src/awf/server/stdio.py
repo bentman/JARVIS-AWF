@@ -36,6 +36,9 @@ METHOD_NAMES = (
     "awf/registry.get",
     "awf/registry.validate",
     "awf/registry.publish",
+    "awf/registry.reindex",
+    "awf/registry.retire",
+    "awf/registry.trust",
     "awf/secret.set",
     "awf/secret.listNames",
     "awf/events.subscribe",
@@ -80,13 +83,21 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
             conn, artifact_id=params["artifactId"], artifacts_root=artifacts_dir(repo_root)
         )
     if method == "awf/registry.list":
-        return ops.op_registry_list(repo_root, kind=params["kind"])
+        return ops.op_registry_list(repo_root, kind=params["kind"], conn=conn)
     if method == "awf/registry.get":
-        return ops.op_registry_get(repo_root, kind=params["kind"], name=params["name"], version=params["version"])
+        return ops.op_registry_get(repo_root, conn, kind=params["kind"], name=params["name"], version=params["version"])
     if method == "awf/registry.validate":
         return ops.op_registry_validate(Path(params["path"]), kind=params.get("kind"))
     if method == "awf/registry.publish":
         return ops.op_registry_publish(repo_root, conn, path=Path(params["path"]), kind=params["kind"])
+    if method == "awf/registry.reindex":
+        return ops.op_registry_reindex(repo_root, conn)
+    if method == "awf/registry.retire":
+        return ops.op_registry_retire(conn, kind=params["kind"], name=params["name"], version=params["version"])
+    if method == "awf/registry.trust":
+        return ops.op_registry_trust(
+            conn, kind=params["kind"], name=params["name"], version=params["version"], status=params["status"]
+        )
     if method == "awf/secret.set":
         return ops.op_secret_set(repo_root, conn, name=params["name"], value=params["value"])
     if method == "awf/secret.listNames":

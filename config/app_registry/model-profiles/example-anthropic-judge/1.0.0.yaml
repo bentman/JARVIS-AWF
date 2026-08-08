@@ -1,4 +1,6 @@
 # Example Model Profile
+name: example-anthropic-judge
+version: 1.0.0
 purpose: judge
 privacy: {maximum_data_class: internal, local_only: false}
 candidates:

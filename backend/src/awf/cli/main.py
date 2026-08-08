@@ -70,6 +70,21 @@ def cmd_registry_publish(args: argparse.Namespace, repo_root: Path, conn) -> int
     return 0
 
 
+def cmd_registry_reindex(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_registry_reindex(repo_root, conn))
+    return 0
+
+
+def cmd_registry_retire(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_registry_retire(conn, kind=args.kind, name=args.name, version=args.version))
+    return 0
+
+
+def cmd_registry_trust(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_registry_trust(conn, kind=args.kind, name=args.name, version=args.version, status=args.status))
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace, repo_root: Path, conn) -> int:
     conn.close()  # the server owns its own connection lifecycle
     from awf.server.stdio import serve_stdio
@@ -120,6 +135,19 @@ def build_parser() -> argparse.ArgumentParser:
     publish_parser.add_argument("definition_file")
     publish_parser.add_argument("--kind", required=True)
     publish_parser.set_defaults(func=cmd_registry_publish)
+    reindex_parser = registry_sub.add_parser("reindex")
+    reindex_parser.set_defaults(func=cmd_registry_reindex)
+    retire_parser = registry_sub.add_parser("retire")
+    retire_parser.add_argument("kind")
+    retire_parser.add_argument("name")
+    retire_parser.add_argument("version")
+    retire_parser.set_defaults(func=cmd_registry_retire)
+    trust_parser = registry_sub.add_parser("trust")
+    trust_parser.add_argument("kind")
+    trust_parser.add_argument("name")
+    trust_parser.add_argument("version")
+    trust_parser.add_argument("--status", required=True)
+    trust_parser.set_defaults(func=cmd_registry_trust)
 
     secret_parser = sub.add_parser("secret")
     secret_parser.add_argument("secret_args", nargs=argparse.REMAINDER)

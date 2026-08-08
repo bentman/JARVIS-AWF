@@ -14,8 +14,12 @@ from awf.cli.core_ops import (
     op_registry_get,
     op_registry_list,
     op_registry_publish,
+    op_registry_reindex,
+    op_registry_retire,
+    op_registry_trust,
     op_registry_validate,
     op_run_list,
+    op_run_resume,
     op_run_start,
     op_run_status,
     op_secret_list_names,
@@ -204,7 +208,7 @@ def test_registry_publish_then_list_and_get_find_it(tmp_path, fixtures_dir):
     listed = op_registry_list(repo_root, kind="capabilities")
     assert {"source": "data", "kind": "capabilities", "name": published["name"], "version": published["version"]} in listed
 
-    fetched = op_registry_get(repo_root, kind="capabilities", name=published["name"], version=published["version"])
+    fetched = op_registry_get(repo_root, conn, kind="capabilities", name=published["name"], version=published["version"])
     assert fetched["source"] == "data"
 
 
@@ -233,7 +237,7 @@ def test_registry_publish_agent_manifest_writes_data_registry_and_index(tmp_path
     assert row["source"] == "data"
     assert row["digest"] == result["digest"]
 
-    fetched = op_registry_get(repo_root, kind="agents", name="builder", version="1.0.0")
+    fetched = op_registry_get(repo_root, conn, kind="agents", name="builder", version="1.0.0")
     assert fetched["source"] == "data"
 
 
@@ -319,6 +323,118 @@ def test_registry_publish_skill_writes_data_registry_and_index(tmp_path):
     assert {"source": "data", "kind": "skills", "name": "other-skill", "version": "1.0.0"} in fetched_list
 
 
+def test_registry_publish_voice_profile_round_trips_through_get_and_list(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+    source = tmp_path / "authoring" / "demo-voice.yaml"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "name: demo-voice\nversion: 1.0.0\n"
+        "persona: {name: Demo, description: x, style_prompt: y}\n"
+        "tts:\n"
+        "  candidates:\n"
+        "    - {engine: kokoro, model: kokoro-v1.0, voice_id: bf_isabella, speed: 1.0, priority: 1, enabled: true}\n"
+        "  fallback: {mode: none, allow_quality_degrade: false}\n"
+        "privacy: {local_only: true}\n"
+        "limits: {max_seconds_per_utterance: 30}\n"
+    )
+
+    result = op_registry_publish(repo_root, conn, path=source, kind="voice-profiles")
+
+    assert result["kind"] == "voice-profiles"
+    assert result["name"] == "demo-voice"
+    assert result["version"] == "1.0.0"
+
+    fetched = op_registry_get(repo_root, conn, kind="voice-profiles", name="demo-voice", version="1.0.0")
+    assert fetched["object"]["persona"]["name"] == "Demo"
+
+    listed = op_registry_list(repo_root, kind="voice-profiles")
+    assert {"source": "data", "kind": "voice-profiles", "name": "demo-voice", "version": "1.0.0"} in listed
+
+
+def test_registry_publish_model_profile_round_trips_through_get_and_list(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+    source = tmp_path / "authoring" / "demo-model.yaml"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "name: demo-model\nversion: 1.0.0\n"
+        "purpose: coding\n"
+        "privacy: {maximum_data_class: internal, local_only: true}\n"
+        "candidates:\n  - {provider: ollama, model: phi4-mini, priority: 1, enabled: true}\n"
+        "fallback: {mode: none, allow_quality_degrade: false}\n"
+        "limits: {max_input_tokens_per_call: 1, max_output_tokens_per_call: 1, max_cost_usd_per_call: 0}\n"
+    )
+
+    result = op_registry_publish(repo_root, conn, path=source, kind="model-profiles")
+
+    assert result["kind"] == "model-profiles"
+    assert result["name"] == "demo-model"
+
+    fetched = op_registry_get(repo_root, conn, kind="model-profiles", name="demo-model", version="1.0.0")
+    assert fetched["object"]["purpose"] == "coding"
+
+    listed = op_registry_list(repo_root, kind="model-profiles")
+    assert {"source": "data", "kind": "model-profiles", "name": "demo-model", "version": "1.0.0"} in listed
+
+
+def test_registry_get_returns_digest_trust_status_and_object(tmp_path, fixtures_dir):
+    repo_root, conn = make_repo(tmp_path)
+    source = fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml"
+    published = op_registry_publish(repo_root, conn, path=source, kind="capabilities")
+
+    fetched = op_registry_get(
+        repo_root, conn, kind="capabilities", name=published["name"], version=published["version"]
+    )
+
+    assert fetched["digest"] == published["digest"]
+    assert fetched["trust_status"] == "local"
+    assert fetched["object"]["risk_class"] == "R0"
+
+
+def test_registry_retire_then_trust_restores_resolution(tmp_path, fixtures_dir):
+    repo_root, conn = make_repo(tmp_path)
+    source = fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml"
+    published = op_registry_publish(repo_root, conn, path=source, kind="capabilities")
+
+    retired = op_registry_retire(conn, kind="capabilities", name=published["name"], version=published["version"])
+    assert retired["trust_status"] == "blocked"
+
+    from awf.registry.resolve import RegistryBlockedError, resolve_registry_object
+
+    with pytest.raises(RegistryBlockedError):
+        resolve_registry_object(
+            repo_root, "capabilities", published["name"], published["version"], conn=conn
+        )
+
+    trusted = op_registry_trust(
+        conn, kind="capabilities", name=published["name"], version=published["version"], status="local"
+    )
+    assert trusted["trust_status"] == "local"
+
+    path, source_side = resolve_registry_object(
+        repo_root, "capabilities", published["name"], published["version"], conn=conn
+    )
+    assert source_side == "data"
+
+
+def test_registry_trust_raises_for_an_unindexed_object(tmp_path):
+    _repo_root, conn = make_repo(tmp_path)
+    with pytest.raises(CoreOpError):
+        op_registry_trust(conn, kind="capabilities", name="missing", version="1.0.0", status="blocked")
+
+
+def test_registry_reindex_covers_shipped_config_defaults(real_repo_root):
+    from awf.db.schema import DDL_STATEMENTS
+
+    conn = get_connection(":memory:")
+    for statement in DDL_STATEMENTS:
+        conn.execute(statement)
+
+    counts = op_registry_reindex(real_repo_root, conn)
+
+    assert counts["agents"]["config"] >= 3
+    assert counts["mcp"]["config"] >= 1
+
+
 def test_registry_list_never_shows_config_side_model_profiles(tmp_path):
     # Section 9.3: model-profiles has no config/app_registry/ counterpart -
     # ADR-0001's reference examples under config/app_registry/model-profiles/
@@ -387,6 +503,66 @@ def test_op_run_start_fails_cleanly_for_an_unknown_activity_name(tmp_path):
     assert "error" in result
     row = conn.execute("SELECT status FROM runs WHERE run_id = ?", (result["run_id"],)).fetchone()
     assert row["status"] == "FAILED"
+
+
+def _single_gate_workflow(name: str, version: str, digest: str) -> dict:
+    return {
+        "apiVersion": "awf/v1",
+        "kind": "Workflow",
+        "metadata": {"name": name, "version": version, "digest": digest},
+        "spec": {
+            "inputSchema": {}, "outputSchema": {}, "budgets": {},
+            "nodes": [{"id": "check", "type": "gate", "checkCommand": "true", "next": None}],
+            "outputs": {},
+        },
+    }
+
+
+def test_op_run_start_with_a_bare_name_resolves_and_pins_the_latest_version(tmp_path):
+    repo_root, conn = make_git_repo(tmp_path)
+    publish_workflow(repo_root, _single_gate_workflow("pin-demo", "1.0.0", "sha256:demo"))
+
+    result = op_run_start(repo_root, conn, workflow_ref="pin-demo", input_data={})
+
+    assert result["status"] == "SUCCEEDED"
+    row = conn.execute("SELECT workflow_ref FROM runs WHERE run_id = ?", (result["run_id"],)).fetchone()
+    assert row["workflow_ref"] == "pin-demo@1.0.0"
+
+
+def test_run_resume_uses_the_pinned_version_not_a_newer_publish(tmp_path):
+    # v1.0.0 always succeeds (gate checkCommand "true"); v2.0.0 always fails
+    # immediately (an unregistered activity function) - if resume picked up
+    # the newer version instead of the pin stored at start time, the run
+    # would come back FAILED instead of SUCCEEDED.
+    repo_root, conn = make_git_repo(tmp_path)
+    publish_workflow(repo_root, _single_gate_workflow("resume-demo", "1.0.0", "sha256:v1"))
+
+    started = op_run_start(repo_root, conn, workflow_ref="resume-demo@1.0.0", input_data={})
+    assert started["status"] == "SUCCEEDED"
+
+    publish_workflow(
+        repo_root,
+        {
+            "apiVersion": "awf/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "resume-demo", "version": "2.0.0", "digest": "sha256:v2"},
+            "spec": {
+                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "nodes": [{"id": "a", "type": "activity", "function": "not-a-real-activity", "next": None}],
+                "outputs": {},
+            },
+        },
+    )
+
+    # simulate a crash that left the (already-SUCCEEDED) run's row RUNNING,
+    # so scan_incomplete_runs picks it back up for this test's purposes.
+    conn.execute("UPDATE runs SET status = 'RUNNING' WHERE run_id = ?", (started["run_id"],))
+    conn.commit()
+
+    results = op_run_resume(repo_root, conn)
+
+    assert len(results) == 1
+    assert results[0]["status"] == "SUCCEEDED"
 
 
 def test_op_run_start_rejects_input_that_violates_inputschema(tmp_path):

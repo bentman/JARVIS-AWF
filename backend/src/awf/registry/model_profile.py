@@ -56,11 +56,17 @@ class Limits:
 
 @dataclass(frozen=True)
 class ModelProfile:
+    name: str
+    version: str
     purpose: str
     privacy: Privacy
     candidates: tuple[Candidate, ...]
     fallback: Fallback
     limits: Limits
+
+    @property
+    def ref(self) -> str:
+        return f"{self.name}@{self.version}"
 
     def enabled_candidates_by_priority(self) -> tuple[Candidate, ...]:
         return tuple(
@@ -69,6 +75,8 @@ class ModelProfile:
 
 
 def parse_model_profile(raw: dict) -> ModelProfile:
+    name = _require(raw, "name", "model profile")
+    version = _require(raw, "version", "model profile")
     privacy_raw = _require(raw, "privacy", "model profile")
     candidates_raw = _require(raw, "candidates", "model profile")
     fallback_raw = _require(raw, "fallback", "model profile")
@@ -110,6 +118,8 @@ def parse_model_profile(raw: dict) -> ModelProfile:
     )
 
     return ModelProfile(
+        name=name,
+        version=version,
         purpose=_require_enum(_require(raw, "purpose", "model profile"), PURPOSES, "purpose"),
         privacy=privacy,
         candidates=candidates,
@@ -119,7 +129,22 @@ def parse_model_profile(raw: dict) -> ModelProfile:
 
 
 def load_model_profile(path: Path) -> ModelProfile:
+    """`path` is `model-profiles/<name>/<version>.yaml` - the parsed `name`
+    and `version` MUST match the containing directory and the file's own
+    stem, per the rule `load_skill` already applies to `SKILL.md`."""
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise ModelProfileValidationError(f"{path}: model profile must be a YAML mapping")
-    return parse_model_profile(raw)
+    profile = parse_model_profile(raw)
+
+    expected_name = path.parent.name
+    if profile.name != expected_name:
+        raise ModelProfileValidationError(
+            f"model profile name '{profile.name}' does not match its registry directory '{expected_name}'"
+        )
+    expected_version = path.stem
+    if profile.version != expected_version:
+        raise ModelProfileValidationError(
+            f"model profile version '{profile.version}' does not match its file name '{expected_version}'"
+        )
+    return profile

@@ -50,6 +50,7 @@ def _write_profile(repo_root, name="local-model", candidates_yaml=None):
         "  - {provider: openai, model: gpt-4o, priority: 2, enabled: false}\n"
     )
     (profile_dir / "1.0.0.yaml").write_text(
+        f"name: {name}\nversion: 1.0.0\n"
         "purpose: general-reasoning\n"
         "privacy: {maximum_data_class: internal, local_only: true}\n"
         f"{candidates_yaml}"

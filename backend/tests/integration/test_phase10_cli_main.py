@@ -139,3 +139,62 @@ def test_registry_validate_command(tmp_path, capsys, fixtures_dir):
     assert exit_code == 0
     out = json.loads(capsys.readouterr().out)
     assert out["kind"] == "CapabilityRecord"
+
+
+def test_registry_reindex_command_dispatches_to_core_ops(tmp_path, capsys, monkeypatch):
+    repo_root = make_repo(tmp_path)
+    monkeypatch.setattr(cli_main.ops, "op_registry_reindex", lambda repo_root, conn: {"capabilities": {"config": 1, "data": 0}})
+
+    exit_code = cli_main.run(["registry", "reindex"], repo_root)
+
+    assert exit_code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["capabilities"] == {"config": 1, "data": 0}
+
+
+def test_registry_retire_command_dispatches_to_core_ops(tmp_path, capsys, monkeypatch):
+    repo_root = make_repo(tmp_path)
+    captured = {}
+
+    def fake_retire(conn, *, kind, name, version):
+        captured.update(kind=kind, name=name, version=version)
+        return {"kind": kind, "name": name, "version": version, "trust_status": "blocked"}
+
+    monkeypatch.setattr(cli_main.ops, "op_registry_retire", fake_retire)
+
+    exit_code = cli_main.run(["registry", "retire", "capabilities", "demo", "1.0.0"], repo_root)
+
+    assert exit_code == 0
+    assert captured == {"kind": "capabilities", "name": "demo", "version": "1.0.0"}
+    out = json.loads(capsys.readouterr().out)
+    assert out["trust_status"] == "blocked"
+
+
+def test_registry_trust_command_requires_status(tmp_path):
+    repo_root = make_repo(tmp_path)
+    try:
+        cli_main.run(["registry", "trust", "capabilities", "demo", "1.0.0"], repo_root)
+        raised = False
+    except SystemExit:
+        raised = True
+    assert raised
+
+
+def test_registry_trust_command_dispatches_to_core_ops(tmp_path, capsys, monkeypatch):
+    repo_root = make_repo(tmp_path)
+    captured = {}
+
+    def fake_trust(conn, *, kind, name, version, status):
+        captured.update(kind=kind, name=name, version=version, status=status)
+        return {"kind": kind, "name": name, "version": version, "trust_status": status}
+
+    monkeypatch.setattr(cli_main.ops, "op_registry_trust", fake_trust)
+
+    exit_code = cli_main.run(
+        ["registry", "trust", "capabilities", "demo", "1.0.0", "--status", "trusted"], repo_root
+    )
+
+    assert exit_code == 0
+    assert captured == {"kind": "capabilities", "name": "demo", "version": "1.0.0", "status": "trusted"}
+    out = json.loads(capsys.readouterr().out)
+    assert out["trust_status"] == "trusted"

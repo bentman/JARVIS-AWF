@@ -109,6 +109,8 @@ def test_gate_with_review_profile_adds_a_real_llm_review_finding_via_the_gateway
 
     review_profile = parse_model_profile(
         {
+            "name": "demo",
+            "version": "1.0.0",
             "purpose": "judge",
             "privacy": {"maximum_data_class": "internal", "local_only": True},
             "candidates": [{"provider": "ollama", "model": "phi4-mini:latest", "priority": 1, "enabled": True}],
@@ -157,6 +159,8 @@ def test_gate_with_worktree_path_shows_the_llm_reviewer_the_real_diff_not_just_t
 
     review_profile = parse_model_profile(
         {
+            "name": "demo",
+            "version": "1.0.0",
             "purpose": "judge",
             "privacy": {"maximum_data_class": "internal", "local_only": True},
             "candidates": [{"provider": "ollama", "model": "phi4-mini:latest", "priority": 1, "enabled": True}],
@@ -195,6 +199,8 @@ def test_high_risk_gate_with_adversary_review_profile_adds_a_real_llm_adversary_
 
     adversary_review_profile = parse_model_profile(
         {
+            "name": "demo",
+            "version": "1.0.0",
             "purpose": "adversary",
             "privacy": {"maximum_data_class": "internal", "local_only": True},
             "candidates": [{"provider": "ollama", "model": "phi4-mini:latest", "priority": 1, "enabled": True}],

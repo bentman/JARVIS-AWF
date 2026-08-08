@@ -1,4 +1,6 @@
 # Example Model Profile
+name: example-llamacpp-coding
+version: 1.0.0
 purpose: coding
 privacy: {maximum_data_class: internal, local_only: true}
 candidates:

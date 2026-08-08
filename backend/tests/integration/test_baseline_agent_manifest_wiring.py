@@ -186,6 +186,7 @@ def test_agent_ref_model_profile_is_threaded_through_to_the_adapter(tmp_path, co
     profile_dir = tmp_path / "data" / "registry" / "model-profiles" / "local-model"
     profile_dir.mkdir(parents=True)
     (profile_dir / "1.0.0.yaml").write_text(
+        "name: local-model\nversion: 1.0.0\n"
         "purpose: general-reasoning\n"
         "privacy: {maximum_data_class: internal, local_only: true}\n"
         "candidates:\n  - {provider: ollama, model: qwen3-vl:8b, priority: 1, enabled: true}\n"

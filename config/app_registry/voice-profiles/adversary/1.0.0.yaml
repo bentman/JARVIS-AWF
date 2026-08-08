@@ -1,3 +1,5 @@
+name: adversary
+version: 1.0.0
 persona:
   name: Adversary
   description: Stress-tests candidates for resource safety, safety-gate bypass, and memory contamination.

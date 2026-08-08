@@ -1,3 +1,5 @@
+name: verifier
+version: 1.0.0
 persona:
   name: Verifier
   description: Performs independent code review and regression tests against candidate artifacts.

@@ -30,6 +30,8 @@ def test_verifier_check_fail_yields_high_severity_finding():
 def _judge_profile():
     return parse_model_profile(
         {
+            "name": "demo-judge",
+            "version": "1.0.0",
             "purpose": "judge",
             "privacy": {"maximum_data_class": "internal", "local_only": True},
             "candidates": [{"provider": "ollama", "model": "phi4-mini:latest", "priority": 1, "enabled": True}],
@@ -79,6 +81,8 @@ def test_llm_review_routes_through_the_model_gateway(monkeypatch):
 def _adversary_profile():
     return parse_model_profile(
         {
+            "name": "demo-adversary",
+            "version": "1.0.0",
             "purpose": "adversary",
             "privacy": {"maximum_data_class": "internal", "local_only": True},
             "candidates": [{"provider": "ollama", "model": "phi4-mini:latest", "priority": 1, "enabled": True}],

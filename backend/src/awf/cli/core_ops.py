@@ -30,17 +30,20 @@ from awf.isolation.worktree import create_worktree, remove_worktree, worktree_pa
 from awf.paths import artifacts_dir
 from awf.paths import db_path as resolve_db_path
 from awf.paths import env_path
+from awf.registry import index as registry_index
 from awf.registry.agent_manifest import load_agent_manifest
-from awf.registry.capability_record import parse_capability_record
-from awf.registry.kinds import AGENTS, CAPABILITIES, MCP, MODEL_PROFILES, SKILLS, WORKFLOWS
+from awf.registry.capability_record import load_capability_record, parse_capability_record
+from awf.registry.index import latest_version
+from awf.registry.kinds import AGENTS, CAPABILITIES, MCP, MODEL_PROFILES, SKILLS, VOICE_PROFILES, WORKFLOWS
 from awf.registry.kinds import UnknownRegistryKindError
 from awf.registry.kinds import by_key as kind_by_key
 from awf.registry.kinds import object_path as kind_object_path
 from awf.registry.kinds import version_names
-from awf.registry.mcp_server import parse_mcp_server
+from awf.registry.mcp_server import load_mcp_server, parse_mcp_server
 from awf.registry.model_profile import load_model_profile, parse_model_profile
 from awf.registry.resolve import CONFIG_ROOT, DATA_ROOT, resolve_registry_object
 from awf.registry.skill import directory_digest, load_skill
+from awf.registry.voice_profile import load_voice_profile, parse_voice_profile
 from awf.secrets.store import list_secret_names, set_secret
 from awf.workflow.approval import make_approval_node_executor
 from awf.workflow.definition import load_workflow, parse_workflow
@@ -228,11 +231,11 @@ def _build_node_executors(
     return executors
 
 
-def _resolve_workflow(repo_root: Path, workflow_ref: str):
+def _resolve_workflow(repo_root: Path, workflow_ref: str, conn: sqlite3.Connection | None = None):
     name, _, version = workflow_ref.partition("@")
     if not version:
-        raise CoreOpError(f"workflow ref must be 'name@version', got: {workflow_ref!r}")
-    path, _source = resolve_registry_object(repo_root, "workflows", name, version)
+        version = latest_version(repo_root, "workflows", name)
+    path, _source = resolve_registry_object(repo_root, "workflows", name, version, conn=conn)
     return load_workflow(path)
 
 
@@ -264,7 +267,7 @@ def _run_workflow_safely(conn: sqlite3.Connection, *, run_id: str, workflow, nod
 def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str, input_data: dict) -> dict:
     import json
 
-    workflow = _resolve_workflow(repo_root, workflow_ref)
+    workflow = _resolve_workflow(repo_root, workflow_ref, conn=conn)
     try:
         validate_input(input_data, workflow.input_schema)
     except InputValidationError as exc:
@@ -303,7 +306,7 @@ def op_run_resume(repo_root: Path, conn: sqlite3.Connection) -> list[dict]:
     results = []
     for run_id in scan_incomplete_runs(conn):
         run_row = conn.execute("SELECT workflow_ref FROM runs WHERE run_id = ?", (run_id,)).fetchone()
-        workflow = _resolve_workflow(repo_root, run_row["workflow_ref"])
+        workflow = _resolve_workflow(repo_root, run_row["workflow_ref"], conn=conn)
         worktree = worktree_path(repo_root, run_id)
         run_scratch_dir = scratch_path(repo_root, run_id)
         node_executors = _build_node_executors(
@@ -393,7 +396,7 @@ def op_artifact_read(conn: sqlite3.Connection, *, artifact_id: str, artifacts_ro
     return {**dict(row), "content": content}
 
 
-def op_registry_list(repo_root: Path, *, kind: str) -> list[dict]:
+def op_registry_list(repo_root: Path, *, kind: str, conn: sqlite3.Connection | None = None) -> list[dict]:
     registry_kind = kind_by_key(kind)
     roots = (("data", repo_root / DATA_ROOT), ("config", repo_root / CONFIG_ROOT))
     if registry_kind.data_only:
@@ -409,15 +412,42 @@ def op_registry_list(repo_root: Path, *, kind: str) -> list[dict]:
             continue
         for name_dir in sorted(p for p in kind_dir.iterdir() if p.is_dir()):
             for version in version_names(name_dir, registry_kind):
-                results.append(
-                    {"source": source_name, "kind": kind, "name": name_dir.name, "version": version}
-                )
+                row = {"source": source_name, "kind": kind, "name": name_dir.name, "version": version}
+                if conn is not None:
+                    indexed = registry_index.index_row(conn, kind, name_dir.name, version)
+                    row["trust_status"] = indexed["trust_status"] if indexed else None
+                    row["digest"] = indexed["digest"] if indexed else None
+                results.append(row)
     return results
 
 
-def op_registry_get(repo_root: Path, *, kind: str, name: str, version: str) -> dict:
-    path, source = resolve_registry_object(repo_root, kind, name, version)
-    return {"kind": kind, "name": name, "version": version, "source": source, "content": path.read_text()}
+_OBJECT_LOADERS = {
+    WORKFLOWS: load_workflow,
+    AGENTS: load_agent_manifest,
+    CAPABILITIES: load_capability_record,
+    MCP: load_mcp_server,
+    SKILLS: load_skill,
+    VOICE_PROFILES: load_voice_profile,
+    MODEL_PROFILES: load_model_profile,
+}
+
+
+def op_registry_get(repo_root: Path, conn: sqlite3.Connection, *, kind: str, name: str, version: str) -> dict:
+    import dataclasses
+
+    registry_kind = kind_by_key(kind)
+    path, source = resolve_registry_object(repo_root, kind, name, version, conn=conn)
+
+    indexed = registry_index.index_row(conn, kind, name, version)
+    digest = indexed["digest"] if indexed else registry_index.compute_digest(path, registry_kind)
+    trust_status = indexed["trust_status"] if indexed else None
+    obj = dataclasses.asdict(_OBJECT_LOADERS[registry_kind](path))
+
+    return {
+        "kind": kind, "name": name, "version": version, "source": source,
+        "content": path.read_text(),
+        "digest": digest, "trust_status": trust_status, "object": obj,
+    }
 
 
 def _skill_md_path(path: Path) -> Path | None:
@@ -487,8 +517,11 @@ def op_registry_validate(path: Path, *, kind: str | None = None) -> dict:
         server = parse_mcp_server(raw)
         return {"kind": "McpServer", "ref": server.ref, "valid": True}
     if registry_kind is MODEL_PROFILES:
-        parse_model_profile(raw)
-        return {"kind": "ModelProfile", "valid": True}
+        profile = parse_model_profile(raw)
+        return {"kind": "ModelProfile", "ref": profile.ref, "valid": True}
+    if registry_kind is VOICE_PROFILES:
+        profile = parse_voice_profile(raw)
+        return {"kind": "VoiceProfile", "ref": profile.ref, "valid": True}
     raise CoreOpError(f"{path}: registry validate does not support kind '{registry_kind.key}'")
 
 
@@ -535,11 +568,14 @@ def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path
         elif registry_kind is MCP:
             server = parse_mcp_server(raw)
             name, version = server.name, server.version
+        elif registry_kind is MODEL_PROFILES:
+            profile = parse_model_profile(raw)
+            name, version = profile.name, profile.version
+        elif registry_kind is VOICE_PROFILES:
+            profile = parse_voice_profile(raw)
+            name, version = profile.name, profile.version
         else:
-            raise CoreOpError(
-                f"{path}: registry publish does not support kind '{kind}' "
-                "(supported: workflows, capabilities, mcp, agents, skills)"
-            )
+            raise CoreOpError(f"{path}: registry publish does not support kind '{kind}'")
 
     payload = path.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
@@ -557,6 +593,27 @@ def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path
     )
     conn.commit()
     return {"kind": kind, "name": name, "version": version, "digest": digest, "path": str(target_path)}
+
+
+def op_registry_reindex(repo_root: Path, conn: sqlite3.Connection) -> dict:
+    return registry_index.reindex(repo_root, conn)
+
+
+_TRUST_STATUSES = ("local", "trusted", "quarantined", "blocked")
+
+
+def op_registry_trust(conn: sqlite3.Connection, *, kind: str, name: str, version: str, status: str) -> dict:
+    kind_by_key(kind)  # validates the kind, raises UnknownRegistryKindError otherwise
+    if status not in _TRUST_STATUSES:
+        raise CoreOpError(f"status must be one of {_TRUST_STATUSES}, got {status!r}")
+    row = registry_index.set_trust_status(conn, kind, name, version, status)
+    if row is None:
+        raise CoreOpError(f"{kind}/{name}@{version} is not indexed; run 'awf registry reindex' or publish it first")
+    return row
+
+
+def op_registry_retire(conn: sqlite3.Connection, *, kind: str, name: str, version: str) -> dict:
+    return op_registry_trust(conn, kind=kind, name=name, version=version, status="blocked")
 
 
 def op_secret_set(repo_root: Path, conn: sqlite3.Connection, *, name: str, value: str) -> dict:

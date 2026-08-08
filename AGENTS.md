@@ -63,7 +63,7 @@ The system must support these targets without assuming any one acceleration path
 
 ## Validation
 
-- Add or update tests with every behavioral change.
+- Update tests with every behavioral change - add new only when shape/pattern does not exist.
 - Hardware-dependent tests must report `SKIP` with a reason when the provider is unavailable, unless the test explicitly requires that provider.
 - The harness should expose focused targets plus a cumulative smoke target.
 - Do not claim runtime support from documentation alone; include command evidence.

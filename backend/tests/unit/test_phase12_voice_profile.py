@@ -15,6 +15,8 @@ def voice_profiles_root(repo_root):
 
 def minimal_raw(**overrides):
     raw = {
+        "name": "demo",
+        "version": "1.0.0",
         "persona": {"name": "Demo", "description": "x", "style_prompt": "y"},
         "tts": {
             "candidates": [
@@ -95,6 +97,8 @@ def test_resolve_default_voice_id_follows_data_registry_override(tmp_path):
 
 def minimal_raw_yaml(voice_id: str) -> str:
     return (
+        "name: narrator\n"
+        "version: 1.0.0\n"
         "persona: {name: Demo, description: x, style_prompt: y}\n"
         "tts:\n"
         "  candidates:\n"

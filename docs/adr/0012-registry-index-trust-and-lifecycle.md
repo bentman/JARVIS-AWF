@@ -2,7 +2,25 @@
 
 ## Status
 
-Proposed. Not implemented.
+Implemented. Acceptance run: `pytest backend/tests` → 460 passed (up from
+436 baseline, same 0 skips); all six `scripts/validate_backend.py` commands
+returned exit 0. Manually verified end to end: `awf registry reindex`
+indexes an object, mutating its file then resolving with a connection
+raises `RegistryIntegrityError` naming both digests; `awf registry retire`
+then resolving raises `RegistryBlockedError`; `awf registry trust ...
+--status local` restores the row's status but resolution still raises
+`RegistryIntegrityError` until a fresh `reindex` accepts the mutated
+content; publishing a Voice Profile through `awf registry publish --kind
+voice-profiles` round-trips; `awf run demo` (no `@version`) resolves and
+records `demo@1.0.0` in `runs.workflow_ref`.
+
+One deviation from this record's own prose: `awf run start --workflow
+<name>` doesn't exist as written — the real CLI is the pre-existing `awf run
+<workflow>` positional, no `run start` subcommand. Rather than restructure
+`run`/`status`/`resume` into a subcommand group this record doesn't
+otherwise specify, the existing positional now accepts a bare name in
+addition to `name@version`, reaching the same latest-version resolution the
+Acceptance criteria describe with no CLI surface change and no test broken.
 
 Covers Task A (items 1–4) and Task D (items 10–12) of the registry cohesion
 review. Depends on ADR-0011, which gives this record the kind vocabulary it

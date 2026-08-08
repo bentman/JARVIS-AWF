@@ -62,6 +62,8 @@ def test_parse_rejects_invalid_purpose():
     with pytest.raises(ModelProfileValidationError):
         parse_model_profile(
             {
+                "name": "demo",
+                "version": "1.0.0",
                 "purpose": "not-a-real-purpose",
                 "privacy": {"maximum_data_class": "internal", "local_only": True},
                 "candidates": [{"provider": "ollama", "model": "x", "priority": 1, "enabled": True}],
@@ -97,6 +99,8 @@ def test_complete_calls_litellm_with_candidate_fields(monkeypatch, repo_root):
 def test_complete_ordered_fallback_tries_next_candidate(monkeypatch):
     profile = parse_model_profile(
         {
+            "name": "demo",
+            "version": "1.0.0",
             "purpose": "coding",
             "privacy": {"maximum_data_class": "internal", "local_only": True},
             "candidates": [
@@ -126,6 +130,8 @@ def test_complete_ordered_fallback_tries_next_candidate(monkeypatch):
 def test_complete_no_fallback_raises_immediately(monkeypatch):
     profile = parse_model_profile(
         {
+            "name": "demo",
+            "version": "1.0.0",
             "purpose": "coding",
             "privacy": {"maximum_data_class": "internal", "local_only": True},
             "candidates": [
@@ -159,6 +165,8 @@ def test_complete_resolves_api_key_from_secrets_store(tmp_path, monkeypatch):
 
     profile = parse_model_profile(
         {
+            "name": "demo",
+            "version": "1.0.0",
             "purpose": "coding",
             "privacy": {"maximum_data_class": "internal", "local_only": False},
             "candidates": [
@@ -191,6 +199,8 @@ def test_complete_resolves_api_key_from_secrets_store(tmp_path, monkeypatch):
 def test_complete_raises_when_secret_required_but_no_conn_given():
     profile = parse_model_profile(
         {
+            "name": "demo",
+            "version": "1.0.0",
             "purpose": "coding",
             "privacy": {"maximum_data_class": "internal", "local_only": False},
             "candidates": [

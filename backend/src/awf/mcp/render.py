@@ -22,7 +22,9 @@ Per-adapter mechanism:
     servers from `~/.gemini/config/mcp_config.json` in the operator's home
     directory, which is never written to directly. Instead, each
     invocation gets its own throwaway `$HOME`
-    (`cache/sandbox/<run_id>/agy_home/`, never the operator's real home):
+    (`cache/sandbox/<run_id>/scratch_home/<actor>/`, never the operator's real
+    home; `scratch_home` is a generic shared directory - Antigravity, Cline,
+    and any future home-scoped adapter - separated by `<actor>`):
     `.gemini/antigravity-cli/antigravity-oauth-token` is copied in
     read-only from the real home, and
     `.gemini/antigravity-cli/settings.json` /

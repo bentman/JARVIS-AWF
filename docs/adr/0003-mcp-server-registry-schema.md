@@ -51,7 +51,7 @@ At each `agent` node, before the adapter runs:
    Antigravity has no per-invocation config flag and reads MCP servers
    only from `~/.gemini/config/mcp_config.json` - its own real home
    directory. For this one adapter, step 3 means giving the subprocess a
-   throwaway `$HOME` instead: `cache/sandbox/<run_id>/agy_home/<actor>/`
+   throwaway `$HOME` instead: `cache/sandbox/<run_id>/scratch_home/<actor>/`
    gets a fresh `.gemini/config/mcp_config.json` and
    `.gemini/antigravity-cli/settings.json` (with the `mcp(*)` allow rule
    headless mode requires - no narrower per-server syntax was found to

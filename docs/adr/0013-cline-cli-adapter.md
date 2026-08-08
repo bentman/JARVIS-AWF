@@ -101,7 +101,7 @@ Flag mapping (authoritative, from `apps/cli/src/commands/program.ts`):
     default `--config` dir, under `$HOME`) and state from `~/.cline/data` (default
     `--data-dir`). With the `HOME` throwaway override that
     `engine.agent_step._apply_mcp` already sets for Antigravity
-    (`scratch_path(repo_root, run_id)/"agy_home"/actor`), `--config` is
+    (`scratch_path(repo_root, run_id)/"scratch_home"/actor`), `--config` is
     not needed: Cline's `~/.cline` resolves under the isolated scratch
     `HOME`, exactly as Antigravity reads `~/.gemini/...` under the same
     scratch `HOME`.
@@ -194,7 +194,7 @@ Met and independently verified (2026-08-08):
 - `backend/tests/integration/test_baseline_agent_step_mcp.py` gains a
   Cline variant of the Antigravity scratch-home test (`actor="cline"`):
   `render_cline` writes `.cline/cline_mcp_settings.json` under the
-  run-scoped scratch `$HOME` (`cache/sandbox/<run_id>/agy_home/cline`) and
+  run-scoped scratch `$HOME` (`cache/sandbox/<run_id>/scratch_home/cline`) and
   sets `constraints["mcp_env_overlay"]["HOME"]` to it; the operator's real
   home is never written. `backend/tests/integration/test_phase1_registry_guard.py`
   gains the `("cline_invoke", "cline", "R1")` parametrize row.

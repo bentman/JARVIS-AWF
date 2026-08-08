@@ -154,8 +154,10 @@ def _apply_mcp(
         # A throwaway $HOME for this Run only - never the operator's real
         # home directory, never anything that outlives the Run (Section
         # 18 #3's spirit, applied to an adapter with no per-invocation MCP
-        # flag of its own).
-        scratch_home = scratch_path(repo_root, run_id) / "agy_home" / actor
+        # flag of its own). The "scratch_home" directory is generic and shared
+        # by every home-scoped adapter (Antigravity, Cline, ...); the trailing
+        # `<actor>` segment keeps each adapter's isolated home separate.
+        scratch_home = scratch_path(repo_root, run_id) / "scratch_home" / actor
         for relative, contents in rendered.home_relative_files.items():
             target = scratch_home / relative
             target.parent.mkdir(parents=True, exist_ok=True)

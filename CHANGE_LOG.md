@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-08 05:40
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Renamed the shared throwaway-home scratch directory from `agy_home` to `scratch_home` - it was Antigravity-specific but is now shared by Cline and any future home-scoped adapter; the `<actor>` subdirectory keeps each separated.
+  - Scope: `backend/src/awf/engine/agent_step.py` (`_apply_mcp` path), `backend/src/awf/mcp/render.py` (docstring), `backend/tests/integration/test_baseline_agent_step_mcp.py` (Antigravity + Cline scratch-home tests), `docs/adr/0003-...`, `docs/adr/0013-...`, and `CHANGE_LOG.md` ADR-0003 reference.
+  - Validation: no `agy_home` string remains; `pytest backend/tests` -> 472 passed, 0 skipped (unchanged).
+  - Notes: cosmetic naming only - nothing keys on the string (per-run scratch path, cleanup removes the whole sandbox dir), so the rename breaks nothing.
+
 - Timestamp: 2026-08-08 05:21
   - Host class(es): Linux/WSL2, AMD64, NVIDIA GeForce RTX 3060
   - Summary: Implemented ADR-0013 - added the fifth and final named CLI adapter, Cline (`adapter: cline`), mirroring the other four in shape, pattern, and functionality, and resolved the historical blocker that had left Cline unbuilt (the current CLI's `--json` + `--auto-approve true` is a non-yolo headless mode).
@@ -165,7 +172,7 @@
   - Summary: Antigravity now gets a real MCP handoff too - all four implemented adapters are supported. Mechanism, tradeoff, and the accepted exception (below) are written into `docs/adr/0003-mcp-server-registry-schema.md` (Mechanism, Scope item 8, Acceptance).
   - Scope:
     - `backend/src/awf/mcp/render.py` (`render_antigravity` renders a fresh `.gemini/config/mcp_config.json` + `.gemini/antigravity-cli/settings.json` instead of raising; new `RenderedMcpConfig.home_relative_files`/`home_copy_paths` fields)
-    - `backend/src/awf/engine/agent_step.py` (`_apply_mcp` materializes a scratch `$HOME` under `cache/sandbox/<run_id>/agy_home/<actor>/`, copies in the real `antigravity-oauth-token`, and injects `HOME` via `mcp_env_overlay`)
+    - `backend/src/awf/engine/agent_step.py` (`_apply_mcp` materializes a scratch `$HOME` under `cache/sandbox/<run_id>/scratch_home/<actor>/`, copies in the real `antigravity-oauth-token`, and injects `HOME` via `mcp_env_overlay`)
     - `backend/tests/test_baseline_mcp_render.py`, `test_baseline_agent_step_mcp.py`
     - `docs/adr/0003-mcp-server-registry-schema.md`
   - Validation:

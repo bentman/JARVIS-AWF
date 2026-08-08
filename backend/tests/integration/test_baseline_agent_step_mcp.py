@@ -184,7 +184,7 @@ def test_antigravity_mcp_ref_materializes_a_scratch_home_never_the_real_one(repo
         repo_root=repo_root,
     )
 
-    scratch_home = repo_root / "cache" / "sandbox" / "run-1" / "agy_home" / "antigravity"
+    scratch_home = repo_root / "cache" / "sandbox" / "run-1" / "scratch_home" / "antigravity"
     assert (scratch_home / ".gemini" / "config" / "mcp_config.json").is_file()
     assert (scratch_home / ".gemini" / "antigravity-cli" / "antigravity-oauth-token").read_text() == "real-token-contents"
     # the real home directory itself was never written to
@@ -265,7 +265,7 @@ def test_cline_mcp_ref_materializes_a_scratch_home_never_the_real_one(repo_and_w
         repo_root=repo_root,
     )
 
-    scratch_home = repo_root / "cache" / "sandbox" / "run-1" / "agy_home" / "cline"
+    scratch_home = repo_root / "cache" / "sandbox" / "run-1" / "scratch_home" / "cline"
     mcp_file = scratch_home / ".cline" / "cline_mcp_settings.json"
     assert mcp_file.is_file()
     assert "mcpServers" in json.loads(mcp_file.read_text())

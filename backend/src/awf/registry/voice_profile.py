@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from awf.registry.resolve import resolve_registry_object
-from awf.registry.schema import require
+from awf.registry.schema import require, require_enum
 
 FALLBACK_MODES = ("none", "ordered")
 
@@ -19,6 +19,7 @@ class VoiceProfileValidationError(ValueError):
 
 
 _require = partial(require, error=VoiceProfileValidationError)
+_require_enum = partial(require_enum, error=VoiceProfileValidationError)
 
 
 @dataclass(frozen=True)
@@ -97,11 +98,9 @@ def parse_voice_profile(raw: dict) -> VoiceProfile:
 
     fallback_raw = _require(tts_raw, "fallback", "tts")
     fallback = Fallback(
-        mode=fallback_raw.get("mode", "none"),
+        mode=_require_enum(fallback_raw.get("mode", "none"), FALLBACK_MODES, "tts.fallback.mode"),
         allow_quality_degrade=bool(fallback_raw.get("allow_quality_degrade", False)),
     )
-    if fallback.mode not in FALLBACK_MODES:
-        raise VoiceProfileValidationError(f"tts.fallback.mode: '{fallback.mode}' not in {FALLBACK_MODES}")
 
     privacy = Privacy(local_only=bool(_require(privacy_raw, "local_only", "privacy")))
     limits = Limits(

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from awf.registry.schema import require
+from awf.registry.schema import require, require_enum
 
 TYPES = ("stdio", "http")
 
@@ -21,6 +21,7 @@ class McpServerValidationError(ValueError):
 
 
 _require = partial(require, error=McpServerValidationError)
+_require_enum = partial(require_enum, error=McpServerValidationError)
 
 
 @dataclass(frozen=True)
@@ -47,9 +48,7 @@ class McpServer:
 
 
 def parse_mcp_server(raw: dict) -> McpServer:
-    server_type = _require(raw, "type", "mcp server")
-    if server_type not in TYPES:
-        raise McpServerValidationError(f"type '{server_type}' not in {TYPES}")
+    server_type = _require_enum(_require(raw, "type", "mcp server"), TYPES, "type")
 
     if server_type == "stdio" and not raw.get("command"):
         raise McpServerValidationError("mcp server: type 'stdio' requires 'command'")

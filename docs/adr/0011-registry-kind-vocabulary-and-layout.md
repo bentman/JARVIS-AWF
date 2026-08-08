@@ -11,6 +11,18 @@ kind-to-layout mapping (`_object_path`/`DATA_ONLY_KINDS`) and no
 `config/app_registry`/`data/registry` string literal survive outside
 `registry/kinds.py`, and `data/artifacts` is spelled only in `paths.py`.
 
+A follow-up pass converted `mcp_server.py`'s and `voice_profile.py`'s two
+remaining hand-rolled enum checks onto `registry/schema.require_enum`, the
+two loaders left out of the initial pass because the shared helper's message
+format didn't obviously match either one's wording. `voice_profile.py`'s
+`tts.fallback.mode` check already used the exact `"{context}: '{value}' not
+in {allowed}"` shape, so that conversion is byte-for-byte unchanged.
+`mcp_server.py`'s `type` check did not (`"type '{value}' not in {allowed}"`,
+no colon) - converting it changes that one message to
+`"type: '{value}' not in {allowed}"`, accepted as a deliberate format-
+consistency fix since no test asserts the exact text. All six loaders now
+share one enum-check shape with no exceptions.
+
 Covers Task B (items 5–8) and Task C (item 9) of the registry cohesion review.
 Task A and Task D are ADR-0012, which builds on this record.
 

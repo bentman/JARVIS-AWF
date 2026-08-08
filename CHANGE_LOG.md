@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-08 02:45
+  - Host class(es): Linux/WSL2, AMD64, NVIDIA GeForce RTX 3060
+  - Summary: Follow-up to ADR-0011's loader consolidation - converted the two remaining hand-rolled enum checks in `mcp_server.py` and `voice_profile.py` onto the shared `registry/schema.require_enum`, closing the last exceptions to "one loader shape."
+  - Scope: `backend/src/awf/registry/mcp_server.py` (`type` check now goes through `_require_enum`); `backend/src/awf/registry/voice_profile.py` (`tts.fallback.mode` check now goes through `_require_enum` at `Fallback` construction instead of a separate post-construction check); `docs/adr/0011-registry-kind-vocabulary-and-layout.md` (Status section records this pass).
+  - Validation: `pytest backend/tests` -> 436 passed, unchanged from baseline (no new tests - pure internal refactor); `pytest backend/tests/unit/test_baseline_mcp_server.py backend/tests/unit/test_phase12_voice_profile.py -v` -> 17 passed; manually confirmed the resulting message text - `voice_profile.py`'s is byte-identical to its pre-change wording (`tts.fallback.mode: 'bogus' not in ('none', 'ordered')`), `mcp_server.py`'s gained one colon (`type: 'bogus' not in ('stdio', 'http')` vs the prior `type 'bogus' not in (...)`).
+  - Notes: no test asserts either message's exact text (both only check the exception class via `pytest.raises`), so the `mcp_server.py` wording change is a deliberate, harmless format-consistency fix rather than a silent regression - recorded here since ADR-0011's own acceptance evidence claimed every existing message stayed unchanged, which no longer literally holds for this one site.
+
 - Timestamp: 2026-08-07 15:48
   - Host class(es): Linux/WSL2, AMD64, NVIDIA GeForce RTX 3060
   - Summary: Implemented ADR-0011's Task B and Task C - centralized registry kind-to-layout knowledge into one new `registry/kinds.py` vocabulary, replaced content-shape dispatch in `op_registry_validate`/`op_registry_publish` with an explicit `kind` argument, consolidated six registry loaders' duplicated `_require`/`_require_enum`/`_split_frontmatter` scaffolding into a new `registry/schema.py`, and closed the two remaining `data/artifacts` path literals.

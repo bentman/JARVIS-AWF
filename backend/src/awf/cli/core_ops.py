@@ -17,6 +17,7 @@ import yaml
 
 from awf.adapters.antigravity_cli import invoke as antigravity_invoke
 from awf.adapters.claude_code import invoke as claude_code_invoke
+from awf.adapters.cline_cli import invoke as cline_invoke
 from awf.adapters.codex_cli import invoke as codex_invoke
 from awf.adapters.copilot_cli import invoke as copilot_invoke
 from awf.clock import utc_now_rfc3339
@@ -59,6 +60,7 @@ ADAPTER_REGISTRY = {
     "codex": codex_invoke,
     "antigravity": antigravity_invoke,
     "copilot": copilot_invoke,
+    "cline": cline_invoke,
 }
 
 

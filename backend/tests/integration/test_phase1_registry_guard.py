@@ -36,6 +36,7 @@ def test_load_r0_capability_record(load_fixture):
         ("codex_invoke", "codex", "R1"),
         ("antigravity_invoke", "antigravity", "R1"),
         ("copilot_invoke", "copilot", "R1"),
+        ("cline_invoke", "cline", "R1"),
     ],
 )
 def test_load_shipped_adr0009_capability_records(repo_root, name, expected_provider, expected_risk_class):

@@ -212,9 +212,48 @@ def render_antigravity(servers: list[McpServer], resolved_secrets: dict[str, str
     )
 
 
+def render_cline(servers: list[McpServer], resolved_secrets: dict[str, str]) -> RenderedMcpConfig:
+    if not servers:
+        return RenderedMcpConfig(relative_path=None, contents=None)
+
+    mcp_servers = {}
+    for server in servers:
+        if server.type == "stdio":
+            entry = {"type": "stdio", "command": server.command, "args": list(server.args)}
+            env = dict(server.env)
+            for env_var in server.env_secrets:
+                env[env_var] = f"${{{_secret_env_var_name(server.name, env_var)}}}"
+            if env:
+                entry["env"] = env
+        else:
+            entry = {"type": "http", "url": server.url}
+            headers = dict(server.headers)
+            for header_name in server.header_secrets:
+                headers[header_name] = f"${{{_secret_env_var_name(server.name, header_name)}}}"
+            if headers:
+                entry["headers"] = headers
+        mcp_servers[server.name] = entry
+
+    mcp_config_contents = json.dumps({"mcpServers": mcp_servers}, indent=2)
+
+    # Cline has no per-invocation MCP-config flag and reads `cline_mcp_settings.json`
+    # (default config dir `~/.cline`) plus state from `~/.cline/data`, so the same
+    # throwaway-$HOME isolation `_apply_mcp` uses for Antigravity redirects both
+    # under the Run's scratch dir - never the operator's real `~/.cline`.
+    return RenderedMcpConfig(
+        relative_path=None,
+        contents=None,
+        env_overlay=_env_overlay_for(servers, resolved_secrets),
+        home_relative_files={
+            ".cline/cline_mcp_settings.json": mcp_config_contents,
+        },
+    )
+
+
 RENDERERS = {
     "claude-code": render_claude_code,
     "codex": render_codex,
     "antigravity": render_antigravity,
     "copilot": render_copilot,
+    "cline": render_cline,
 }

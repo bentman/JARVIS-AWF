@@ -1,3 +1,4 @@
+import json
 import subprocess
 
 import pytest
@@ -231,3 +232,45 @@ def test_mcp_secret_reaches_env_overlay_never_the_rendered_file(repo_and_worktre
     assert "sk-real-secret-value" not in rendered_file
     overlay = seen["invocation"].constraints["mcp_env_overlay"]
     assert overlay == {"AWF_MCP_CONTEXT7_CONTEXT7_API_KEY": "sk-real-secret-value"}
+
+
+def test_cline_mcp_ref_materializes_a_scratch_home_never_the_real_one(repo_and_worktree, conn, tmp_path, monkeypatch):
+    repo_root, worktree = repo_and_worktree
+    _write_fetch_server(repo_root)
+
+    fake_real_home = tmp_path / "fake_real_home"
+    (fake_real_home / ".cline").mkdir(parents=True)
+
+    import awf.engine.agent_step as agent_step_module
+
+    monkeypatch.setattr(agent_step_module.Path, "home", staticmethod(lambda: fake_real_home))
+
+    seen = {}
+
+    def adapter_fn(invocation: AgentInvocation) -> AgentResult:
+        seen["invocation"] = invocation
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    invocation = AgentInvocation(objective="use fetch", inputs={}, workspace_root=worktree)
+    run_agent_step(
+        conn,
+        step_id="step-1",
+        run_id="run-1",
+        worktree_path=worktree,
+        invocation=invocation,
+        adapter_fn=adapter_fn,
+        commit_message="agent: used fetch via cline",
+        actor="cline",
+        mcp_refs=["fetch@1.0.0"],
+        repo_root=repo_root,
+    )
+
+    scratch_home = repo_root / "cache" / "sandbox" / "run-1" / "agy_home" / "cline"
+    mcp_file = scratch_home / ".cline" / "cline_mcp_settings.json"
+    assert mcp_file.is_file()
+    assert "mcpServers" in json.loads(mcp_file.read_text())
+    # the real home directory itself was never written to
+    assert not (fake_real_home / ".cline" / "cline_mcp_settings.json").exists()
+
+    overlay = seen["invocation"].constraints["mcp_env_overlay"]
+    assert overlay["HOME"] == str(scratch_home)

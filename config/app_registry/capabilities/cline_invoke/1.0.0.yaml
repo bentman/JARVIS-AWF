@@ -1,0 +1,5 @@
+identity: {type: cli-adapter-action, provider: cline, name: cline_invoke, version: 1.0.0}
+schema: {input: "", output: ""}
+effects: {operation: update, reversible: true, idempotent: false, external_side_effect: true}
+risk_class: R1
+approval: never

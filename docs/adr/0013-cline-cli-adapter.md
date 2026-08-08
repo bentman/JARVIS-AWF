@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. Adds the fifth of the five named CLI adapters called out in
+Implemented. Adds the fifth of the five named CLI adapters called out in
 `README.md` §Status ("one of the five named CLI adapters … is
 outstanding"). The adapter contract (Section 10.1) and its single
 wiring point `ADAPTER_REGISTRY` (`cli/core_ops.py`) already exist and are
@@ -24,13 +24,24 @@ ADAPTER_REGISTRY = {                      # cli/core_ops.py:57
 }
 ```
 
-The fifth — **Cline** (npm package `@cline/cli`, command `cline`) — is the
+The fifth — **Cline** (npm package `cline`, whose upstream platform binary is
+`@cline/cli-<os-arch>`, command `cline`) — is the
 outstanding one. Cline is a first-class, widely-used autonomous coding
 agent with a non-interactive CLI and JSON streaming, so it fills the
 same slot the other four occupy; it is not a new capability class.
 Cline's presence on a host is a runtime/install fact (`awf-setup` /
 operator install), never an import-time assumption: the adapter must not
 import or probe Cline at module load.
+
+Earlier CLI generations offered no non-yolo headless mode — `man cline`
+confirmed `-y`/`--no-interactive`/`--yolo` were three aliases for the single
+fully-autonomous mode, which `CHANGE_LOG.md` recorded as blocking Cline
+against Section 10.2's default profile. The current CLI resolves that: a
+positional prompt plus `--json` plus an explicit `--auto-approve true` is a
+fully non-interactive, non-yolo headless invocation, and a non-TTY with
+required approvals *denies* those calls (it never silently auto-approves), so
+Section 10.2's no-yolo constraint is satisfiable — the reason this record is
+proposable now.
 
 The contract needs no new shapes. `AgentInvocation.constraints` already
 carries the three degrees of freedom every adapter consumes —
@@ -86,8 +97,8 @@ Flag mapping (authoritative, from `apps/cli/src/commands/program.ts`):
   - `--cwd <path>` — binds the task to the Run's worktree
     (`invocation.workspace_root`), matching every adapter's `cwd=`.
   - `-m, --model <model-id>` — receives `model_override`.
-  - Cline reads MCP config from `~/.cline/mcp.json` (default `--config`
-    dir, under `$HOME`) and state from `~/.cline/data` (default
+  - Cline reads MCP config from `~/.cline/cline_mcp_settings.json` (the
+    default `--config` dir, under `$HOME`) and state from `~/.cline/data` (default
     `--data-dir`). With the `HOME` throwaway override that
     `engine.agent_step._apply_mcp` already sets for Antigravity
     (`scratch_path(repo_root, run_id)/"agy_home"/actor`), `--config` is
@@ -99,20 +110,21 @@ So the adapter reuses the existing isolation machinery verbatim
 (`render_*` -> `home_relative_files` + `env_overlay["HOME"]`) instead of
 adding per-adapter CLI flags — same shape as `render_antigravity`.
 
-JSON parsing contract: Cline's `--json` NDJSON event surface (verified
-against `sdk/packages/core/src/services/agent-events.ts`) carries event
-`type`s such as `content_start` (`contentType: "tool"`), `content_end`
-(`error` when a tool fails), `usage` (`inputTokens`/`outputTokens`/
-`cacheWriteTokens`/`cacheReadTokens`/`cost`), and `iteration_end`. The
-adapter mirrors `copilot_cli`'s exit-code-primary posture verbatim —
-"Success/failure is determined primarily by the process exit code, not
-event contents" — so a non-zero `returncode` is `AgentStatus.FAILED`
-(`termination_reason=f"exit code {returncode}"`), zero is
-`AgentStatus.COMPLETED`, `TimeoutExpired` is `LIMIT_EXCEEDED`, and the
-NDJSON stream is parsed for a best-effort final assistant message and
-`usage` and carried through in the `AgentResult` envelope. The exact
-event-type strings are pinned against observed `cline --json` output at
-implementation; the adapter never fabricates a schema it cannot parse.
+JSON parsing contract: Cline's `--json` NDJSON event surface (pinned against
+observed `cline --json` output on the installed CLI) carries top-level
+`run_result` (with `finishReason`, `usage` — `inputTokens`/`outputTokens`/
+`cacheReadTokens`/`cacheWriteTokens`/`totalCost` — and the final assistant
+`text`), `error` (a fatal `message`), `agent_event` (wrapping inner
+`iteration_start`/`error` events), and `hook_event`. Cline reports internal
+failures (e.g. auth) **in the stream and returns exit code 0 even then**, so
+the adapter mirrors `copilot_cli`'s exit-code-primary posture only as the
+first check: a non-zero `returncode` is `AgentStatus.FAILED`
+(`termination_reason=f"exit code {returncode}"`), but a top-level `error`
+event, or a `run_result` whose `finishReason` is not a success term
+(`done`/`success`/`successful`/`completed`), or an absent `run_result` is also
+`AgentStatus.FAILED`. `TimeoutExpired` is `LIMIT_EXCEEDED`; a successful run
+is `COMPLETED` with `result` = `run_result.text` and `usage` = `run_result.usage`.
+The adapter never fabricates a schema it cannot parse.
 
 Command built by `invoke`:
 
@@ -147,9 +159,11 @@ env={**os.environ, **mcp_env_overlay})` — identical to `copilot_cli`/`antigrav
    wiring point for both `make_agent_node_executor` and
    `make_handoff_node_executor`.
 3. `backend/src/awf/mcp/render.py` — add `render_cline`
-   (writes `.cline/mcp.json` as `{"mcpServers": ...}`, secrets referenced
-   as `${AWF_MCP_<NAME>_<KEY>}` and resolved via `_env_overlay_for`, same
-   as `render_copilot`/`render_antigravity`) and add
+   (writes `.cline/cline_mcp_settings.json` as `{"mcpServers": ...}`, secrets
+   referenced as `${AWF_MCP_<NAME>_<KEY>}` and resolved via `_env_overlay_for`,
+   same as `render_antigravity` — Cline has no per-invocation MCP flag, so it
+   uses the throwaway-`$HOME` `home_relative_files` shape rather than
+   `render_copilot`'s `--additional-mcp-config` path) and add
    `"cline": render_cline` to `RENDERERS`. No per-invocation config flag
    is needed — Cline follows the throwaway `HOME` that `_apply_mcp`
    already injects.
@@ -161,31 +175,45 @@ No new agent manifest is required: a manifest opts in later by setting
 `adapter: cline` and `capabilities: [cline_invoke@1.0.0]`. Manifests are
 out of scope here until a workflow node actually drives Cline (YAGNI).
 
-## Acceptance (to be met when implemented)
+## Acceptance
+
+Met and independently verified (2026-08-08):
 
 - `python -m pytest -q backend/tests/unit/test_phase6_cline_adapter.py`
-  passes, mirroring `test_phase6_copilot_adapter.py`:
+  passes (11 tests), mirroring `test_phase6_copilot_adapter.py`:
     builds the non-interactive one-shot command (`cline`, positional
     objective, `--json`, `--auto-approve true`, `--cwd`,
     `--config`-free — isolation via `HOME`); asserts `--yolo` /
-    `--dangerously-skip-permissions` are never emitted;
-    appends `--model` from `model_override`; maps non-zero exit
-    -> `FAILED` (`"exit code N"`); maps successful run -> `COMPLETED`
-    with parsed events/usage; maps `TimeoutExpired` ->
-    `LIMIT_EXCEEDED`; maps non-JSON stdout -> `FAILED`.
-- `python -m pytest -q backend/tests/unit` and
-  `python scripts/validate_backend.py ci` remain green (same or higher
-  pass count, same or fewer skips) — no four-adapter assumption is
-  hard-coded anywhere.
-- `ADAPTER_REGISTRY` and `RENDERERS` each have five entries.
+    `--dangerously-skip-permissions` are never emitted and are refused as
+    constraints; appends `-m` from `model_override`; maps non-zero exit
+    -> `FAILED` (`"exit code N"`); maps a streamed top-level `error` event
+    (with exit 0) -> `FAILED`; maps a non-success `run_result.finishReason`
+    -> `FAILED`; maps a successful `run_result` -> `COMPLETED` with parsed
+    `text`/`usage`; maps `TimeoutExpired` -> `LIMIT_EXCEEDED`; maps
+    non-JSON/stdout-without-`run_result` -> `FAILED`.
+- `backend/tests/integration/test_baseline_agent_step_mcp.py` gains a
+  Cline variant of the Antigravity scratch-home test (`actor="cline"`):
+  `render_cline` writes `.cline/cline_mcp_settings.json` under the
+  run-scoped scratch `$HOME` (`cache/sandbox/<run_id>/agy_home/cline`) and
+  sets `constraints["mcp_env_overlay"]["HOME"]` to it; the operator's real
+  home is never written. `backend/tests/integration/test_phase1_registry_guard.py`
+  gains the `("cline_invoke", "cline", "R1")` parametrize row.
+- `python -m pytest -q backend/tests` -> **472 passed, 0 skipped** (up from
+  460 baseline; +12 net) and `python scripts/validate_backend.py ci` -> 454
+  passed, 18 deselected, exit 0 — no four-adapter assumption is hard-coded
+  anywhere.
+- `ADAPTER_REGISTRY` and `RENDERERS` each have five entries, with matching
+  keys `{claude-code, codex, antigravity, copilot, cline}`.
 - `awf registry validate
-  config/app_registry/capabilities/cline_invoke` resolves with no
-  `--kind` and reports `provider: cline`.
-- A manifest declaring `adapter: cline` is accepted by
-  `registry/agent_manifest.parse_agent_manifest` and the engine resolves
-  it to the registered `invoke` (verified by the unit test's captured
-  command, not by a live Cline install — Cline availability is a runtime
-  fact and any live test must `SKIP` when `cline` is absent from `PATH`).
+  config/app_registry/capabilities/cline_invoke/1.0.0.yaml` resolves with
+  no `--kind` and reports a valid `cline_invoke@1.0.0` (`provider: cline`).
+- Isolation is live-verified: running the installed `cline` 3.0.51 under a
+  throwaway `$HOME` creates `~/.cline`/`~/.cline/data` entirely inside that
+  scratch `HOME`, never the operator's real `~/.cline`. A live headless
+  `cline --json` run emits the `run_result`/`error`/`agent_event`/`hook_event`
+  NDJSON schema the adapter parses (a full authenticated run is a live,
+  provider-key-gated test, so a live test must `SKIP` when `cline` is absent
+  from `PATH` or no key is configured).
 
 ## Consequences
 
@@ -194,7 +222,7 @@ out of scope here until a workflow node actually drives Cline (YAGNI).
   copilot. The other four adapters are unchanged.
 - A Cline-driven Run never reads or writes the operator's real
   `~/.cline`: `_apply_mcp` sets `HOME` to the run-scoped scratch dir and
-  `render_cline` writes `mcp.json` there, mirroring Antigravity.
+  `render_cline` writes `cline_mcp_settings.json` there, mirroring Antigravity.
 - The Capability Guard (pre-run) + Git worktree + Gate (post-run)
   remain the authorization, isolation, and verification boundaries;
   Cline's `--auto-approve true` is a per-Run convenience, not a bypass

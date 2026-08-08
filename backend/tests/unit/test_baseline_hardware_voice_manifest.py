@@ -1,3 +1,6 @@
+import shutil
+from pathlib import Path
+
 import pytest
 
 from awf.registry.hardware_voice_manifest import (
@@ -7,6 +10,7 @@ from awf.registry.hardware_voice_manifest import (
     parse_hardware_voice_manifest,
     resolve_hardware_voice_manifest_path,
 )
+from awf.speech import models
 from awf.speech.models import artifact_paths, stt_runtime, verify_models
 
 FILE_FUNCTIONS = ("tts", "vad", "wake")
@@ -98,6 +102,69 @@ def test_cuda_device_resolves_to_the_cuda_entry(repo_root):
     assert runtime.model == "deepdml/faster-whisper-large-v3-turbo-ct2"
     assert runtime.device == "cuda"
     assert runtime.compute_type == "float16"
+
+
+def test_reconcile_stt_directory_removes_an_obsolete_small_cache(tmp_path):
+    target_dir = tmp_path / "stt"
+    target_dir.mkdir()
+    (target_dir / ".gitkeep").write_text("")
+    (target_dir / "CACHEDIR.TAG").write_text("cache")
+    active = target_dir / "models--deepdml--faster-whisper-large-v3-turbo-ct2"
+    obsolete = target_dir / "models--Systran--faster-whisper-small"
+    active.mkdir()
+    obsolete.mkdir()
+    locks_dir = target_dir / ".locks"
+    (locks_dir / active.name).mkdir(parents=True)
+    stale_lock = locks_dir / obsolete.name
+    stale_lock.mkdir()
+
+    removed = models._reconcile_stt_directory(target_dir, "deepdml/faster-whisper-large-v3-turbo-ct2")
+
+    assert active.is_dir()
+    assert (locks_dir / active.name).is_dir()
+    assert not obsolete.exists()
+    assert not stale_lock.exists()
+    assert {result["status"] for result in removed} == {"REMOVED"}
+
+
+def test_sync_reconciles_config_obsolete_file_artifacts_and_reports_removals(tmp_path, repo_root, monkeypatch):
+    shutil.copytree(repo_root / "config", tmp_path / "config")
+    stale_tts = tmp_path / "models" / "tts" / "old-model.onnx"
+    stale_tts.parent.mkdir(parents=True)
+    stale_tts.write_bytes(b"old")
+    stale_stt = tmp_path / "models" / "stt" / "models--Systran--faster-whisper-small"
+    stale_stt.mkdir(parents=True)
+
+    def acquire(file, target):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(file.name.encode())
+
+    class FakeWhisperModel:
+        def __init__(self, model, *, download_root):
+            (Path(download_root) / models._stt_cache_name(model)).mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(models, "_acquire_file", acquire)
+    monkeypatch.setattr("faster_whisper.WhisperModel", FakeWhisperModel)
+
+    results = models.sync_models(tmp_path, "cuda")
+
+    assert not stale_tts.exists()
+    assert not stale_stt.exists()
+    assert {result["path"] for result in results if result["status"] == "REMOVED"} == {str(stale_tts), str(stale_stt)}
+
+
+def test_sync_leaves_existing_models_untouched_when_acquisition_fails(tmp_path, repo_root, monkeypatch):
+    shutil.copytree(repo_root / "config", tmp_path / "config")
+    stale_tts = tmp_path / "models" / "tts" / "old-model.onnx"
+    stale_tts.parent.mkdir(parents=True)
+    stale_tts.write_bytes(b"old")
+
+    monkeypatch.setattr(models, "_acquire_file", lambda file, target: (_ for _ in ()).throw(RuntimeError("download failed")))
+
+    with pytest.raises(RuntimeError, match="download failed"):
+        models.sync_models(tmp_path, "cpu")
+
+    assert stale_tts.is_file()
 
 
 @pytest.mark.live

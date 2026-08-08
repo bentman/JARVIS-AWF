@@ -26,11 +26,21 @@ validator outcome and counts for passed, failed, skipped, deselected, errors,
 and warnings; pytest's detailed failure, warning, and skip sections remain
 verbatim in the transcript.
 
-Every report header records UTC start time, validation command, canonical
-`host_class_id`, pytest command, pytest return code, and harness return code.
-If the hardware profiler cannot resolve the host, the header records a short
-`unresolved:<ExceptionClass>` value without changing the command's existing
-failure semantics.
+Every report header records UTC start time, validation command,
+provisioning-derived `host_class_id`, pytest command, pytest return code, and
+harness return code. The host class uses the same `collect_inventory()` plus
+`explain_ort_extra()` decision as `awf-setup --provision`, mapped to the
+canonical profile suffix (`cpu`, `cuda`, `gpu`, or `qnn`). This keeps report
+classification aligned with the dependency extra the operator would install;
+it does not treat per-function runtime readiness as a provisioning decision.
+If the provisioning inventory cannot resolve the host, the header records a
+short `unresolved:<ExceptionClass>` value without changing the command's
+existing failure semantics.
+
+The `profile` diagnostic records the selected extra and its reason, followed
+by the separate runtime-readiness profile/evidence when it can be resolved.
+That distinction makes a restricted execution environment visible without
+misclassifying the host selected by the provisioning probe.
 
 At the end of every harness invocation, the report root is pruned per folder:
 only the newest 35 `.txt` files in each directory under `reports/` are kept.

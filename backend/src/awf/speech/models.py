@@ -26,6 +26,8 @@ from awf.registry.hardware_voice_manifest import (
 # `classes`, not `files`, and is acquired through `WhisperModel`'s own cache
 # instead of a named download.
 _FILE_FUNCTIONS = tuple(function for function in FUNCTIONS if function != "stt")
+_KEEP_FILE_NAMES = {".gitkeep"}
+_KEEP_STT_NAMES = _KEEP_FILE_NAMES | {".locks", "CACHEDIR.TAG"}
 
 
 @dataclass(frozen=True)
@@ -76,6 +78,65 @@ def _acquire_file(file, target: Path) -> None:
             shutil.copyfileobj(source, out)
 
 
+def _remove_path(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+def _removed_result(function: str, path: Path) -> dict:
+    return {"function": function, "name": path.name, "path": str(path), "status": "REMOVED"}
+
+
+def _reconcile_file_directory(function: str, target_dir: Path, expected_names: set[str]) -> list[dict]:
+    """Remove config-obsolete TTS, VAD, or wake artifacts after sync succeeds."""
+    removed = []
+    for path in target_dir.iterdir():
+        if path.name in _KEEP_FILE_NAMES or path.name in expected_names:
+            continue
+        _remove_path(path)
+        removed.append(_removed_result(function, path))
+    return removed
+
+
+def _stt_cache_name(model: str) -> str:
+    from faster_whisper.utils import _MODELS
+
+    repository_id = _MODELS.get(model, model)
+    return f"models--{repository_id.replace('/', '--')}"
+
+
+def _reconcile_stt_directory(target_dir: Path, model: str) -> list[dict]:
+    """Keep only the selected faster-whisper cache and its matching lock."""
+    expected_cache_name = _stt_cache_name(model)
+    removed = []
+    for path in target_dir.iterdir():
+        if path.name in _KEEP_STT_NAMES or path.name == expected_cache_name:
+            continue
+        _remove_path(path)
+        removed.append(_removed_result("stt", path))
+
+    locks_dir = target_dir / ".locks"
+    if locks_dir.is_dir():
+        for path in locks_dir.iterdir():
+            if path.name == ".gitkeep" or path.name == expected_cache_name:
+                continue
+            _remove_path(path)
+            removed.append(_removed_result("stt", path))
+    return removed
+
+
+def _reconcile_models(repo_root: Path, stt_model: str) -> list[dict]:
+    """Reconcile config-owned model directories only after acquisition completes."""
+    removed = []
+    for function in _FILE_FUNCTIONS:
+        manifest = load_voice_manifest(repo_root, function)
+        removed.extend(_reconcile_file_directory(function, models_dir(repo_root, function), {file.name for file in manifest.files}))
+    removed.extend(_reconcile_stt_directory(models_dir(repo_root, "stt"), stt_model))
+    return removed
+
+
 def sync_models(repo_root: Path, stt_device: str) -> list[dict]:
     results = []
     for function in _FILE_FUNCTIONS:
@@ -96,6 +157,7 @@ def sync_models(repo_root: Path, stt_device: str) -> list[dict]:
     download_root.mkdir(parents=True, exist_ok=True)
     WhisperModel(runtime.model, download_root=str(download_root))
     results.append({"function": "stt", "name": runtime.model, "path": str(download_root), "status": "SYNCED"})
+    results.extend(_reconcile_models(repo_root, runtime.model))
 
     return results
 

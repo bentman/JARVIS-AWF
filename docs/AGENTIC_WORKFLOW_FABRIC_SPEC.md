@@ -147,7 +147,7 @@ JARVIS/
       skills/<name>/<version>/SKILL.md           (+ optional scripts/, references/, assets/)
       voice-profiles/<name>/<version>.yaml
       workflows/<name>/<version>.yaml
-    voice/{stt,tts,vad,wake}/                    (hardware-profile manifests: one YAML per profile pinning artifact URL + sha256 — Section 16.4)
+    voice/{stt,tts,vad,wake}.yaml                (one manifest per speech function — Section 16.4)
   data/                                          <- gitignored except .gitkeep; operator-personal, portable; back this up
     artifacts/                                   (content-addressed: artifacts/<sha256[0:2]>/<sha256>)
     awf_db/
@@ -190,12 +190,12 @@ JARVIS/
 ```
 
 Rules:
-- **`config/`:** git-tracked in full. `config/app_registry/` holds repository-default registry objects (9.3); `config/voice/` holds hardware-profile manifests (16.4).
+- **`config/`:** git-tracked in full. `config/app_registry/` holds repository-default registry objects (9.3); `config/voice/` holds one manifest per speech function (16.4).
 - **`data/`:** gitignored in full except a `.gitkeep` placeholder per empty subdirectory, so a fresh checkout carries the directory skeleton with no content. Every path under it stays relative to `data/` itself, so the whole tree can be copied to another machine or backed up as a unit.
 - **`cache/`:** ephemeral scratch only. Run resumption reads `data/awf_db/awf.db` alone (13.2).
 - **`.env`:** gitignored, machine-local; relocating or sharing `data/` does not carry it.
 - **`backend/src/awf/`:** modules appear in the phase noted beside them; Phase 0 creates only `db/` and `events/`.
-- **`models/`:** gitignored, populated from `config/voice/` manifests (16.4) at setup. Distribution ships `config/`, `backend/`, and `frontend/` only.
+- **`models/`:** gitignored, config-owned storage populated and reconciled from `config/voice/` manifests by `awf-speech models sync` (16.4). Distribution ships `config/`, `backend/`, and `frontend/` only.
 
 ---
 
@@ -534,16 +534,9 @@ AWF-GUI (`frontend/gui/`) is a desktop application whose defining capability is 
   | Linux arm64 | `linux-arm64-cpu` | `linux-arm64-gpu` | — | `linux-arm64-qnn` |
 
   On arm64 (both OSes), `-gpu` denotes Qualcomm **Adreno GPU acceleration via OpenCL**. On x64, `-gpu` denotes a probe-verified non-CUDA GPU execution provider (DirectML on Windows; the vendor GPU EP on Linux). A profile above `-cpu` is valid only when the Profiler verifies its execution provider actually loads. Resolution order per arch is QNN/CUDA → GPU → CPU, and **every profile falls back to its arch's `*64-cpu` profile** — the guaranteed floor on every host. WSL2 resolves as Linux.
-- **Model acquisition (Phase 12 setup, hardware-aware):** speech models are never bundled. Setup downloads the variant of each selected model matching the resolved hardware profile into the gitignored `models/` tree (`models/stt/`, `models/tts/`, `models/vad/`, `models/wake/`), plus the `*64-cpu` fallback artifact whenever the resolved profile is above CPU. The operator accepts each model's upstream license at download. Every probe result and fallback decision is written to the `events` table.
+- **Model acquisition (Phase 12 setup, hardware-aware):** speech models are never bundled. `awf-speech models sync` resolves STT readiness, acquires the selected STT cache and the manifest-listed TTS, VAD, and wake artifacts into the gitignored `models/` tree, then reconciles every function directory. The manifests are authoritative: after acquisition succeeds, sync removes obsolete artifacts and stale faster-whisper cache/lock directories and reports each removal. The operator accepts each model's upstream license at download.
 - **Selection basis (decision record):** *STT = Whisper* — ONNX exports via sherpa-onnx include QNN builds for Snapdragon NPUs; faster-whisper is the fastest CUDA path. *TTS = Kokoro-82M* — Apache-2.0, 54 voices in one install (audibly distinct role personas), ~6× realtime on CPU, ONNX-native. *VAD = Silero* — MIT, ONNX, ~2 MB. *Wake word = openWakeWord* — Apache-2.0 code, ONNX models, prebuilt `hey jarvis`. Replacing a selection is an ADR against the same adapter contract.
-- **Pinned model variants.** Hardware-profile manifests under repo-owned `config/voice/{stt,tts,vad,wake}/` — one YAML per canonical profile ID per function (`<profile-id>.yaml`, e.g. `config/voice/stt/windows-arm64-qnn.yaml`) — pin the exact artifact URL and SHA-256 digest for every speech model and are the authority for bytes; the table below is their initial content. Profiles that pin identical artifacts repeat the pin. Downloads land in the matching `models/<function>/` directory. Only the STT artifact varies by acceleration class — TTS, VAD, and wake word use one artifact in every profile, with only the execution provider changing at runtime:
-
-  | Function | `*-cpu` / `*-gpu` profiles | `*-cuda` profiles | `*-qnn` profiles |
-  |---|---|---|---|
-  | STT | Whisper `small` int8 ONNX (sherpa-onnx export) | faster-whisper `large-v3-turbo` | Whisper `base` QNN build (sherpa-onnx) |
-  | TTS | Kokoro-82M v1.0 ONNX | same artifact | same artifact |
-  | VAD | Silero VAD ONNX (sherpa-onnx-packaged) | same artifact | same artifact |
-  | Wake word | openWakeWord `hey_jarvis` ONNX | same artifact | same artifact |
+- **Voice manifests.** Repo-owned `config/voice/{stt,tts,vad,wake}.yaml` are the source of truth. `stt.yaml` maps readiness devices to faster-whisper model, device, and compute type; every unlisted device falls back to its `cpu` class. `tts.yaml`, `vad.yaml`, and `wake.yaml` name each required artifact and its URL or supplying package. Downloads land in the matching `models/<function>/` directory, which sync treats as config-owned and reconciles after a successful acquisition.
 - **Text-first invariant:** every recognized utterance is displayed as text before it is submitted to the core, and every spoken response has a visible transcript. Voice is an alternate modality over the same command surface as 16.2 — there are no voice-only capabilities.
 - **Approval rule:** an approval decision for an R2+ action MUST NOT be granted from voice input alone. The GUI MUST display the exact action digest and require a non-voice confirmation (click/keypress). Voice MAY acknowledge R0/R1 prompts.
 - **Resource ceiling:** local speech inference counts toward the GPU-utilization ceiling (Section 12.3); under contention with a running Gate evaluation, STT/TTS MUST degrade to CPU/smaller models rather than push GPU utilization past the limit.

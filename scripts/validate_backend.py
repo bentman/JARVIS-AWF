@@ -57,6 +57,13 @@ _SUMMARY_BY_CODE = {
     EXIT_ENVIRONMENT_UNSATISFIED: "ENVIRONMENT_UNSATISFIED",
 }
 
+_PROVISIONING_PROFILE_SUFFIX = {
+    "hw-ort-cpu": "cpu",
+    "hw-ort-cuda": "cuda",
+    "hw-ort-directml": "gpu",
+    "hw-ort-qnn": "qnn",
+}
+
 
 def _timestamp() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
@@ -137,11 +144,22 @@ def _run_pytest(args: list[str]) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(_pytest_command(args), returncode, "".join(output), "")
 
 
+def _resolve_provisioning_host_class() -> tuple[str, str, str]:
+    """Return the host class from the same inventory decision as awf-setup."""
+    from awf.hardware.profiler import collect_inventory
+    from awf.hardware.provisioning import explain_ort_extra
+
+    inventory = collect_inventory()
+    extra, reason = explain_ort_extra(inventory)
+    suffix = _PROVISIONING_PROFILE_SUFFIX[extra]
+    if inventory.os_name not in ("linux", "windows") or inventory.arch not in ("x64", "arm64"):
+        raise ValueError(f"unsupported provision inventory: os={inventory.os_name}, arch={inventory.arch}")
+    return f"{inventory.os_name}-{inventory.arch}-{suffix}", extra, reason
+
+
 def _resolve_host_class_id() -> str:
     try:
-        from awf.hardware.profiler import resolve_hardware_profile_id
-
-        profile_id, _evidence = resolve_hardware_profile_id(REPO_ROOT)
+        profile_id, _extra, _reason = _resolve_provisioning_host_class()
     except Exception as exc:
         return f"unresolved:{type(exc).__name__}"
     return profile_id
@@ -225,13 +243,21 @@ def cmd_profile(_args: argparse.Namespace) -> int:
         lines.append(f"awf_import_error={type(exc).__name__}: {exc}")
     else:
         try:
-            profile_id, evidence = resolve_hardware_profile_id(REPO_ROOT)
+            profile_id, extra, reason = _resolve_provisioning_host_class()
             lines.append(f"host_class_id={profile_id}")
             lines.append(f"hardware_profile_id={profile_id}")
-            lines.append(f"hardware_profile_evidence={evidence}")
+            lines.append(f"hardware_provisioning_extra={extra}")
+            lines.append(f"hardware_provisioning_reason={reason}")
         except Exception as exc:
             lines.append(f"host_class_id=unresolved:{type(exc).__name__}")
             lines.append(f"hardware_profile_error={type(exc).__name__}: {exc}")
+        else:
+            try:
+                runtime_profile_id, evidence = resolve_hardware_profile_id(REPO_ROOT)
+                lines.append(f"runtime_readiness_profile_id={runtime_profile_id}")
+                lines.append(f"runtime_readiness_evidence={evidence}")
+            except Exception as exc:
+                lines.append(f"runtime_readiness_error={type(exc).__name__}: {exc}")
 
     diagnostics_dir = REPORTS_DIR / "diagnostics"
     diagnostics_dir.mkdir(parents=True, exist_ok=True)

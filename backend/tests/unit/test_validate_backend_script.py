@@ -2,6 +2,8 @@ import importlib.util
 import os
 from pathlib import Path
 
+from awf.hardware.profiler import HardwareInventory
+
 
 def _load_validator(repo_root: Path):
     path = repo_root / "scripts" / "validate_backend.py"
@@ -64,3 +66,27 @@ def test_trim_report_files_keeps_the_newest_files_per_directory(repo_root, tmp_p
     assert removed == 2
     assert {path.name for path in validation_dir.glob("*.txt")} == {"validation-2.txt", "validation-3.txt"}
     assert diagnostic.exists()
+
+
+def test_profile_uses_the_same_inventory_selection_as_awf_setup(repo_root, monkeypatch, tmp_path, capsys):
+    validator = _load_validator(repo_root)
+    import awf.hardware.profiler as profiler
+
+    monkeypatch.setattr(
+        profiler,
+        "collect_inventory",
+        lambda: HardwareInventory(os_name="linux", arch="x64", gpu_vendor="nvidia", cuda_available=True),
+    )
+    monkeypatch.setattr(
+        profiler,
+        "resolve_hardware_profile_id",
+        lambda _repo_root: ("linux-x64-cpu", {"readiness": "separate runtime evidence"}),
+    )
+    monkeypatch.setattr(validator, "REPORTS_DIR", tmp_path / "reports")
+
+    assert validator.cmd_profile(None) == validator.EXIT_PASS
+
+    output = capsys.readouterr().out
+    assert "host_class_id=linux-x64-cuda" in output
+    assert "hardware_provisioning_extra=hw-ort-cuda" in output
+    assert "runtime_readiness_profile_id=linux-x64-cpu" in output

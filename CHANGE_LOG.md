@@ -19,6 +19,18 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-08 09:35
+  - Host class(es): Linux/WSL2, AMD64, NVIDIA CUDA
+  - Summary: Fixed validation report host classification to use the same inventory and dependency-extra decision as `awf-setup --provision`; see ADR-0015.
+  - Scope: `scripts/validate_backend.py`, its unit coverage, and ADR-0015.
+  - Validation: mocked CUDA inventory confirms `profile` reports `linux-x64-cuda` even when separately captured runtime-readiness evidence resolves differently.
+
+- Timestamp: 2026-08-08 08:24
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: `awf-speech models sync` now removes model artifacts that the current voice manifests no longer select; see ADR-0016.
+  - Scope: voice model acquisition/reconciliation, ADR-0007, Section 16.4, and focused model tests.
+  - Validation: focused reconciliation tests cover stale artifact/cache removal and failed-acquisition preservation.
+
 - Timestamp: 2026-08-08 08:15
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Capped retained text reports at 35 per report folder; see ADR-0015.

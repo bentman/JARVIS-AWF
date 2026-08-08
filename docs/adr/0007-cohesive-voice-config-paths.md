@@ -2,7 +2,14 @@
 
 ## Status
 
-Implemented. Amended in part by ADR-0008.
+Implemented. Amended in part by ADR-0008 and ADR-0016.
+
+## Amended by ADR-0016
+
+`sync_models` no longer leaves artifacts that a current manifest does not
+select. After all requested acquisitions succeed, it reconciles each
+config-owned `models/<function>/` directory and reports every removal. The
+manifest remains the sole authority for retained artifacts.
 
 ## Amended by ADR-0008
 

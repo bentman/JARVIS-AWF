@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-09 06:02
+  - Host class(es): Linux/WSL2, AMD64; Windows ARM64
+  - Summary: Added helper documentation and scripts for operator-built accelerator artifacts that back ADR-0017's manual llama.cpp runtime entries and the ARM64 Whisper/QNN artifact handoff.
+  - Scope: `docs/helpers/*`, `.gitignore`, and ADR-0017.
+  - Validation: `bash -n docs/helpers/jarvis-wsl-llamacpp.sh`; PowerShell parser validation for all copied `.ps1` helpers; path scan confirms helper staging paths align with `linux-x64-cuda`, `windows-arm64-gpu`, and `windows-arm64-qnn`; `docs/temp/` and `runtimes/` generated artifacts are ignored.
+  - Notes: helpers were adapted from working JARVISv7 helper sources while preserving build behavior; repo-specific staging names now use JARVIS-AWF's canonical profile IDs.
+
 - Timestamp: 2026-08-09 05:41
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Expanded ADR-0017 llama.cpp runtime declarations to cover every canonical host profile, including Linux/Windows CPU, generic GPU, CUDA, ARM Adreno GPU, and QNN/Hexagon manual artifacts.

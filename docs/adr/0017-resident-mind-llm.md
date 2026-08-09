@@ -86,6 +86,9 @@ Vulkan release archives are acquired on request into
 llama.cpp CUDA 12.4 release archive. Linux CUDA, Snapdragon Hexagon/QNN, and
 Adreno OpenCL entries may be declared as `archive: manual`, meaning the
 operator must place a compatible build under that same runtime directory.
+Helper scripts under `docs/helpers/` document and automate the currently
+known manual build/staging paths for Linux x64 CUDA, Windows ARM64 Adreno
+OpenCL, and Windows ARM64 QNN/Hexagon.
 
 **`derive_llm_readiness` resolves the full accelerator ladder.** CUDA, QNN,
 Vulkan, and Adreno OpenCL are each decided from inventory facts and preflight

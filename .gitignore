@@ -193,6 +193,9 @@ Thumbs.db
 !/reports/validation/.gitkeep
 !/reports/.gitkeep
 
+# helper-produced handoff packages
+/docs/temp/
+
 # ------------------------------------------------------------
 # Model artifacts (per-folder allowlist; prevent large binary commits
 # but permit `.gitkeep` placeholders)

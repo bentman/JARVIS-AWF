@@ -77,6 +77,34 @@ class CoreOpError(RuntimeError):
     pass
 
 
+def _cpu_fallback_profile_id(profile_id: str) -> str:
+    os_name, arch, _suffix = profile_id.rsplit("-", 2)
+    return f"{os_name}-{arch}-cpu"
+
+
+def _artifact_binary_present(repo_root: Path, profile_id: str, artifact) -> bool:
+    from awf.llm.discovery import binary_path
+
+    path = binary_path(repo_root, profile_id, artifact)
+    return path.is_file() and path.stat().st_size > 0
+
+
+def _select_managed_llm_artifact(repo_root: Path, server, profile_id: str, *, allow_cpu_fallback: bool = True):
+    from awf.llm.servers import artifact_for
+
+    artifact = artifact_for(server, profile_id)
+    if artifact is not None and _artifact_binary_present(repo_root, profile_id, artifact):
+        return profile_id, artifact
+
+    if allow_cpu_fallback:
+        cpu_profile_id = _cpu_fallback_profile_id(profile_id)
+        cpu_artifact = artifact_for(server, cpu_profile_id)
+        if cpu_artifact is not None and _artifact_binary_present(repo_root, cpu_profile_id, cpu_artifact):
+            return cpu_profile_id, cpu_artifact
+
+    return profile_id, artifact
+
+
 def _make_check_fn(node: dict, worktree: Path):
     command = node.get("checkCommand")
     if not command:
@@ -751,6 +779,11 @@ def op_llm_acquire(repo_root: Path) -> dict:
         raise CoreOpError("llama-server is not declared in config/llm/servers.yaml")
 
     art = artifact_for(llama_s, profile_id)
+    if art is not None and art.archive == "manual":
+        cpu_profile_id = _cpu_fallback_profile_id(profile_id)
+        cpu_art = artifact_for(llama_s, cpu_profile_id)
+        if cpu_art is not None and cpu_art.archive != "manual":
+            profile_id, art = cpu_profile_id, cpu_art
     if art is None:
         raise CoreOpError(f"No artifact declared for canonical profile ID '{profile_id}'")
 
@@ -783,7 +816,7 @@ def op_llm_serve(repo_root: Path, conn: sqlite3.Connection, *, action: str) -> d
     from awf.hardware.profiler import resolve_hardware_profile_id
     from awf.llm.discovery import local_models, model_by_name
     from awf.llm.selector import current_selection
-    from awf.llm.servers import artifact_for, load_servers
+    from awf.llm.servers import load_servers
     from awf.llm.sidecar import start, status, stop
 
     default_id, servers = load_servers(repo_root)
@@ -797,16 +830,19 @@ def op_llm_serve(repo_root: Path, conn: sqlite3.Connection, *, action: str) -> d
         model_name = None
 
     if action == "stop":
-        st = stop(conn=conn)
+        st = stop(conn=conn, repo_root=repo_root)
         return asdict(st)
 
     if action == "status":
-        st = status(server)
+        st = status(server, repo_root=repo_root)
         return asdict(st)
 
     if action == "start":
         profile_id, _ = resolve_hardware_profile_id(repo_root)
-        art = artifact_for(server, profile_id) if server.managed else None
+        if server.managed:
+            profile_id, art = _select_managed_llm_artifact(repo_root, server, profile_id)
+        else:
+            art = None
 
         model = None
         if model_name:
@@ -819,7 +855,7 @@ def op_llm_serve(repo_root: Path, conn: sqlite3.Connection, *, action: str) -> d
             if avail:
                 model = avail[0]
 
-        st = start(repo_root, server, art, model, conn=conn)
+        st = start(repo_root, server, art, model, conn=conn, detach=True)
         return asdict(st)
 
     raise CoreOpError(f"Unknown serve action '{action}'. Valid: start, stop, status")

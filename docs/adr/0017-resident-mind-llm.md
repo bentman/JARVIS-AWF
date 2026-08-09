@@ -6,6 +6,14 @@ Implemented.
 
 Acceptance run: `scripts/validate_backend.py lint` passed; `scripts/validate_backend.py runtime` -> 17 passed, 1 skipped; `scripts/validate_backend.py ci` -> 509 passed, 18 deselected. `awf-setup --verify` reports the installed Ruff dev-tooling floor and `pip_check: OK`.
 
+Corrective update: `awf llm serve start` now detaches managed `llama-server`
+processes so later CLI invocations can observe and stop them through persisted
+sidecar state. Managed LLM startup and readiness use the host accelerator
+artifact when present and fall back to the matching CPU artifact when the
+accelerator artifact is unavailable. Loopback OpenAI-compatible endpoints get
+a local placeholder API key in the Model Gateway so LiteLLM/OpenAI client setup
+does not reject local llama.cpp before the request reaches the server.
+
 ## Context
 
 The Model Gateway calls `litellm.completion` in-process.

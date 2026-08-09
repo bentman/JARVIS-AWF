@@ -7,6 +7,7 @@ the profile file itself.
 """
 
 import sqlite3
+import urllib.parse
 
 import litellm
 
@@ -35,6 +36,13 @@ def _resolve_api_key(
     return get_secret(conn, candidate.api_key_secret_name, secret_key)
 
 
+def _is_loopback_api_base(api_base: str | None) -> bool:
+    if not api_base:
+        return False
+    parsed = urllib.parse.urlparse(api_base)
+    return (parsed.hostname or "") in ("127.0.0.1", "::1", "localhost")
+
+
 def complete(
     profile: ModelProfile,
     messages: list[dict],
@@ -58,6 +66,8 @@ def complete(
             kwargs["api_base"] = candidate.api_base
         if api_key:
             kwargs["api_key"] = api_key
+        elif candidate.provider == "openai" and _is_loopback_api_base(candidate.api_base):
+            kwargs["api_key"] = "local-dev"
 
         try:
             response = litellm.completion(**kwargs)

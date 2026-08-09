@@ -97,6 +97,70 @@ def test_complete_calls_litellm_with_candidate_fields(monkeypatch, repo_root):
     assert "api_key" not in captured
 
 
+def test_complete_supplies_dummy_api_key_for_loopback_openai_compatible(monkeypatch):
+    profile = parse_model_profile(
+        {
+            "name": "demo",
+            "version": "1.0.0",
+            "purpose": "general-reasoning",
+            "privacy": {"maximum_data_class": "internal", "local_only": True},
+            "candidates": [
+                {
+                    "provider": "openai",
+                    "model": "Qwen3-8B-Q5_K_M.gguf",
+                    "priority": 1,
+                    "enabled": True,
+                    "api_base": "http://127.0.0.1:8080/v1",
+                }
+            ],
+            "fallback": {"mode": "none", "allow_quality_degrade": False},
+            "limits": {"max_input_tokens_per_call": 1, "max_output_tokens_per_call": 1, "max_cost_usd_per_call": 0},
+        }
+    )
+    captured = {}
+
+    def fake_completion(**kwargs):
+        captured.update(kwargs)
+        return _fake_response("ok")
+
+    monkeypatch.setattr("awf.gateway.client.litellm.completion", fake_completion)
+
+    assert complete(profile, [{"role": "user", "content": "ping"}]) == "ok"
+    assert captured["api_key"] == "local-dev"
+
+
+def test_complete_does_not_supply_dummy_api_key_for_remote_openai(monkeypatch):
+    profile = parse_model_profile(
+        {
+            "name": "demo",
+            "version": "1.0.0",
+            "purpose": "general-reasoning",
+            "privacy": {"maximum_data_class": "internal", "local_only": False},
+            "candidates": [
+                {
+                    "provider": "openai",
+                    "model": "gpt-demo",
+                    "priority": 1,
+                    "enabled": True,
+                    "api_base": "https://api.example.test/v1",
+                }
+            ],
+            "fallback": {"mode": "none", "allow_quality_degrade": False},
+            "limits": {"max_input_tokens_per_call": 1, "max_output_tokens_per_call": 1, "max_cost_usd_per_call": 0},
+        }
+    )
+    captured = {}
+
+    def fake_completion(**kwargs):
+        captured.update(kwargs)
+        return _fake_response("ok")
+
+    monkeypatch.setattr("awf.gateway.client.litellm.completion", fake_completion)
+
+    assert complete(profile, [{"role": "user", "content": "ping"}]) == "ok"
+    assert "api_key" not in captured
+
+
 def test_complete_envelope_renders_chat_and_model_profile_bounds_max_tokens(monkeypatch, repo_root):
     profile = load_example_profile(repo_root, "example-ollama-general")
     envelope = PromptEnvelope(

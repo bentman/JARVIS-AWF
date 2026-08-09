@@ -28,10 +28,11 @@ def _gpu_utilization_sample(conn: sqlite3.Connection, _args: dict) -> dict:
 def _llm_server_ensure(conn: sqlite3.Connection, _args: dict) -> dict:
     from dataclasses import asdict
 
+    from awf.cli.core_ops import _select_managed_llm_artifact
     from awf.hardware.profiler import resolve_hardware_profile_id
     from awf.llm.discovery import local_models, model_by_name
     from awf.llm.selector import current_selection
-    from awf.llm.servers import artifact_for, load_servers
+    from awf.llm.servers import load_servers
     from awf.llm.sidecar import start, status
     from awf.paths import REPO_ROOT
 
@@ -51,7 +52,7 @@ def _llm_server_ensure(conn: sqlite3.Connection, _args: dict) -> dict:
         return asdict(st)
 
     profile_id, _ = resolve_hardware_profile_id(repo_root)
-    art = artifact_for(server, profile_id)
+    profile_id, art = _select_managed_llm_artifact(repo_root, server, profile_id)
 
     model = None
     if model_name:
@@ -64,7 +65,7 @@ def _llm_server_ensure(conn: sqlite3.Connection, _args: dict) -> dict:
         if avail:
             model = avail[0]
 
-    st = start(repo_root, server, art, model, conn=conn)
+    st = start(repo_root, server, art, model, conn=conn, detach=True)
     return asdict(st)
 
 

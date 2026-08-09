@@ -182,6 +182,40 @@ def test_derive_llm_readiness_fully_ready(tmp_path):
     assert "running on cpu" in r.reason
 
 
+def test_derive_llm_readiness_uses_cpu_profile_artifact_for_cpu_fallback(tmp_path):
+    inv = HardwareInventory(gpu_vendor="nvidia", cuda_available=True)
+    tokens = ["ep:CUDAExecutionProvider"]
+    model_path = _write_ready_artifacts(tmp_path, "linux-x64-cpu")
+    s = LlmServer(
+        id="llama-server",
+        managed=True,
+        base_url="http://127.0.0.1:8080",
+        openai_base_path="/v1",
+        provider="openai",
+        health_paths=(),
+        artifacts={
+            "linux-x64-cpu": Artifact(
+                profile_id="linux-x64-cpu",
+                url="https://example.com/cpu.tar.gz",
+                archive="tar_gz",
+                binary="llama-server",
+                accelerator="cpu",
+                launch={},
+            )
+        },
+        launch={},
+        api_key_secret_name=None,
+    )
+
+    r = derive_llm_readiness(
+        inv, tokens, server=s, profile_id="linux-x64-cuda", model_path=model_path, repo_root=tmp_path
+    )
+
+    assert r.device == "cpu"
+    assert r.ready is True
+    assert "Degraded-accelerator-unavailable: no gpu.cuda artifact declared for linux-x64-cuda" in r.reason
+
+
 def test_derive_llm_readiness_returns_cuda_when_declared_and_present(tmp_path):
     model_path = _write_ready_artifacts(tmp_path, "linux-x64-cuda")
     s = _managed_server("linux-x64-cuda", "gpu.cuda")

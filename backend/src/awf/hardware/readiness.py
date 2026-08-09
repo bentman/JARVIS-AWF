@@ -128,6 +128,12 @@ def derive_llm_readiness(
     if repo_root is None:
         repo_root = REPO_ROOT
 
+    def artifact_profile_id_for(accelerator: str) -> str:
+        if accelerator == "cpu":
+            os_name, arch, _suffix = profile_id.rsplit("-", 2)
+            return f"{os_name}-{arch}-cpu"
+        return profile_id
+
     cuda_hw = inventory.gpu_vendor == "nvidia" and inventory.cuda_available
     cuda_tok = "ep:CUDAExecutionProvider" in tokens
 
@@ -151,7 +157,8 @@ def derive_llm_readiness(
 
     for rung_accel, hw_ok, tok_ok, desc in rungs:
         if hw_ok and tok_ok:
-            art = server.artifacts.get(profile_id)
+            artifact_profile_id = artifact_profile_id_for(rung_accel)
+            art = server.artifacts.get(artifact_profile_id)
             if art is None or art.accelerator != rung_accel:
                 if rung_accel != "cpu" and accelerator_unavailable_reason is None:
                     accelerator_unavailable_reason = (
@@ -159,7 +166,7 @@ def derive_llm_readiness(
                     )
                 continue
 
-            bin_p = binary_path(repo_root, profile_id, art)
+            bin_p = binary_path(repo_root, artifact_profile_id, art)
             if not bin_p.is_file() or bin_p.stat().st_size == 0:
                 return Readiness(
                     device=rung_accel,

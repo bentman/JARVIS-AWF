@@ -89,3 +89,72 @@ servers:
     assert "state" in res
 
     conn.close()
+
+
+def test_llm_serve_uses_cpu_fallback_when_host_artifact_missing(tmp_path, monkeypatch):
+    conn_path = tmp_path / "data" / "awf.db"
+    init_db(conn_path)
+    conn = get_connection(conn_path)
+
+    m_dir = tmp_path / "models" / "llm" / "qwen"
+    m_dir.mkdir(parents=True)
+    (m_dir / "qwen.gguf").write_bytes(b"dummy gguf content")
+
+    cpu_binary = tmp_path / "runtimes" / "llama.cpp" / "linux-x64-cpu" / "llama-server"
+    cpu_binary.parent.mkdir(parents=True)
+    cpu_binary.write_text("binary")
+
+    cfg_dir = tmp_path / "config" / "llm"
+    cfg_dir.mkdir(parents=True)
+    (cfg_dir / "servers.yaml").write_text("""
+default_server: llama-server
+servers:
+  llama-server:
+    managed: true
+    base_url: http://127.0.0.1:8080
+    openai_base_path: /v1
+    provider: openai
+    health_paths: [/health]
+    artifacts:
+      linux-x64-cuda:
+        url: manual://cuda
+        archive: manual
+        binary: llama-server
+        accelerator: gpu.cuda
+      linux-x64-cpu:
+        url: https://example.com/llama.tar.gz
+        archive: tar_gz
+        binary: llama-server
+        accelerator: cpu
+""")
+
+    monkeypatch.setattr("awf.hardware.profiler.resolve_hardware_profile_id", lambda _repo_root: ("linux-x64-cuda", {}))
+
+    captured = {}
+
+    def fake_start(repo_root, server, artifact, model, *, conn=None, detach=False):
+        from awf.llm.sidecar import SidecarStatus
+
+        captured["artifact"] = artifact
+        captured["model"] = model
+        captured["detach"] = detach
+        return SidecarStatus(
+            state="running",
+            server_id=server.id,
+            base_url=server.base_url,
+            model_path=str(model.primary),
+            profile_id=artifact.profile_id,
+            pid=1,
+            adopted=False,
+            warnings=(),
+            reason=None,
+        )
+
+    monkeypatch.setattr("awf.llm.sidecar.start", fake_start)
+
+    result = ops.op_llm_serve(tmp_path, conn, action="start")
+
+    assert result["profile_id"] == "linux-x64-cpu"
+    assert captured["artifact"].profile_id == "linux-x64-cpu"
+    assert captured["detach"] is True
+    conn.close()

@@ -1,6 +1,8 @@
 """Managed LLM sidecar process runner and lifecycle controller (ADR-0017)."""
 
 import json
+import os
+import signal
 import subprocess
 import time
 import urllib.parse
@@ -46,6 +48,58 @@ _FLAG_TRANSLATIONS = {
 # Module-level state for managing single sidecar process per worker process lifetime
 _SIDECAR_PROCESS: subprocess.Popen | None = None
 _CURRENT_STATUS: "SidecarStatus | None" = None
+
+
+def _state_path(repo_root: Path) -> Path:
+    return repo_root / "cache" / "llm" / "sidecar.json"
+
+
+def _log_path(repo_root: Path) -> Path:
+    return repo_root / "cache" / "llm" / "sidecar.log"
+
+
+def _write_state(repo_root: Path, status_obj: "SidecarStatus") -> None:
+    path = _state_path(repo_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(status_obj.__dict__, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _clear_state(repo_root: Path) -> None:
+    path = _state_path(repo_root)
+    if path.exists():
+        path.unlink()
+
+
+def _read_state(repo_root: Path) -> "SidecarStatus | None":
+    path = _state_path(repo_root)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        warnings = data.get("warnings") or ()
+        return SidecarStatus(
+            state=data["state"],
+            server_id=data.get("server_id"),
+            base_url=data.get("base_url"),
+            model_path=data.get("model_path"),
+            profile_id=data.get("profile_id"),
+            pid=data.get("pid"),
+            adopted=bool(data.get("adopted")),
+            warnings=tuple(warnings),
+            reason=data.get("reason"),
+        )
+    except Exception:
+        return None
+
+
+def _pid_alive(pid: int | None) -> bool:
+    if pid is None:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
 
 
 @dataclass(frozen=True)
@@ -178,6 +232,8 @@ def start(
     artifact: Artifact | None,
     model: LocalModel | None,
     conn: Any = None,
+    *,
+    detach: bool = False,
 ) -> SidecarStatus:
     global _SIDECAR_PROCESS, _CURRENT_STATUS
 
@@ -198,6 +254,7 @@ def start(
             reason="server reachable; adopted existing process",
         )
         _CURRENT_STATUS = status_obj
+        _write_state(repo_root, status_obj)
         _record_event(
             conn,
             "llm_server_started",
@@ -265,9 +322,18 @@ def start(
 
     # Step 3: Build command and launch process
     cmd = build_command(target_bin, model.primary, server.base_url, artifact.launch)
+    log_handle = None
     try:
-        proc = subprocess.Popen(cmd.argv, cwd=target_bin.parent)
+        popen_kwargs: dict[str, Any] = {"cwd": target_bin.parent}
+        if detach:
+            log_path = _log_path(repo_root)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_handle = open(log_path, "ab")
+            popen_kwargs.update({"stdout": log_handle, "stderr": subprocess.STDOUT, "start_new_session": True})
+        proc = subprocess.Popen(cmd.argv, **popen_kwargs)
     except Exception as exc:
+        if log_handle is not None:
+            log_handle.close()
         status_obj = SidecarStatus(
             state="degraded",
             server_id=server.id,
@@ -302,6 +368,8 @@ def start(
             )
             _SIDECAR_PROCESS = None
             _CURRENT_STATUS = status_obj
+            if log_handle is not None:
+                log_handle.close()
             return status_obj
 
         if probe(server).reachable:
@@ -316,7 +384,12 @@ def start(
                 warnings=cmd.warnings,
                 reason=None,
             )
+            if detach:
+                _SIDECAR_PROCESS = None
+                if log_handle is not None:
+                    log_handle.close()
             _CURRENT_STATUS = status_obj
+            _write_state(repo_root, status_obj)
             _record_event(
                 conn,
                 "llm_server_started",
@@ -344,6 +417,8 @@ def start(
         proc.kill()
 
     _SIDECAR_PROCESS = None
+    if log_handle is not None:
+        log_handle.close()
     status_obj = SidecarStatus(
         state="degraded",
         server_id=server.id,
@@ -359,7 +434,7 @@ def start(
     return status_obj
 
 
-def stop(conn: Any = None) -> SidecarStatus:
+def stop(conn: Any = None, *, repo_root: Path | None = None) -> SidecarStatus:
     global _SIDECAR_PROCESS, _CURRENT_STATUS
 
     if _CURRENT_STATUS is not None and _CURRENT_STATUS.adopted:
@@ -385,6 +460,8 @@ def stop(conn: Any = None) -> SidecarStatus:
             },
         )
         _CURRENT_STATUS = stopped_status
+        if repo_root is not None:
+            _clear_state(repo_root)
         return stopped_status
 
     if _SIDECAR_PROCESS is not None:
@@ -424,7 +501,36 @@ def stop(conn: Any = None) -> SidecarStatus:
             },
         )
         _CURRENT_STATUS = stopped_status
+        if repo_root is not None:
+            _clear_state(repo_root)
         return stopped_status
+
+    if repo_root is not None:
+        stored = _read_state(repo_root)
+        if stored is not None and stored.pid is not None and not stored.adopted and _pid_alive(stored.pid):
+            try:
+                os.kill(stored.pid, signal.SIGTERM)
+                deadline = time.time() + STOP_TIMEOUT_SECONDS
+                while time.time() < deadline and _pid_alive(stored.pid):
+                    time.sleep(0.1)
+                if _pid_alive(stored.pid):
+                    os.kill(stored.pid, signal.SIGKILL)
+            except OSError:
+                pass
+            stopped_status = SidecarStatus(
+                state="stopped",
+                server_id=stored.server_id,
+                base_url=stored.base_url,
+                model_path=stored.model_path,
+                profile_id=stored.profile_id,
+                pid=stored.pid,
+                adopted=False,
+                warnings=(),
+                reason="process stopped",
+            )
+            _clear_state(repo_root)
+            _CURRENT_STATUS = stopped_status
+            return stopped_status
 
     stopped_status = SidecarStatus(
         state="stopped",
@@ -438,12 +544,25 @@ def stop(conn: Any = None) -> SidecarStatus:
         reason="no sidecar running",
     )
     _CURRENT_STATUS = stopped_status
+    if repo_root is not None:
+        _clear_state(repo_root)
     return stopped_status
 
 
-def status(server: LlmServer | None = None) -> SidecarStatus:
+def status(server: LlmServer | None = None, *, repo_root: Path | None = None) -> SidecarStatus:
     if _CURRENT_STATUS is not None:
         return _CURRENT_STATUS
+
+    if repo_root is not None:
+        stored = _read_state(repo_root)
+        if stored is not None:
+            if stored.adopted:
+                if server is not None and probe(server).reachable:
+                    return stored
+            elif _pid_alive(stored.pid):
+                if server is None or probe(server).reachable:
+                    return stored
+            _clear_state(repo_root)
 
     if server is not None:
         h = probe(server)

@@ -19,6 +19,12 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-09 08:32
+  - Host class(es): Linux/WSL2, AMD64, NVIDIA CUDA
+  - Summary: Fixed managed resident-mind sidecar lifecycle and fallback behavior so `awf llm serve start` leaves a stoppable process, CPU fallback is selected when an accelerator artifact is unavailable, and local OpenAI-compatible llama.cpp calls do not require an operator secret.
+  - Scope: `backend/src/awf/llm/sidecar.py`, `backend/src/awf/cli/core_ops.py`, `backend/src/awf/workflow/activities.py`, `backend/src/awf/hardware/readiness.py`, `backend/src/awf/gateway/client.py`, focused LLM tests, and ADR-0017.
+  - Validation: focused LLM sidecar/CLI/readiness/gateway tests passed; live host proof started AWF-managed CUDA `llama-server` on `127.0.0.1:8080`, verified `resident-mind@1.0.0` completion through the Model Gateway without manually setting `OPENAI_API_KEY`, and stopped the persisted sidecar by CLI.
+
 - Timestamp: 2026-08-09 07:08
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Reduced test sprawl by replacing the phase10 core-op catch-all with focused integration files, centralizing temporary repo helpers, and trimming duplicate GUI dashboard assertions.

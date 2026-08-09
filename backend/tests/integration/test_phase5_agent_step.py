@@ -122,6 +122,7 @@ def _capability(risk_class: str, approval: str) -> CapabilityRecord:
         effects=Effects(operation="update", reversible=True, idempotent=False, external_side_effect=True),
         risk_class=risk_class,
         approval=approval,
+        constraints={},
     )
 
 

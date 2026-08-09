@@ -18,6 +18,7 @@ export interface ApprovalSummary {
   requested_at: string;
   decided_at: string | null;
   risk_class: string | null;
+  preview?: { machine_action?: Record<string, unknown>; machine_action_digest?: string } | null;
 }
 
 export interface DashboardProps {
@@ -60,6 +61,9 @@ export function Dashboard({ runs, approvals, onRefresh, refreshing }: DashboardP
             {approvals.map((approval) => (
               <li key={approval.approval_id}>
                 {approval.action_digest} - {approval.risk_class ?? "unknown risk class"} ({approval.approval_id})
+                {approval.preview?.machine_action && (
+                  <pre>{JSON.stringify(approval.preview.machine_action, null, 2)}</pre>
+                )}
               </li>
             ))}
           </ul>

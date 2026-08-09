@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("awf", {
   runStatus: (runId: string) => ipcRenderer.invoke(CHANNELS.runStatus, runId),
   runList: () => ipcRenderer.invoke(CHANNELS.runList),
   approvalList: () => ipcRenderer.invoke(CHANNELS.approvalList),
+  approvalDetail: (approvalId: string) => ipcRenderer.invoke(CHANNELS.approvalDetail, approvalId),
   approvalApprove: (approvalId: string) => ipcRenderer.invoke(CHANNELS.approvalApprove, approvalId),
   approvalReject: (approvalId: string, reason: string) =>
     ipcRenderer.invoke(CHANNELS.approvalReject, approvalId, reason),

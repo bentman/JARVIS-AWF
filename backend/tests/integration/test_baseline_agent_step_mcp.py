@@ -51,6 +51,18 @@ def _write_fetch_server(repo_root):
     )
 
 
+def _write_fetch_tool_capability(repo_root, name="fetch_url"):
+    capability_dir = repo_root / "config" / "app_registry" / "capabilities" / name
+    capability_dir.mkdir(parents=True)
+    (capability_dir / "1.0.0.yaml").write_text(
+        f"identity: {{type: mcp-tool, provider: fetch, name: {name}, version: 1.0.0}}\n"
+        'schema: {input: "", output: ""}\n'
+        "effects: {operation: communicate, reversible: false, idempotent: false, external_side_effect: true}\n"
+        "risk_class: R1\n"
+        "approval: per-invocation\n"
+    )
+
+
 def test_mcp_ref_renders_config_and_passes_extra_args_to_adapter(repo_and_worktree, conn):
     repo_root, worktree = repo_and_worktree
     _write_fetch_server(repo_root)
@@ -81,6 +93,64 @@ def test_mcp_ref_renders_config_and_passes_extra_args_to_adapter(repo_and_worktr
     event = conn.execute("SELECT new_status, payload_json FROM events WHERE new_status = 'mcp_rendered'").fetchone()
     assert event is not None
     assert "fetch@1.0.0" in event["payload_json"]
+
+
+def test_mcp_server_with_declared_tools_requires_all_tools_to_have_allowed_capabilities(repo_and_worktree, conn):
+    repo_root, worktree = repo_and_worktree
+    server_dir = repo_root / "config" / "app_registry" / "mcp" / "fetch"
+    server_dir.mkdir(parents=True)
+    (server_dir / "1.0.0.yaml").write_text(
+        "name: fetch\nversion: 1.0.0\ntype: stdio\ncommand: npx\n"
+        "args: ['-y', '@modelcontextprotocol/server-fetch']\ntools: [fetch_url, scrape_url]\n"
+    )
+    seen = {}
+
+    def adapter_fn(invocation: AgentInvocation) -> AgentResult:
+        seen["invocation"] = invocation
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    run_agent_step(
+        conn,
+        step_id="step-1",
+        run_id="run-1",
+        worktree_path=worktree,
+        invocation=AgentInvocation(objective="use fetch", inputs={}, workspace_root=worktree),
+        adapter_fn=adapter_fn,
+        commit_message="agent: used fetch",
+        actor="claude-code",
+        mcp_refs=["fetch@1.0.0"],
+        agent_allowlist=["fetch_url@1.0.0"],
+        repo_root=repo_root,
+    )
+
+    assert "mcp_extra_args" not in seen["invocation"].constraints
+    assert not (worktree / "mcp" / "claude-code.mcp.json").exists()
+    assert conn.execute("SELECT 1 FROM events WHERE new_status = 'mcp_rendered'").fetchone() is None
+
+    _write_fetch_tool_capability(repo_root, "fetch_url")
+    _write_fetch_tool_capability(repo_root, "scrape_url")
+    create_step(conn, step_id="step-2", run_id="run-1", node_id="agent-node-2")
+    run_agent_step(
+        conn,
+        step_id="step-2",
+        run_id="run-1",
+        worktree_path=worktree,
+        invocation=AgentInvocation(objective="use fetch", inputs={}, workspace_root=worktree),
+        adapter_fn=adapter_fn,
+        commit_message="agent: used fetch",
+        actor="claude-code",
+        mcp_refs=["fetch@1.0.0"],
+        agent_allowlist=["fetch_url@1.0.0", "scrape_url@1.0.0"],
+        repo_root=repo_root,
+    )
+
+    rendered_file = worktree / "mcp" / "claude-code.mcp.json"
+    rendered = json.loads(rendered_file.read_text())
+    assert rendered["mcpServers"]["fetch"]["command"] == "npx"
+    event = conn.execute("SELECT payload_json FROM events WHERE new_status = 'mcp_rendered'").fetchone()
+    payload = json.loads(event["payload_json"])
+    assert payload["servers"][0]["tools"] == ["fetch_url", "scrape_url"]
+    assert payload["servers"][0]["capabilities"] == ["fetch_url@1.0.0", "scrape_url@1.0.0"]
 
 
 def test_no_mcp_refs_renders_nothing_and_labels_user_objective(repo_and_worktree, conn):

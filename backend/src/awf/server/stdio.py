@@ -28,8 +28,10 @@ METHOD_NAMES = (
     "awf/run.list",
     "awf/run.resume",
     "awf/approval.list",
+    "awf/approval.detail",
     "awf/approval.approve",
     "awf/approval.reject",
+    "awf/machine.actionPreview",
     "awf/artifact.list",
     "awf/artifact.read",
     "awf/registry.list",
@@ -84,6 +86,8 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
         return ops.op_run_resume(repo_root, conn)
     if method == "awf/approval.list":
         return ops.op_approval_list(conn)
+    if method == "awf/approval.detail":
+        return ops.op_approval_detail(conn, approval_id=params["approvalId"])
     if method == "awf/approval.approve":
         return ops.op_approval_approve(
             conn,
@@ -93,6 +97,8 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
         )
     if method == "awf/approval.reject":
         return ops.op_approval_reject(conn, approval_id=params["approvalId"], reason=params.get("reason", ""))
+    if method == "awf/machine.actionPreview":
+        return ops.op_machine_action_preview(conn, approval_id=params["approvalId"])
     if method == "awf/artifact.list":
         return ops.op_artifact_list(conn, run_id=params["runId"])
     if method == "awf/artifact.read":

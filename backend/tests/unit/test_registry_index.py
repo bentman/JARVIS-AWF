@@ -3,7 +3,7 @@ import pytest
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.registry.index import compute_digest, index_row, latest_version, reindex, set_trust_status
-from awf.registry.kinds import CAPABILITIES
+from awf.registry.kinds import CAPABILITIES, KINDS
 from awf.registry.resolve import (
     RegistryBlockedError,
     RegistryIntegrityError,
@@ -38,16 +38,7 @@ def test_reindex_covers_both_roots_and_all_kinds(tmp_path):
     counts = reindex(repo_root, conn)
 
     assert counts["capabilities"] == {"config": 1, "data": 1}
-    assert set(counts.keys()) == {
-        "workflows",
-        "agents",
-        "capabilities",
-        "mcp",
-        "skills",
-        "voice-profiles",
-        "model-profiles",
-        "personas",
-    }
+    assert set(counts.keys()) == {kind.key for kind in KINDS}
     assert index_row(conn, "capabilities", "demo", "1.0.0") is not None
     assert index_row(conn, "capabilities", "other", "1.0.0") is not None
 

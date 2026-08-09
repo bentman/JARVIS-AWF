@@ -1,0 +1,14 @@
+identity: {type: activity, provider: awf, name: command_run, version: 1.0.0}
+schema: {input: "", output: ""}
+effects: {operation: execute, reversible: true, idempotent: true, external_side_effect: false}
+risk_class: R1
+approval: per-invocation
+constraints:
+  command:
+    executable: python3.12
+    allowedArgs:
+      - ["-m", "pytest", "backend/tests/**"]
+    cwdRoot: worktree
+    timeoutSeconds: 300
+    maxOutputBytes: 65536
+    network: denied

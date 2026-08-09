@@ -45,6 +45,7 @@ fails the Step before the adapter runs, the same posture as an empty
 Capability Guard allowlist.
 """
 
+import dataclasses
 import hashlib
 import json
 import shutil
@@ -64,7 +65,8 @@ from awf.isolation.worktree import commit_all_changes
 from awf.mcp.render import RENDERERS
 from awf.paths import env_path
 from awf.registry.agent_manifest import SkillRef
-from awf.registry.capability_record import CapabilityRecord
+from awf.registry.capability_record import CapabilityRecord, load_capability_record
+from awf.registry.index import latest_version
 from awf.registry.mcp_server import load_mcp_server
 from awf.registry.model_profile import load_model_profile
 from awf.registry.persona import CompiledPersona, compile_persona, load_persona
@@ -98,18 +100,51 @@ def _is_trusted(conn: sqlite3.Connection, kind: str, name: str, version: str, so
     return row["trust_status"] not in ("quarantined", "blocked")
 
 
-def _resolve_mcp_servers(conn: sqlite3.Connection, repo_root: Path, mcp_refs: list[str]):
+def _resolve_mcp_servers(
+    conn: sqlite3.Connection, repo_root: Path, mcp_refs: list[str], capability_refs: list[str] | None
+):
     """Returns (servers, refs_with_digest) for the refs that pass the trust gate."""
     servers = []
     refs_with_digest = []
+    allowed_capability_refs = set(capability_refs or [])
     for ref in mcp_refs:
         name, _, version = ref.partition("@")
         path, source = resolve_registry_object(repo_root, "mcp", name, version)
         if not _is_trusted(conn, "mcp", name, version, source):
             continue
-        servers.append(load_mcp_server(path))
-        refs_with_digest.append({"ref": ref, "digest": hashlib.sha256(path.read_bytes()).hexdigest()})
+        server = load_mcp_server(path)
+        tools, capability_records = _allowed_mcp_tools(repo_root, server.name, server.tools, allowed_capability_refs)
+        if server.tools and tuple(tools) != server.tools:
+            continue
+        servers.append(dataclasses.replace(server, tools=tuple(tools)))
+        refs_with_digest.append(
+            {
+                "ref": ref,
+                "digest": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "tools": tools,
+                "capabilities": [record.ref for record in capability_records],
+            }
+        )
     return servers, refs_with_digest
+
+
+def _allowed_mcp_tools(repo_root: Path, provider: str, tools: tuple[str, ...], allowed_refs: set[str]):
+    allowed_tools = []
+    capability_records = []
+    for tool in tools:
+        try:
+            version = latest_version(repo_root, "capabilities", tool)
+            cap_path, _source = resolve_registry_object(repo_root, "capabilities", tool, version)
+            capability = load_capability_record(cap_path)
+        except Exception:
+            continue
+        if capability.ref not in allowed_refs:
+            continue
+        if capability.identity.type != "mcp-tool" or capability.identity.provider != provider:
+            continue
+        allowed_tools.append(tool)
+        capability_records.append(capability)
+    return allowed_tools, capability_records
 
 
 def _resolve_secrets(conn: sqlite3.Connection, repo_root: Path, servers) -> dict[str, str]:
@@ -131,13 +166,14 @@ def _apply_mcp(
     worktree_path: Path,
     repo_root: Path | None,
     mcp_refs: list[str],
+    capability_refs: list[str] | None,
     actor: str,
     invocation: AgentInvocation,
 ) -> AgentInvocation:
     if not mcp_refs or repo_root is None:
         return invocation
 
-    servers, refs_with_digest = _resolve_mcp_servers(conn, repo_root, mcp_refs)
+    servers, refs_with_digest = _resolve_mcp_servers(conn, repo_root, mcp_refs, capability_refs)
     if not servers:
         return invocation
 
@@ -449,6 +485,7 @@ def run_agent_step(
             worktree_path=worktree_path,
             repo_root=repo_root,
             mcp_refs=list(mcp_refs) if mcp_refs else [],
+            capability_refs=agent_allowlist if agent_allowlist is not None else [capability.ref] if capability else [],
             actor=actor,
             invocation=skilled_invocation,
         )

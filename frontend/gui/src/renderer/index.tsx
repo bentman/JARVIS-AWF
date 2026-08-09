@@ -21,6 +21,7 @@ declare global {
       runStatus: (runId: string) => Promise<unknown>;
       runList: () => Promise<RunSummary[]>;
       approvalList: () => Promise<ApprovalSummary[]>;
+      approvalDetail: (approvalId: string) => Promise<unknown>;
       approvalApprove: (approvalId: string) => Promise<unknown>;
       approvalReject: (approvalId: string, reason: string) => Promise<unknown>;
       proposalGet: (proposalId: string) => Promise<ProposalSummary>;

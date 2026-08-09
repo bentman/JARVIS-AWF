@@ -9,6 +9,7 @@ function makeFakeClient(overrides: Partial<CommandClient> = {}): CommandClient {
     runList: vi.fn().mockResolvedValue([]),
     runResume: vi.fn().mockResolvedValue([]),
     approvalList: vi.fn().mockResolvedValue([]),
+    approvalDetail: vi.fn().mockResolvedValue({ approval: { approval_id: "ap-1" }, preview: null }),
     approvalApprove: vi.fn().mockResolvedValue({ approval_id: "ap-1", status: "approved" }),
     approvalReject: vi.fn().mockResolvedValue({ approval_id: "ap-1", status: "rejected" }),
     artifactList: vi.fn().mockResolvedValue([]),
@@ -75,6 +76,12 @@ describe("dispatchCommand", () => {
     const client = makeFakeClient();
     await dispatchCommand(client, "/approvals", DEFAULT_SETTINGS);
     expect(client.approvalList).toHaveBeenCalled();
+  });
+
+  it("/approval calls approvalDetail with the id", async () => {
+    const client = makeFakeClient();
+    await dispatchCommand(client, "/approval ap-1", DEFAULT_SETTINGS);
+    expect(client.approvalDetail).toHaveBeenCalledWith("ap-1");
   });
 
   it("/approve calls approvalApprove with the id", async () => {

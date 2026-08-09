@@ -1,0 +1,5 @@
+identity: {type: mcp-tool, provider: context7, name: get-library-docs, version: 1.0.0}
+schema: {input: "", output: ""}
+effects: {operation: read, reversible: true, idempotent: true, external_side_effect: true}
+risk_class: R1
+approval: never

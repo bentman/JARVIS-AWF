@@ -243,7 +243,7 @@ def _build_node_executors(
     run_map_item = _make_run_map_item(artifacts_root, repo_root)
     executors = {
         "agent": make_agent_node_executor(ADAPTER_REGISTRY, worktree, repo_root),
-        "activity": make_activity_node_executor(repo_root=repo_root),
+        "activity": make_activity_node_executor(repo_root=repo_root, worktree_path=worktree),
         "approval": make_approval_node_executor(),
         "subworkflow": make_subworkflow_node_executor(run_child),
         "map": make_map_node_executor(run_map_item, worktree_path=worktree, repo_root=repo_root),
@@ -360,7 +360,49 @@ def op_run_resume(repo_root: Path, conn: sqlite3.Connection) -> list[dict]:
 
 def op_approval_list(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute("SELECT * FROM approvals WHERE status = 'pending' ORDER BY requested_at").fetchall()
-    return [dict(row) for row in rows]
+    result = []
+    for row in rows:
+        item = dict(row)
+        item["preview"] = _machine_action_preview_for_step(conn, step_id=row["step_id"])
+        result.append(item)
+    return result
+
+
+def _machine_action_preview_for_step(conn: sqlite3.Connection, *, step_id: str) -> dict | None:
+    import json
+
+    rows = conn.execute(
+        "SELECT payload_json FROM events "
+        "WHERE step_id = ? AND reason_code IN ("
+        "'machine_action_waiting_approval', 'machine_action_allowed', 'machine_action_denied', "
+        "'machine_action_executed'"
+        ") ORDER BY occurred_at DESC",
+        (step_id,),
+    ).fetchall()
+    for row in rows:
+        try:
+            payload = json.loads(row["payload_json"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        action = payload.get("machine_action")
+        if action:
+            return {"machine_action": action, "machine_action_digest": payload.get("machine_action_digest")}
+    return None
+
+
+def op_approval_detail(conn: sqlite3.Connection, *, approval_id: str) -> dict:
+    row = conn.execute("SELECT * FROM approvals WHERE approval_id = ?", (approval_id,)).fetchone()
+    if row is None:
+        raise CoreOpError(f"no such approval: {approval_id}")
+    preview = _machine_action_preview_for_step(conn, step_id=row["step_id"])
+    return {"approval": dict(row), "preview": preview}
+
+
+def op_machine_action_preview(conn: sqlite3.Connection, *, approval_id: str) -> dict:
+    detail = op_approval_detail(conn, approval_id=approval_id)
+    if detail["preview"] is None:
+        raise CoreOpError(f"approval {approval_id} has no machine action preview")
+    return detail["preview"]
 
 
 def _decide_approval(conn: sqlite3.Connection, *, approval_id: str, status: str, reason: str | None) -> dict:

@@ -1,0 +1,11 @@
+identity: {type: activity, provider: awf, name: fs_write, version: 1.0.0}
+schema: {input: "", output: ""}
+effects: {operation: update, reversible: true, idempotent: false, external_side_effect: false}
+risk_class: R1
+approval: never
+constraints:
+  filesystem:
+    allowedRoots: [worktree, scratch]
+    deniedGlobs: [".env", "data/awf_db/**", "data/registry/capabilities/**"]
+    followSymlinks: false
+    maxBytes: 262144

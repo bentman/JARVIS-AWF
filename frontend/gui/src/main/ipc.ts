@@ -10,6 +10,7 @@ export const CHANNELS = {
   runStatus: "awf:runStatus",
   runList: "awf:runList",
   approvalList: "awf:approvalList",
+  approvalDetail: "awf:approvalDetail",
   approvalApprove: "awf:approvalApprove",
   approvalReject: "awf:approvalReject",
   proposalGet: "awf:proposalGet",
@@ -31,6 +32,7 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, client: ProtocolClient
   ipcMain.handle(CHANNELS.runStatus, (_event, runId) => client.runStatus(runId as string));
   ipcMain.handle(CHANNELS.runList, () => client.runList());
   ipcMain.handle(CHANNELS.approvalList, () => client.approvalList());
+  ipcMain.handle(CHANNELS.approvalDetail, (_event, approvalId) => client.approvalDetail(approvalId as string));
   ipcMain.handle(CHANNELS.approvalApprove, (_event, approvalId) =>
     client.approvalApprove(approvalId as string),
   );

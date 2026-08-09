@@ -16,6 +16,7 @@ function makeFakeClient() {
     runStatus: vi.fn().mockResolvedValue({ run_id: "run-1" }),
     runList: vi.fn().mockResolvedValue([]),
     approvalList: vi.fn().mockResolvedValue([]),
+    approvalDetail: vi.fn().mockResolvedValue({ approval: { approval_id: "ap-1" }, preview: null }),
     approvalApprove: vi.fn().mockResolvedValue({ status: "approved" }),
     approvalReject: vi.fn().mockResolvedValue({ status: "rejected" }),
     proposalGet: vi.fn().mockResolvedValue({ proposal_id: "p1" }),
@@ -51,6 +52,9 @@ describe("registerIpcHandlers", () => {
 
     await handlers.get(CHANNELS.approvalList)?.({});
     expect(client.approvalList).toHaveBeenCalled();
+
+    await handlers.get(CHANNELS.approvalDetail)?.({}, "ap-1");
+    expect(client.approvalDetail).toHaveBeenCalledWith("ap-1");
 
     await handlers.get(CHANNELS.proposalGet)?.({}, "p1");
     expect(client.proposalGet).toHaveBeenCalledWith("p1");

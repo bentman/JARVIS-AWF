@@ -79,6 +79,14 @@ describe("ProtocolClient", () => {
     void client.approvalReject("ap-1", "not safe");
     expect(transport.lastRequest().params).toEqual({ approvalId: "ap-1", reason: "not safe" });
 
+    void client.approvalDetail("ap-1");
+    expect(transport.lastRequest().method).toBe("awf/approval.detail");
+    expect(transport.lastRequest().params).toEqual({ approvalId: "ap-1" });
+
+    void client.machineActionPreview("ap-1");
+    expect(transport.lastRequest().method).toBe("awf/machine.actionPreview");
+    expect(transport.lastRequest().params).toEqual({ approvalId: "ap-1" });
+
     void client.artifactRead("art-1");
     expect(transport.lastRequest().params).toEqual({ artifactId: "art-1" });
 

@@ -1,0 +1,10 @@
+identity: {type: activity, provider: awf, name: fs_delete, version: 1.0.0}
+schema: {input: "", output: ""}
+effects: {operation: delete, reversible: true, idempotent: false, external_side_effect: false}
+risk_class: R2
+approval: per-invocation
+constraints:
+  filesystem:
+    allowedRoots: [worktree]
+    deniedGlobs: [".env", "data/awf_db/**", "data/registry/capabilities/**"]
+    followSymlinks: false

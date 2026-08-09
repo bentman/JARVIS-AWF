@@ -11,6 +11,7 @@ export type CommandClient = Pick<
   | "runList"
   | "runResume"
   | "approvalList"
+  | "approvalDetail"
   | "approvalApprove"
   | "approvalReject"
   | "artifactList"
@@ -48,6 +49,7 @@ export const HELP_TEXT = `
 /runs                                 List Runs
 /resume                               Trigger the startup recovery scan
 /approvals                            Approval queue
+/approval <id>                        Approval detail and machine-action preview
 /approve <id>                         Approve a pending approval
 /reject <id> <reason>                 Reject a pending approval
 /artifacts <run-id>                   List artifacts for a Run
@@ -120,6 +122,10 @@ export async function dispatchCommand(
   if (name === "runs") return { kind: "json", data: await client.runList() };
   if (name === "resume") return { kind: "json", data: await client.runResume() };
   if (name === "approvals") return { kind: "json", data: await client.approvalList() };
+  if (name === "approval") {
+    if (!args[0]) throw new CommandError("usage: /approval <approval-id>");
+    return { kind: "json", data: await client.approvalDetail(args[0]) };
+  }
   if (name === "approve") {
     if (!args[0]) throw new CommandError("usage: /approve <approval-id>");
     return { kind: "json", data: await client.approvalApprove(args[0]) };

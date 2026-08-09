@@ -7,8 +7,10 @@ export type MethodName =
   | "awf/run.list"
   | "awf/run.resume"
   | "awf/approval.list"
+  | "awf/approval.detail"
   | "awf/approval.approve"
   | "awf/approval.reject"
+  | "awf/machine.actionPreview"
   | "awf/artifact.list"
   | "awf/artifact.read"
   | "awf/registry.list"
@@ -102,6 +104,16 @@ export interface Approval {
   reason: string | null;
   requested_at: string;
   decided_at: string | null;
+}
+
+export interface MachineActionPreview {
+  machine_action: Record<string, unknown>;
+  machine_action_digest: string;
+}
+
+export interface ApprovalDetail {
+  approval: Approval;
+  preview: MachineActionPreview | null;
 }
 
 export interface Artifact {

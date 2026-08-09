@@ -2,8 +2,10 @@ import type { Transport } from "./transport.js";
 import {
   ProtocolError,
   type Approval,
+  type ApprovalDetail,
   type Artifact,
   type JsonRpcResponse,
+  type MachineActionPreview,
   type MemorySearchResult,
   type MethodName,
   type Proposal,
@@ -88,12 +90,20 @@ export class ProtocolClient {
     return this.call("awf/approval.list", {});
   }
 
+  approvalDetail(approvalId: string): Promise<ApprovalDetail> {
+    return this.call("awf/approval.detail", { approvalId });
+  }
+
   approvalApprove(approvalId: string): Promise<Approval> {
     return this.call("awf/approval.approve", { approvalId });
   }
 
   approvalReject(approvalId: string, reason: string): Promise<Approval> {
     return this.call("awf/approval.reject", { approvalId, reason });
+  }
+
+  machineActionPreview(approvalId: string): Promise<MachineActionPreview> {
+    return this.call("awf/machine.actionPreview", { approvalId });
   }
 
   artifactList(runId: string): Promise<Artifact[]> {

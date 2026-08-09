@@ -69,10 +69,19 @@ def _llm_server_ensure(conn: sqlite3.Connection, _args: dict) -> dict:
     return asdict(st)
 
 
+def _machine_placeholder(conn: sqlite3.Connection, _args: dict) -> dict:
+    raise RuntimeError("machine activities are executed by awf.machine.activities")
+
+
 ACTIVITY_REGISTRY: dict[str, ActivityFn] = {
     "hardware_probe": _hardware_probe,
     "gpu_utilization_sample": _gpu_utilization_sample,
     "llm_server_ensure": _llm_server_ensure,
+    "fs_read": _machine_placeholder,
+    "fs_write": _machine_placeholder,
+    "fs_delete": _machine_placeholder,
+    "command_run": _machine_placeholder,
+    "network_fetch": _machine_placeholder,
 }
 
 

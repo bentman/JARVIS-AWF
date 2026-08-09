@@ -95,6 +95,7 @@ def _synthesized_capability_for_node(node: dict, adapter_name: str) -> Capabilit
         effects=Effects(operation="update", reversible=True, idempotent=False, external_side_effect=True),
         risk_class="R1",
         approval="never",
+        constraints={},
     )
 
 
@@ -172,6 +173,7 @@ def _synthesized_capability_for_activity(node: dict) -> CapabilityRecord:
         effects=Effects(operation="execute", reversible=True, idempotent=True, external_side_effect=False),
         risk_class="R1",
         approval="never",
+        constraints={},
     )
 
 
@@ -184,9 +186,25 @@ def _resolve_activity_capability(node: dict, repo_root: Path) -> CapabilityRecor
 
 
 def make_activity_node_executor(
-    activity_registry: dict = ACTIVITY_REGISTRY, repo_root: Path | None = None
+    activity_registry: dict = ACTIVITY_REGISTRY,
+    repo_root: Path | None = None,
+    worktree_path: Path | None = None,
 ) -> NodeExecutor:
     def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
+        if repo_root is not None and node["function"] in {"fs_read", "fs_write", "fs_delete", "command_run", "network_fetch"}:
+            from awf.machine.activities import run_machine_activity
+
+            capability = _resolve_activity_capability(node, repo_root)
+            return run_machine_activity(
+                conn,
+                repo_root=repo_root,
+                worktree_path=worktree_path or repo_root,
+                run_id=run_id,
+                step_id=step_id,
+                node=node,
+                capability=capability,
+            )
+
         def fn(_payload: dict) -> dict:
             activity_fn = activity_registry.get(node["function"])
             if activity_fn is None:

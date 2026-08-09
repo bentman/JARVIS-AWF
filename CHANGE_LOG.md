@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-09 11:18
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0021 governed machine reach with constrained filesystem, bounded writes, command, network, and MCP exposure paths bound to Capability Records, guard events, exact action digests, and approval previews.
+  - Scope: `backend/src/awf/machine/*`, Capability Record constraints, workflow activity routing, MCP tool exposure checks, JSON-RPC/CLI/GUI approval preview surfaces, default filesystem/command machine capability records, focused tests, and ADR-0021.
+  - Validation: `backend/.venv/bin/python -m pytest backend/tests -q` outside the Codex sandbox -> 550 passed, 7 warnings; `backend/.venv/bin/python -m ruff check .` passed; `npm --prefix frontend run build --workspaces` passed; `npm --prefix frontend test --workspaces` -> shared 9 passed, CLI 37 passed, GUI 32 passed.
+  - Notes: network activity execution is covered with a deterministic fake opener; no live external network or host-destructive command support is claimed.
+
 - Timestamp: 2026-08-09 09:36
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Implemented ADR-0020 memory beyond workflows with registry-backed memory profiles, semantic memories, active sessions, episodic search, memory proposal actions, JSON-RPC/CLI methods, and frontend memory controls.

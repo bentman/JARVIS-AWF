@@ -86,7 +86,7 @@ def test_mcp_ref_renders_config_and_passes_extra_args_to_adapter(repo_and_worktr
     assert "fetch@1.0.0" in event["payload_json"]
 
 
-def test_no_mcp_refs_renders_nothing_and_adapter_runs_unmodified(repo_and_worktree, conn):
+def test_no_mcp_refs_renders_nothing_and_labels_user_objective(repo_and_worktree, conn):
     repo_root, worktree = repo_and_worktree
     seen = {}
 
@@ -107,7 +107,8 @@ def test_no_mcp_refs_renders_nothing_and_adapter_runs_unmodified(repo_and_worktr
         repo_root=repo_root,
     )
 
-    assert seen["invocation"] is invocation
+    assert seen["invocation"] is not invocation
+    assert seen["invocation"].objective == "[user/input, untrusted]\ndo nothing special"
     assert not (worktree / "mcp").exists()
     assert conn.execute("SELECT 1 FROM events WHERE new_status = 'mcp_rendered'").fetchone() is None
 
@@ -147,7 +148,8 @@ def test_quarantined_mcp_ref_is_refused_before_adapter_runs(repo_and_worktree, c
         repo_root=repo_root,
     )
 
-    assert seen["invocation"] is invocation  # unmodified: quarantined ref never rendered
+    assert seen["invocation"] is not invocation
+    assert seen["invocation"].objective == "[user/input, untrusted]\nuse fetch"
     assert not (worktree / "mcp").exists()
     assert conn.execute("SELECT 1 FROM events WHERE new_status = 'mcp_rendered'").fetchone() is None
 

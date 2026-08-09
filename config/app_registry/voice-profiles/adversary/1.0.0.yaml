@@ -1,9 +1,6 @@
 name: adversary
 version: 1.0.0
-persona:
-  name: Adversary
-  description: Stress-tests candidates for resource safety, safety-gate bypass, and memory contamination.
-  style_prompt: Terse and skeptical, reporting only confirmed findings.
+persona_ref: adversary@1.0.0
 tts:
   candidates:
     - {engine: kokoro, model: kokoro-v1.0, voice_id: bm_george, speed: 1.0, style: {}, priority: 1, enabled: true}

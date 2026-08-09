@@ -17,7 +17,7 @@ def minimal_raw(**overrides):
     raw = {
         "name": "demo",
         "version": "1.0.0",
-        "persona": {"name": "Demo", "description": "x", "style_prompt": "y"},
+        "persona_ref": "demo-persona@1.0.0",
         "tts": {
             "candidates": [
                 {"engine": "kokoro", "model": "kokoro-v1.0", "voice_id": "bf_isabella", "speed": 1.0, "priority": 1, "enabled": True}
@@ -33,14 +33,25 @@ def minimal_raw(**overrides):
 
 def test_parse_minimal_voice_profile():
     profile = parse_voice_profile(minimal_raw())
-    assert profile.persona.name == "Demo"
+    assert profile.persona_ref == "demo-persona@1.0.0"
+    assert profile.persona is None
     candidate = profile.enabled_candidates_by_priority()[0]
     assert candidate.voice_id == "bf_isabella"
 
 
-def test_parse_rejects_missing_persona():
+def test_parse_rejects_inline_persona_with_replacement_message():
     raw = minimal_raw()
-    del raw["persona"]
+    raw["persona"] = {"name": "Demo", "description": "x", "style_prompt": "y"}
+    with pytest.raises(
+        VoiceProfileValidationError,
+        match="voice profile: 'persona' is replaced by 'persona_ref' \\(ADR-0018\\)",
+    ):
+        parse_voice_profile(raw)
+
+
+def test_parse_rejects_missing_persona_ref():
+    raw = minimal_raw()
+    del raw["persona_ref"]
     with pytest.raises(VoiceProfileValidationError):
         parse_voice_profile(raw)
 
@@ -69,16 +80,19 @@ def test_parse_rejects_invalid_fallback_mode():
     ],
 )
 def test_load_real_shipped_voice_profile(name, expected_voice_id, voice_profiles_root):
-    profile = load_voice_profile(voice_profiles_root / name / "1.0.0.yaml")
+    profile = load_voice_profile(voice_profiles_root.parents[2], voice_profiles_root / name / "1.0.0.yaml")
     candidate = profile.enabled_candidates_by_priority()[0]
     assert candidate.voice_id == expected_voice_id
     assert candidate.engine == "kokoro"
+    assert profile.persona_ref == f"{name}@1.0.0"
+    assert profile.persona is not None
+    assert profile.persona.ref == f"{name}@1.0.0"
 
 
 def test_all_four_default_voice_profiles_use_distinct_voice_ids(voice_profiles_root):
     voice_ids = set()
     for name in ("narrator", "builder", "verifier", "adversary"):
-        profile = load_voice_profile(voice_profiles_root / name / "1.0.0.yaml")
+        profile = load_voice_profile(voice_profiles_root.parents[2], voice_profiles_root / name / "1.0.0.yaml")
         voice_ids.add(profile.enabled_candidates_by_priority()[0].voice_id)
     assert len(voice_ids) == 4
 
@@ -88,6 +102,9 @@ def test_resolve_default_voice_id_from_shipped_narrator_profile(repo_root):
 
 
 def test_resolve_default_voice_id_follows_data_registry_override(tmp_path):
+    persona_dir = tmp_path / "config" / "app_registry" / "personas" / "narrator"
+    persona_dir.mkdir(parents=True)
+    (persona_dir / "1.0.0.yaml").write_text(minimal_persona_yaml("narrator"))
     override_dir = tmp_path / "data" / "registry" / "voice-profiles" / "narrator"
     override_dir.mkdir(parents=True)
     (override_dir / "1.0.0.yaml").write_text(minimal_raw_yaml("am_michael"))
@@ -99,11 +116,31 @@ def minimal_raw_yaml(voice_id: str) -> str:
     return (
         "name: narrator\n"
         "version: 1.0.0\n"
-        "persona: {name: Demo, description: x, style_prompt: y}\n"
+        "persona_ref: narrator@1.0.0\n"
         "tts:\n"
         "  candidates:\n"
         f"    - {{engine: kokoro, model: kokoro-v1.0, voice_id: {voice_id}, speed: 1.0, priority: 1, enabled: true}}\n"
         "  fallback: {mode: none, allow_quality_degrade: false}\n"
         "privacy: {local_only: true}\n"
         "limits: {max_seconds_per_utterance: 30}\n"
+    )
+
+
+def minimal_persona_yaml(name: str) -> str:
+    return (
+        f"name: {name}\n"
+        "version: 1.0.0\n"
+        "display_name: Demo\n"
+        "description: x\n"
+        "locale: en\n"
+        "system: Demo system.\n"
+        "style:\n"
+        "  max_words_default: 100\n"
+        "  structure: Direct.\n"
+        "  do: [Do one thing.]\n"
+        "  avoid: [Avoid one thing.]\n"
+        "traits: {warmth: medium, assertiveness: medium, detail: medium, humor: none}\n"
+        "examples:\n"
+        "  - {user: hi, assistant: hello}\n"
+        "generation: {temperature: 0.5, max_tokens: 100}\n"
     )

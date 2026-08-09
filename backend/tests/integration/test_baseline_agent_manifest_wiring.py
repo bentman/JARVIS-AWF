@@ -48,6 +48,23 @@ def publish_manifest(repo_root: Path, name: str, frontmatter: str, instructions:
     target.write_text(f"---\n{frontmatter}\n---\n\n{instructions}\n")
 
 
+def publish_persona(repo_root: Path, name: str) -> None:
+    target = repo_root / "config" / "app_registry" / "personas" / name / "1.0.0.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        f"name: {name}\n"
+        "version: 1.0.0\n"
+        "display_name: Demo\n"
+        "description: x\n"
+        "locale: en\n"
+        "system: Manifest persona system.\n"
+        "style: {max_words_default: 120, structure: Answer first., do: [Be direct.], avoid: [Guessing.]}\n"
+        "traits: {warmth: medium, assertiveness: medium, detail: medium, humor: none}\n"
+        "examples: [{user: hi, assistant: hello}]\n"
+        "generation: {temperature: 0.5, max_tokens: 120}\n"
+    )
+
+
 def test_agent_ref_supplies_adapter_role_and_instructions(tmp_path, conn):
     publish_manifest(
         tmp_path,
@@ -69,6 +86,30 @@ def test_agent_ref_supplies_adapter_role_and_instructions(tmp_path, conn):
     assert output["status"] == "COMPLETED"
     assert "You are the demo builder." in captured["objective"]
     assert "add a feature" in captured["objective"]
+
+
+def test_agent_ref_persona_is_compiled_into_adapter_objective(tmp_path, conn):
+    publish_persona(tmp_path, "narrator")
+    publish_manifest(
+        tmp_path,
+        "demo-builder",
+        "name: demo-builder\nversion: 1.0.0\ndescription: x\nadapter: claude-code\npersona: narrator@1.0.0\n",
+        instructions="Application instructions.",
+    )
+    captured = {}
+
+    def fake_adapter(invocation: AgentInvocation) -> AgentResult:
+        captured["objective"] = invocation.objective
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    executor = make_agent_node_executor({"claude-code": fake_adapter}, tmp_path, tmp_path)
+    node = {"id": "build", "type": "agent", "agentRef": "demo-builder@1.0.0", "objective": "add a feature"}
+
+    executor(conn, "run-1", "step-1", node)
+
+    assert "[application/instruction]\nApplication instructions." in captured["objective"]
+    assert "[persona/style]\nManifest persona system." in captured["objective"]
+    assert "[user/input, untrusted]\nadd a feature" in captured["objective"]
 
 
 def test_agent_ref_capabilities_becomes_the_real_guard_allowlist(tmp_path, conn):

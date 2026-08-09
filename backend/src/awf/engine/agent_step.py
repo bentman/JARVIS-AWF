@@ -53,6 +53,8 @@ from pathlib import Path
 from typing import Callable
 
 from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
+from awf.cognition.envelope import PromptEnvelope, PromptSegment
+from awf.cognition.render import render_flat
 from awf.engine.executor import StepFailure, run_step
 from awf.envfile import get_env_value
 from awf.events.writer import write_event
@@ -65,6 +67,7 @@ from awf.registry.agent_manifest import SkillRef
 from awf.registry.capability_record import CapabilityRecord
 from awf.registry.mcp_server import load_mcp_server
 from awf.registry.model_profile import load_model_profile
+from awf.registry.persona import CompiledPersona, compile_persona, load_persona
 from awf.registry.resolve import resolve_registry_object
 from awf.registry.skill import Skill, directory_digest, load_skill
 from awf.secrets.store import get_secret
@@ -256,16 +259,31 @@ def _apply_skills(
     worktree_path: Path,
     repo_root: Path | None,
     skill_refs: list[SkillRef],
+    persona: CompiledPersona | None,
     actor: str,
     instructions: str,
     invocation: AgentInvocation,
 ) -> AgentInvocation:
     resolved = _resolve_skills(conn, repo_root, skill_refs) if (repo_root is not None and skill_refs) else []
 
-    objective_parts = [instructions] if instructions else []
-    objective_parts += [skill.body for _ref, skill, _digest, _dir in resolved if skill.body]
-    objective_parts.append(invocation.objective)
-    objective = "\n\n".join(part for part in objective_parts if part)
+    segments = []
+    if instructions.strip():
+        segments.append(PromptSegment("application", "instruction", True, instructions))
+    if persona is not None and persona.system_text.strip():
+        segments.append(PromptSegment("persona", "style", True, persona.system_text))
+    segments.extend(
+        PromptSegment("skill", "instruction", False, skill.body)
+        for _ref, skill, _digest, _dir in resolved
+        if skill.body.strip()
+    )
+    if invocation.objective.strip():
+        segments.append(PromptSegment("user", "input", False, invocation.objective))
+    envelope = PromptEnvelope(
+        segments=tuple(segments),
+        example_messages=persona.example_messages if persona is not None else (),
+        generation=persona.generation if persona is not None else {},
+    )
+    objective = render_flat(envelope)
 
     constraints = dict(invocation.constraints)
     resolved_skill_refs: tuple[str, ...] = invocation.skills
@@ -342,6 +360,19 @@ def _apply_model_profile(
     )
 
 
+def _resolve_persona(repo_root: Path | None, persona_ref: str | None) -> CompiledPersona | None:
+    if not persona_ref or repo_root is None:
+        return None
+    name, sep, version = persona_ref.partition("@")
+    if not sep or not name or not version:
+        raise AgentStepError(
+            f"persona ref must be '<name>@<version>', got {persona_ref!r}",
+            failure_class="INVALID_INPUT",
+        )
+    path, _source = resolve_registry_object(repo_root, "personas", name, version)
+    return compile_persona(load_persona(path))
+
+
 def run_agent_step(
     conn: sqlite3.Connection,
     *,
@@ -359,6 +390,7 @@ def run_agent_step(
     instructions: str = "",
     mcp_refs: list[str] | None = None,
     skill_refs: list[SkillRef] | None = None,
+    persona_ref: str | None = None,
     model_profile_ref: str | None = None,
     repo_root: Path | None = None,
 ) -> dict:
@@ -383,6 +415,8 @@ def run_agent_step(
                     failure_class="POLICY_DENIED",
                 )
 
+        compiled_persona = _resolve_persona(repo_root, persona_ref)
+
         skilled_invocation = _apply_skills(
             conn,
             run_id=run_id,
@@ -390,6 +424,7 @@ def run_agent_step(
             worktree_path=worktree_path,
             repo_root=repo_root,
             skill_refs=list(skill_refs) if skill_refs else [],
+            persona=compiled_persona,
             actor=actor,
             instructions=instructions,
             invocation=invocation,

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from awf.registry.persona import Persona, load_persona
 from awf.registry.resolve import resolve_registry_object
 from awf.registry.schema import require, require_enum
 
@@ -20,13 +21,6 @@ class VoiceProfileValidationError(ValueError):
 
 _require = partial(require, error=VoiceProfileValidationError)
 _require_enum = partial(require_enum, error=VoiceProfileValidationError)
-
-
-@dataclass(frozen=True)
-class Persona:
-    name: str
-    description: str
-    style_prompt: str
 
 
 @dataclass(frozen=True)
@@ -60,7 +54,8 @@ class Limits:
 class VoiceProfile:
     name: str
     version: str
-    persona: Persona
+    persona_ref: str
+    persona: Persona | None
     candidates: tuple[TtsCandidate, ...]
     fallback: Fallback
     privacy: Privacy
@@ -75,18 +70,14 @@ class VoiceProfile:
 
 
 def parse_voice_profile(raw: dict) -> VoiceProfile:
+    if "persona" in raw:
+        raise VoiceProfileValidationError("voice profile: 'persona' is replaced by 'persona_ref' (ADR-0018)")
     name = _require(raw, "name", "voice profile")
     version = _require(raw, "version", "voice profile")
-    persona_raw = _require(raw, "persona", "voice profile")
+    persona_ref = _require(raw, "persona_ref", "voice profile")
     tts_raw = _require(raw, "tts", "voice profile")
     privacy_raw = _require(raw, "privacy", "voice profile")
     limits_raw = _require(raw, "limits", "voice profile")
-
-    persona = Persona(
-        name=_require(persona_raw, "name", "persona"),
-        description=_require(persona_raw, "description", "persona"),
-        style_prompt=_require(persona_raw, "style_prompt", "persona"),
-    )
 
     candidates_raw = _require(tts_raw, "candidates", "tts")
     if not isinstance(candidates_raw, list) or not candidates_raw:
@@ -116,12 +107,20 @@ def parse_voice_profile(raw: dict) -> VoiceProfile:
     )
 
     return VoiceProfile(
-        name=name, version=version, persona=persona, candidates=candidates,
+        name=name, version=version, persona_ref=persona_ref, persona=None, candidates=candidates,
         fallback=fallback, privacy=privacy, limits=limits,
     )
 
 
-def load_voice_profile(path: Path) -> VoiceProfile:
+def _resolve_persona(repo_root: Path, persona_ref: str) -> Persona:
+    name, sep, version = persona_ref.partition("@")
+    if not sep or not name or not version:
+        raise VoiceProfileValidationError(f"voice profile persona_ref must be '<name>@<version>', got {persona_ref!r}")
+    path, _source = resolve_registry_object(repo_root, "personas", name, version)
+    return load_persona(path)
+
+
+def load_voice_profile(repo_root: Path, path: Path) -> VoiceProfile:
     """`path` is `voice-profiles/<name>/<version>.yaml` - the parsed `name`
     and `version` MUST match the containing directory and the file's own
     stem, per the rule `load_skill` already applies to `SKILL.md`."""
@@ -140,13 +139,23 @@ def load_voice_profile(path: Path) -> VoiceProfile:
         raise VoiceProfileValidationError(
             f"voice profile version '{profile.version}' does not match its file name '{expected_version}'"
         )
-    return profile
+    persona = _resolve_persona(repo_root, profile.persona_ref)
+    return VoiceProfile(
+        name=profile.name,
+        version=profile.version,
+        persona_ref=profile.persona_ref,
+        persona=persona,
+        candidates=profile.candidates,
+        fallback=profile.fallback,
+        privacy=profile.privacy,
+        limits=profile.limits,
+    )
 
 
 def resolve_default_voice_id(repo_root: Path) -> str:
     name, _, version = DEFAULT_VOICE_PROFILE_REF.partition("@")
     path, _source = resolve_registry_object(repo_root, "voice-profiles", name, version)
-    profile = load_voice_profile(path)
+    profile = load_voice_profile(repo_root, path)
     candidates = profile.enabled_candidates_by_priority()
     if not candidates:
         raise VoiceProfileValidationError(

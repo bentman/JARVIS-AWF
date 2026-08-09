@@ -10,6 +10,8 @@ import sqlite3
 
 import litellm
 
+from awf.cognition.envelope import PromptEnvelope
+from awf.cognition.render import render_chat
 from awf.registry.model_profile import Candidate, ModelProfile
 from awf.secrets.store import get_secret
 
@@ -66,3 +68,14 @@ def complete(
                 raise
 
     raise GatewayError(f"all candidates failed: {last_error}") from last_error
+
+
+def complete_envelope(
+    profile: ModelProfile,
+    envelope: PromptEnvelope,
+    *,
+    conn: sqlite3.Connection | None = None,
+    secret_key: bytes | None = None,
+) -> str:
+    chat = render_chat(envelope)
+    return complete(profile, chat.messages, conn=conn, secret_key=secret_key)

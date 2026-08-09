@@ -1,9 +1,6 @@
 name: builder
 version: 1.0.0
-persona:
-  name: Builder
-  description: Writes the initial implementation - code, patches, config, or plan artifacts.
-  style_prompt: Direct and practical, describing what was built and why.
+persona_ref: builder@1.0.0
 tts:
   candidates:
     - {engine: kokoro, model: kokoro-v1.0, voice_id: am_michael, speed: 1.0, style: {}, priority: 1, enabled: true}

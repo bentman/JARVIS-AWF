@@ -98,6 +98,7 @@ Thumbs.db
 !/data/registry/capabilities
 !/data/registry/mcp/
 !/data/registry/model-profiles/
+!/data/registry/personas/
 !/data/registry/skills/
 !/data/registry/voice-profiles/
 !/data/registry/workflows/
@@ -125,6 +126,10 @@ Thumbs.db
 # data/registry/model-profiles
 /data/registry/model-profiles/*
 !/data/registry/model-profiles/.gitkeep
+
+# data/registry/personas
+/data/registry/personas/*
+!/data/registry/personas/.gitkeep
 
 # data/registry/skills
 /data/registry/skills/*

@@ -4,7 +4,7 @@ A Markdown file with YAML frontmatter - the shape every real subagent
 config format independently converged on (Claude Code, GitHub Copilot CLI,
 Antigravity), adapted for AWF's own concepts: which adapter it routes
 through, its capability allowlist (Section 9.2), Trifecta role (Section
-12.3), and optional voice/MCP/skills/model-profile references. The Markdown body
+12.3), and optional voice/persona/MCP/skills/model-profile references. The Markdown body
 is the manifest's default instructions, layered under a workflow node's
 per-invocation `objective`, never replacing it.
 
@@ -54,6 +54,7 @@ class AgentManifest:
     mcp: tuple[str, ...] = ()
     skills: tuple[SkillRef, ...] = ()
     voice: str | None = None
+    persona: str | None = None
     model_profile: str | None = None
     instructions: str = ""
 
@@ -85,6 +86,7 @@ def parse_agent_manifest(raw: dict, instructions: str = "") -> AgentManifest:
         mcp=tuple(raw.get("mcp", [])),
         skills=tuple(_parse_skill_ref(item) for item in raw.get("skills", [])),
         voice=raw.get("voice"),
+        persona=raw.get("persona"),
         model_profile=raw.get("modelProfile"),
         instructions=instructions,
     )

@@ -5,7 +5,8 @@ from cryptography.fernet import Fernet
 
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
-from awf.gateway.client import GatewayError, complete
+from awf.cognition.envelope import PromptEnvelope, PromptSegment
+from awf.gateway.client import GatewayError, complete, complete_envelope
 from awf.registry.model_profile import (
     ModelProfileValidationError,
     load_model_profile,
@@ -94,6 +95,34 @@ def test_complete_calls_litellm_with_candidate_fields(monkeypatch, repo_root):
     assert captured["api_base"] == "http://localhost:11434"
     assert captured["max_tokens"] == 256
     assert "api_key" not in captured
+
+
+def test_complete_envelope_renders_chat_and_model_profile_bounds_max_tokens(monkeypatch, repo_root):
+    profile = load_example_profile(repo_root, "example-ollama-general")
+    envelope = PromptEnvelope(
+        segments=(
+            PromptSegment("persona", "style", True, "Persona asks for 9999 max tokens."),
+            PromptSegment("skill", "instruction", False, "Skill body."),
+            PromptSegment("user", "input", False, "ping"),
+        ),
+        generation={"max_tokens": 9999},
+    )
+    captured = {}
+
+    def fake_completion(**kwargs):
+        captured.update(kwargs)
+        return _fake_response("pong")
+
+    monkeypatch.setattr("awf.gateway.client.litellm.completion", fake_completion)
+
+    result = complete_envelope(profile, envelope)
+
+    assert result == "pong"
+    assert captured["max_tokens"] == profile.limits.max_output_tokens_per_call
+    assert captured["messages"][0]["role"] == "system"
+    assert "[persona/style]\nPersona asks for 9999 max tokens." in captured["messages"][0]["content"]
+    assert captured["messages"][-1]["role"] == "user"
+    assert "[skill/instruction, untrusted]\nSkill body." in captured["messages"][-1]["content"]
 
 
 def test_complete_ordered_fallback_tries_next_candidate(monkeypatch):

@@ -34,7 +34,7 @@ def test_reindex_covers_both_roots_and_all_kinds(tmp_path):
 
     assert counts["capabilities"] == {"config": 1, "data": 1}
     assert set(counts.keys()) == {
-        "workflows", "agents", "capabilities", "mcp", "skills", "voice-profiles", "model-profiles",
+        "workflows", "agents", "capabilities", "mcp", "skills", "voice-profiles", "model-profiles", "personas",
     }
     assert index_row(conn, "capabilities", "demo", "1.0.0") is not None
     assert index_row(conn, "capabilities", "other", "1.0.0") is not None

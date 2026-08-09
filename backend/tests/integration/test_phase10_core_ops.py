@@ -325,11 +325,25 @@ def test_registry_publish_skill_writes_data_registry_and_index(tmp_path):
 
 def test_registry_publish_voice_profile_round_trips_through_get_and_list(tmp_path):
     repo_root, conn = make_repo(tmp_path)
+    persona_dir = repo_root / "config" / "app_registry" / "personas" / "demo-persona"
+    persona_dir.mkdir(parents=True)
+    (persona_dir / "1.0.0.yaml").write_text(
+        "name: demo-persona\n"
+        "version: 1.0.0\n"
+        "display_name: Demo\n"
+        "description: x\n"
+        "locale: en\n"
+        "system: Demo system.\n"
+        "style: {max_words_default: 100, structure: Direct., do: [Do.], avoid: [Avoid.]}\n"
+        "traits: {warmth: medium, assertiveness: medium, detail: medium, humor: none}\n"
+        "examples: [{user: hi, assistant: hello}]\n"
+        "generation: {temperature: 0.5, max_tokens: 100}\n"
+    )
     source = tmp_path / "authoring" / "demo-voice.yaml"
     source.parent.mkdir(parents=True)
     source.write_text(
         "name: demo-voice\nversion: 1.0.0\n"
-        "persona: {name: Demo, description: x, style_prompt: y}\n"
+        "persona_ref: demo-persona@1.0.0\n"
         "tts:\n"
         "  candidates:\n"
         "    - {engine: kokoro, model: kokoro-v1.0, voice_id: bf_isabella, speed: 1.0, priority: 1, enabled: true}\n"
@@ -345,10 +359,39 @@ def test_registry_publish_voice_profile_round_trips_through_get_and_list(tmp_pat
     assert result["version"] == "1.0.0"
 
     fetched = op_registry_get(repo_root, conn, kind="voice-profiles", name="demo-voice", version="1.0.0")
-    assert fetched["object"]["persona"]["name"] == "Demo"
+    assert fetched["object"]["persona_ref"] == "demo-persona@1.0.0"
+    assert fetched["object"]["persona"]["name"] == "demo-persona"
 
     listed = op_registry_list(repo_root, kind="voice-profiles")
     assert {"source": "data", "kind": "voice-profiles", "name": "demo-voice", "version": "1.0.0"} in listed
+
+
+def test_registry_publish_persona_round_trips_through_get_and_list(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+    source = tmp_path / "authoring" / "demo-persona.yaml"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "name: demo-persona\n"
+        "version: 1.0.0\n"
+        "display_name: Demo\n"
+        "description: x\n"
+        "locale: en\n"
+        "system: Demo system.\n"
+        "style: {max_words_default: 100, structure: Direct., do: [Do.], avoid: [Avoid.]}\n"
+        "traits: {warmth: medium, assertiveness: medium, detail: medium, humor: none}\n"
+        "examples: [{user: hi, assistant: hello}]\n"
+        "generation: {temperature: 0.5, max_tokens: 100}\n"
+    )
+
+    result = op_registry_publish(repo_root, conn, path=source, kind="personas")
+
+    assert result["kind"] == "personas"
+    assert result["name"] == "demo-persona"
+    assert result["version"] == "1.0.0"
+    fetched = op_registry_get(repo_root, conn, kind="personas", name="demo-persona", version="1.0.0")
+    assert fetched["object"]["display_name"] == "Demo"
+    listed = op_registry_list(repo_root, kind="personas")
+    assert {"source": "data", "kind": "personas", "name": "demo-persona", "version": "1.0.0"} in listed
 
 
 def test_registry_publish_model_profile_round_trips_through_get_and_list(tmp_path):

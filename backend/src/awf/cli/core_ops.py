@@ -35,13 +35,14 @@ from awf.registry import index as registry_index
 from awf.registry.agent_manifest import load_agent_manifest
 from awf.registry.capability_record import load_capability_record, parse_capability_record
 from awf.registry.index import latest_version
-from awf.registry.kinds import AGENTS, CAPABILITIES, MCP, MODEL_PROFILES, SKILLS, VOICE_PROFILES, WORKFLOWS
+from awf.registry.kinds import AGENTS, CAPABILITIES, MCP, MODEL_PROFILES, PERSONAS, SKILLS, VOICE_PROFILES, WORKFLOWS
 from awf.registry.kinds import UnknownRegistryKindError
 from awf.registry.kinds import by_key as kind_by_key
 from awf.registry.kinds import object_path as kind_object_path
 from awf.registry.kinds import version_names
 from awf.registry.mcp_server import load_mcp_server, parse_mcp_server
 from awf.registry.model_profile import load_model_profile, parse_model_profile
+from awf.registry.persona import load_persona, parse_persona
 from awf.registry.resolve import CONFIG_ROOT, DATA_ROOT, resolve_registry_object
 from awf.registry.skill import directory_digest, load_skill
 from awf.registry.voice_profile import load_voice_profile, parse_voice_profile
@@ -431,7 +432,14 @@ _OBJECT_LOADERS = {
     SKILLS: load_skill,
     VOICE_PROFILES: load_voice_profile,
     MODEL_PROFILES: load_model_profile,
+    PERSONAS: load_persona,
 }
+
+
+def _load_registry_object(repo_root: Path, registry_kind, path: Path):
+    if registry_kind is VOICE_PROFILES:
+        return load_voice_profile(repo_root, path)
+    return _OBJECT_LOADERS[registry_kind](path)
 
 
 def op_registry_get(repo_root: Path, conn: sqlite3.Connection, *, kind: str, name: str, version: str) -> dict:
@@ -443,7 +451,7 @@ def op_registry_get(repo_root: Path, conn: sqlite3.Connection, *, kind: str, nam
     indexed = registry_index.index_row(conn, kind, name, version)
     digest = indexed["digest"] if indexed else registry_index.compute_digest(path, registry_kind)
     trust_status = indexed["trust_status"] if indexed else None
-    obj = dataclasses.asdict(_OBJECT_LOADERS[registry_kind](path))
+    obj = dataclasses.asdict(_load_registry_object(repo_root, registry_kind, path))
 
     return {
         "kind": kind, "name": name, "version": version, "source": source,
@@ -521,6 +529,9 @@ def op_registry_validate(path: Path, *, kind: str | None = None) -> dict:
     if registry_kind is MODEL_PROFILES:
         profile = parse_model_profile(raw)
         return {"kind": "ModelProfile", "ref": profile.ref, "valid": True}
+    if registry_kind is PERSONAS:
+        persona = parse_persona(raw)
+        return {"kind": "Persona", "ref": persona.ref, "valid": True}
     if registry_kind is VOICE_PROFILES:
         profile = parse_voice_profile(raw)
         return {"kind": "VoiceProfile", "ref": profile.ref, "valid": True}
@@ -573,8 +584,17 @@ def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path
         elif registry_kind is MODEL_PROFILES:
             profile = parse_model_profile(raw)
             name, version = profile.name, profile.version
+        elif registry_kind is PERSONAS:
+            persona = parse_persona(raw)
+            name, version = persona.name, persona.version
         elif registry_kind is VOICE_PROFILES:
             profile = parse_voice_profile(raw)
+            persona_name, sep, persona_version = profile.persona_ref.partition("@")
+            if not sep or not persona_name or not persona_version:
+                raise CoreOpError(
+                    f"{path}: voice profile persona_ref must be '<name>@<version>', got {profile.persona_ref!r}"
+                )
+            resolve_registry_object(repo_root, "personas", persona_name, persona_version, conn=conn)
             name, version = profile.name, profile.version
         else:
             raise CoreOpError(f"{path}: registry publish does not support kind '{kind}'")

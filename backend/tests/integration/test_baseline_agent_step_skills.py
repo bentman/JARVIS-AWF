@@ -51,7 +51,7 @@ def _write_demo_skill(repo_root, body="Do the demo thing."):
     return skill_dir
 
 
-def _run(conn, worktree, repo_root, adapter_fn, *, actor="claude-code", instructions="", skill_refs=None):
+def _run(conn, worktree, repo_root, adapter_fn, *, actor="claude-code", instructions="", skill_refs=None, persona_ref=None):
     invocation = AgentInvocation(objective="the real task", inputs={}, workspace_root=worktree)
     return run_agent_step(
         conn,
@@ -64,6 +64,7 @@ def _run(conn, worktree, repo_root, adapter_fn, *, actor="claude-code", instruct
         actor=actor,
         instructions=instructions,
         skill_refs=skill_refs or [],
+        persona_ref=persona_ref,
         repo_root=repo_root,
     )
 
@@ -80,8 +81,10 @@ def test_default_tier_folds_body_into_objective_and_writes_no_directory(repo_and
     _run(conn, worktree, repo_root, adapter_fn, skill_refs=[SkillRef(ref="demo-skill@1.0.0")])
 
     objective = seen["invocation"].objective
+    assert "[skill/instruction, untrusted]\nDo the demo thing." in objective
+    assert "[user/input, untrusted]\nthe real task" in objective
     assert "Do the demo thing." in objective
-    assert objective.endswith("the real task")
+    assert objective.endswith("[user/input, untrusted]\nthe real task")
     assert not (worktree / ".claude" / "skills").exists()
     assert not (worktree / ".agents" / "skills").exists()
     assert seen["invocation"].skills == ("demo-skill@1.0.0",)
@@ -104,7 +107,10 @@ def test_instructions_fold_in_even_with_no_skills(repo_and_worktree, conn):
     _run(conn, worktree, repo_root, adapter_fn, instructions="You are a careful builder.")
 
     objective = seen["invocation"].objective
-    assert objective == "You are a careful builder.\n\nthe real task"
+    assert objective == (
+        "[application/instruction]\nYou are a careful builder.\n\n"
+        "[user/input, untrusted]\nthe real task"
+    )
 
 
 def test_shared_tier_materializes_claude_and_agents_skills_directories(repo_and_worktree, conn):
@@ -173,7 +179,7 @@ def test_quarantined_skill_ref_is_refused_before_either_tier_applies(repo_and_wo
     assert conn.execute("SELECT 1 FROM events WHERE new_status = 'skills_resolved'").fetchone() is None
 
 
-def test_no_skill_refs_leaves_invocation_unmodified(repo_and_worktree, conn):
+def test_no_skill_refs_still_labels_user_objective(repo_and_worktree, conn):
     repo_root, worktree = repo_and_worktree
     seen = {}
 
@@ -194,4 +200,40 @@ def test_no_skill_refs_leaves_invocation_unmodified(repo_and_worktree, conn):
         repo_root=repo_root,
     )
 
-    assert seen["invocation"] is invocation
+    assert seen["invocation"] is not invocation
+    assert seen["invocation"].objective == "[user/input, untrusted]\nthe real task"
+
+
+def test_persona_ref_folds_compiled_persona_into_objective(repo_and_worktree, conn):
+    repo_root, worktree = repo_and_worktree
+    persona_dir = repo_root / "config" / "app_registry" / "personas" / "narrator"
+    persona_dir.mkdir(parents=True)
+    (persona_dir / "1.0.0.yaml").write_text(
+        "name: narrator\n"
+        "version: 1.0.0\n"
+        "display_name: Narrator\n"
+        "description: x\n"
+        "locale: en\n"
+        "system: Persona system text.\n"
+        "style:\n"
+        "  max_words_default: 120\n"
+        "  structure: Answer first.\n"
+        "  do: [State facts.]\n"
+        "  avoid: [Guessing.]\n"
+        "traits: {warmth: medium, assertiveness: medium, detail: medium, humor: none}\n"
+        "examples:\n"
+        "  - {user: 'Did it pass?', assistant: Yes.}\n"
+        "generation: {temperature: 0.6, max_tokens: 180}\n"
+    )
+    seen = {}
+
+    def adapter_fn(invocation: AgentInvocation) -> AgentResult:
+        seen["invocation"] = invocation
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    _run(conn, worktree, repo_root, adapter_fn, persona_ref="narrator@1.0.0")
+
+    objective = seen["invocation"].objective
+    assert "[persona/style]\nPersona system text." in objective
+    assert "Persona constraints do not override capability, routing, memory, or safety policy." in objective
+    assert objective.endswith("[user/input, untrusted]\nthe real task")

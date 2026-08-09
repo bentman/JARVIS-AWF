@@ -51,11 +51,17 @@ def test_parse_accepts_valid_role_and_capabilities():
     assert manifest.capabilities == ("read_file@1.0.0", "git_push@1.0.0")
 
 
-def test_parse_captures_optional_voice_mcp_and_model_profile():
+def test_parse_captures_optional_voice_persona_mcp_and_model_profile():
     manifest = parse_agent_manifest(
-        minimal_raw(voice="builder@1.0.0", mcp=["some-server@1.0.0"], modelProfile="example-openai-adversary@1.0.0")
+        minimal_raw(
+            voice="builder@1.0.0",
+            persona="builder@1.0.0",
+            mcp=["some-server@1.0.0"],
+            modelProfile="example-openai-adversary@1.0.0",
+        )
     )
     assert manifest.voice == "builder@1.0.0"
+    assert manifest.persona == "builder@1.0.0"
     assert manifest.mcp == ("some-server@1.0.0",)
     assert manifest.model_profile == "example-openai-adversary@1.0.0"
 
@@ -97,4 +103,5 @@ def test_load_real_shipped_default_manifest(name, expected_adapter, expected_rol
     assert manifest.adapter == expected_adapter
     assert manifest.role == expected_role
     assert manifest.voice == f"{name}@1.0.0"
+    assert manifest.persona == f"{name}@1.0.0"
     assert manifest.instructions

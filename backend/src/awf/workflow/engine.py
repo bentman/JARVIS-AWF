@@ -151,6 +151,7 @@ def make_agent_node_executor(
             instructions=manifest.instructions if manifest else "",
             mcp_refs=list(manifest.mcp) if manifest and manifest.mcp else [],
             skill_refs=list(manifest.skills) if manifest and manifest.skills else [],
+            persona_ref=manifest.persona if manifest else None,
             model_profile_ref=manifest.model_profile if manifest else None,
             repo_root=repo_root,
         )

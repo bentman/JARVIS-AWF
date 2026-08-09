@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.js";
 import type { ApprovalSummary, RunSummary } from "./Dashboard.js";
+import type { MemorySearchResult } from "./MemoryPanel.js";
 import type { ProposalSummary } from "./ProposalReview.js";
 
 interface VoiceRoundTripResult {
@@ -25,6 +26,12 @@ declare global {
       proposalGet: (proposalId: string) => Promise<ProposalSummary>;
       proposalPublish: (proposalId: string, digest: string) => Promise<unknown>;
       proposalReject: (proposalId: string, reason?: string) => Promise<unknown>;
+      memorySearch: (query: string, profile?: string) => Promise<MemorySearchResult>;
+      memoryGet: (ref: string) => Promise<unknown>;
+      memoryPropose: (path: string, summary?: string) => Promise<unknown>;
+      memoryPublish: (proposalId: string, digest: string) => Promise<unknown>;
+      memoryReject: (proposalId: string, reason?: string) => Promise<unknown>;
+      memoryBlock: (ref: string) => Promise<unknown>;
       voiceRoundTrip: (
         wakeAudioPath: string,
         commandAudioPath: string,
@@ -49,6 +56,10 @@ if (container) {
       onProposalGet: (proposalId: string) => window.awf.proposalGet(proposalId),
       onProposalPublish: (proposalId: string, digest: string) => window.awf.proposalPublish(proposalId, digest),
       onProposalReject: (proposalId: string, reason?: string) => window.awf.proposalReject(proposalId, reason),
+      onMemorySearch: (query: string) => window.awf.memorySearch(query),
+      onMemoryBlock: (ref: string) => window.awf.memoryBlock(ref),
+      onMemoryPublish: (proposalId: string, digest: string) => window.awf.memoryPublish(proposalId, digest),
+      onMemoryReject: (proposalId: string, reason?: string) => window.awf.memoryReject(proposalId, reason),
     }),
   );
 }

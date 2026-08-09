@@ -23,6 +23,18 @@ export type MethodName =
   | "awf/proposal.update"
   | "awf/proposal.publish"
   | "awf/proposal.reject"
+  | "awf/memory.search"
+  | "awf/memory.get"
+  | "awf/memory.propose"
+  | "awf/memory.publish"
+  | "awf/memory.reject"
+  | "awf/memory.block"
+  | "awf/session.start"
+  | "awf/session.append"
+  | "awf/session.show"
+  | "awf/session.summarize"
+  | "awf/episodic.search"
+  | "awf/episodic.timeline"
   | "awf/secret.set"
   | "awf/secret.listNames"
   | "awf/events.subscribe";
@@ -113,7 +125,7 @@ export interface RegistryEntry {
 
 export interface Proposal {
   proposal_id: string;
-  kind: "workflows";
+  kind: "workflows" | "semantic-memories";
   name: string;
   version: string;
   status: "draft" | "published" | "rejected";
@@ -127,6 +139,52 @@ export interface Proposal {
   rejection_reason: string | null;
   content: string;
   events: Record<string, unknown>[];
+}
+
+export interface SemanticMemorySearchHit {
+  kind: "semantic-memories";
+  name: string;
+  version: string;
+  ref: string;
+  source: "config" | "data";
+  digest: string | null;
+  trust_status: string | null;
+  score: number;
+  confidence: number;
+  object: Record<string, unknown>;
+}
+
+export interface EpisodicSearchHit {
+  source: "events";
+  score: number;
+  event_id: string;
+  run_id: string;
+  step_id: string | null;
+  event_type: string;
+  actor: string;
+  reason_code: string;
+  payload_json: string | null;
+  workflow_ref: string;
+  node_id: string | null;
+  created_at: string;
+}
+
+export interface MemorySearchResult {
+  query: string;
+  profile_ref: string;
+  semantic: SemanticMemorySearchHit[];
+  episodic: EpisodicSearchHit[];
+  context: Record<string, unknown>;
+}
+
+export interface ActiveSession {
+  session_id: string;
+  title: string | null;
+  status: "active" | "summarized" | "expired";
+  created_at: string;
+  updated_at: string;
+  expires_at: string | null;
+  entries?: Record<string, unknown>[];
 }
 
 export class ProtocolError extends Error {

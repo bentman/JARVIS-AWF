@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-09 09:36
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0020 memory beyond workflows with registry-backed memory profiles, semantic memories, active sessions, episodic search, memory proposal actions, JSON-RPC/CLI methods, and frontend memory controls.
+  - Scope: `backend/src/awf/memory/*`, memory registry schemas/loaders/kinds, SQLite bootstrap/schema, CLI/core ops/stdio methods, frontend shared/CLI/GUI memory surfaces, focused tests, and ADR-0020.
+  - Validation: memory-focused backend tests -> 42 passed; frontend shared tests -> 9 passed; frontend CLI tests -> 36 passed; frontend GUI tests -> 32 passed; `npm --prefix frontend run build` passed; `backend/.venv/bin/python -m ruff check backend/src/awf backend/tests` passed; `git diff --check` passed.
+  - Notes: deterministic lexical retrieval only; no embedding/vector-store path or live LLM validation. Frontend commands passed in the current shell with Node v22.19.0; the repo policy remains Node >=26.
+
 - Timestamp: 2026-08-09 09:04
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Implemented ADR-0019 workflow authorship as a digest-bound proposal pipeline backed by structured resident-mind output, durable proposal storage, CLI/JSON-RPC methods, and frontend proposal review controls.

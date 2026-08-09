@@ -135,3 +135,32 @@ def test_proposal_get_over_jsonrpc(tmp_path):
 
     assert response["result"]["proposal_id"] == "p1"
     assert response["result"]["content"] == "apiVersion: awf/v1\n"
+
+
+def test_memory_search_over_jsonrpc(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+    profile = repo_root / "config" / "app_registry" / "memory-profiles" / "default" / "1.0.0.yaml"
+    profile.parent.mkdir(parents=True)
+    profile.write_text(
+        """
+apiVersion: awf/v1
+kind: MemoryProfile
+metadata: {name: default, version: 1.0.0, digest: sha256:test}
+spec:
+  enabled: true
+  maximum_data_class: internal
+  retrieval: {maxItems: 10, maxTokens: 2000, includeEpisodic: true, includeSemantic: true, minConfidence: 0.0}
+  retention: {activeSessionTtlHours: 24, requireExplicitSemanticPublish: true}
+  embedding: {enabled: false, modelProfileRef: null, version: none}
+""",
+        encoding="utf-8",
+    )
+
+    response = send(
+        repo_root,
+        conn,
+        {"jsonrpc": "2.0", "id": 8, "method": "awf/memory.search", "params": {"query": "targeted"}},
+    )
+
+    assert response["id"] == 8
+    assert response["result"]["semantic"] == []

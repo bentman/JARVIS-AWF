@@ -112,4 +112,24 @@ describe("ProtocolClient", () => {
     void client.proposalReject("p1", "not useful");
     expect(transport.lastRequest().params).toEqual({ proposalId: "p1", reason: "not useful" });
   });
+
+  it("builds correct params for memory, session, and episodic methods", () => {
+    const { transport, client } = setup();
+
+    void client.memorySearch("targeted tests");
+    expect(transport.lastRequest().method).toBe("awf/memory.search");
+    expect(transport.lastRequest().params).toEqual({ query: "targeted tests", profile: "default@1.0.0" });
+
+    void client.memoryGet("pref@1.0.0");
+    expect(transport.lastRequest().params).toEqual({ ref: "pref@1.0.0" });
+
+    void client.memoryPublish("p1", "abc");
+    expect(transport.lastRequest().params).toEqual({ proposalId: "p1", digest: "abc" });
+
+    void client.sessionStart("demo");
+    expect(transport.lastRequest().params).toEqual({ title: "demo", expiresAt: undefined });
+
+    void client.episodicTimeline("run-1");
+    expect(transport.lastRequest().params).toEqual({ runId: "run-1" });
+  });
 });

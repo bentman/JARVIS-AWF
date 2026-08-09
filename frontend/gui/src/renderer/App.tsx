@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ApprovalConfirmation } from "./ApprovalConfirmation.js";
 import { Dashboard, type ApprovalSummary, type RunSummary } from "./Dashboard.js";
+import { MemoryPanel, type MemorySearchResult } from "./MemoryPanel.js";
 import { ProposalReview, type ProposalSummary } from "./ProposalReview.js";
 import { Transcript, type TranscriptEntry } from "./Transcript.js";
 import { VoiceActivation } from "./VoiceActivation.js";
@@ -31,6 +32,10 @@ export interface AppProps {
   onProposalGet?: (proposalId: string) => Promise<ProposalSummary>;
   onProposalPublish?: (proposalId: string, digest: string) => Promise<unknown>;
   onProposalReject?: (proposalId: string, reason?: string) => Promise<unknown>;
+  onMemorySearch?: (query: string) => Promise<MemorySearchResult>;
+  onMemoryBlock?: (ref: string) => Promise<unknown>;
+  onMemoryPublish?: (proposalId: string, digest: string) => Promise<unknown>;
+  onMemoryReject?: (proposalId: string, reason?: string) => Promise<unknown>;
 }
 
 // An approval whose node never declared `riskClass` (Section 12.2) has no
@@ -57,6 +62,10 @@ export function App({
   onProposalGet,
   onProposalPublish,
   onProposalReject,
+  onMemorySearch,
+  onMemoryBlock,
+  onMemoryPublish,
+  onMemoryReject,
 }: AppProps): React.JSX.Element {
   const [entries, setEntries] = useState<TranscriptEntry[]>(initialTranscript);
   const nextId = useRef(initialTranscript.length);
@@ -119,6 +128,14 @@ export function App({
           onProposalGet={onProposalGet}
           onProposalPublish={onProposalPublish}
           onProposalReject={onProposalReject}
+        />
+      )}
+      {onMemorySearch && onMemoryBlock && onMemoryPublish && onMemoryReject && (
+        <MemoryPanel
+          onMemorySearch={onMemorySearch}
+          onMemoryBlock={onMemoryBlock}
+          onMemoryPublish={onMemoryPublish}
+          onMemoryReject={onMemoryReject}
         />
       )}
       <Transcript entries={entries} />

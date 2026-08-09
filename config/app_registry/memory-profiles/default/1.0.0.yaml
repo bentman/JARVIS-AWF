@@ -1,0 +1,22 @@
+apiVersion: awf/v1
+kind: MemoryProfile
+metadata:
+  name: default
+  version: 1.0.0
+  digest: sha256:default
+spec:
+  enabled: true
+  maximum_data_class: internal
+  retrieval:
+    maxItems: 8
+    maxTokens: 1600
+    includeEpisodic: true
+    includeSemantic: true
+    minConfidence: 0.6
+  retention:
+    activeSessionTtlHours: 72
+    requireExplicitSemanticPublish: true
+  embedding:
+    enabled: false
+    modelProfileRef: null
+    version: none

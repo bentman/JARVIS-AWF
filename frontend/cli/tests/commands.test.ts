@@ -19,6 +19,16 @@ function makeFakeClient(overrides: Partial<CommandClient> = {}): CommandClient {
     proposalUpdate: vi.fn().mockResolvedValue({ proposal_id: "p1", status: "draft" }),
     proposalPublish: vi.fn().mockResolvedValue({ proposal: { proposal_id: "p1", status: "published" } }),
     proposalReject: vi.fn().mockResolvedValue({ proposal_id: "p1", status: "rejected" }),
+    memorySearch: vi.fn().mockResolvedValue({ semantic: [], episodic: [] }),
+    memoryGet: vi.fn().mockResolvedValue({ ref: "pref@1.0.0" }),
+    memoryPropose: vi.fn().mockResolvedValue({ proposal_id: "p1", status: "draft" }),
+    memoryPublish: vi.fn().mockResolvedValue({ proposal: { proposal_id: "p1", status: "published" } }),
+    memoryReject: vi.fn().mockResolvedValue({ proposal_id: "p1", status: "rejected" }),
+    memoryBlock: vi.fn().mockResolvedValue({ ref: "pref@1.0.0", trust_status: "blocked" }),
+    sessionStart: vi.fn().mockResolvedValue({ session_id: "s1" }),
+    sessionShow: vi.fn().mockResolvedValue({ session_id: "s1", entries: [] }),
+    episodicSearch: vi.fn().mockResolvedValue([]),
+    episodicTimeline: vi.fn().mockResolvedValue({ run: { run_id: "run-1" } }),
     ...overrides,
   } as CommandClient;
 }
@@ -132,6 +142,40 @@ describe("dispatchCommand", () => {
     const client = makeFakeClient();
     await dispatchCommand(client, "/proposal-reject p1 not useful", DEFAULT_SETTINGS);
     expect(client.proposalReject).toHaveBeenCalledWith("p1", "not useful");
+  });
+
+  it("dispatches memory, session, and episodic commands", async () => {
+    const client = makeFakeClient();
+
+    await dispatchCommand(client, "/memory-search targeted tests", DEFAULT_SETTINGS);
+    expect(client.memorySearch).toHaveBeenCalledWith("targeted tests");
+
+    await dispatchCommand(client, "/memory pref@1.0.0", DEFAULT_SETTINGS);
+    expect(client.memoryGet).toHaveBeenCalledWith("pref@1.0.0");
+
+    await dispatchCommand(client, "/memory-propose /tmp/memory.yaml", DEFAULT_SETTINGS);
+    expect(client.memoryPropose).toHaveBeenCalledWith("/tmp/memory.yaml");
+
+    await dispatchCommand(client, "/memory-publish p1 abc", DEFAULT_SETTINGS);
+    expect(client.memoryPublish).toHaveBeenCalledWith("p1", "abc");
+
+    await dispatchCommand(client, "/memory-reject p1 not useful", DEFAULT_SETTINGS);
+    expect(client.memoryReject).toHaveBeenCalledWith("p1", "not useful");
+
+    await dispatchCommand(client, "/memory-block pref@1.0.0", DEFAULT_SETTINGS);
+    expect(client.memoryBlock).toHaveBeenCalledWith("pref@1.0.0");
+
+    await dispatchCommand(client, "/session-start demo session", DEFAULT_SETTINGS);
+    expect(client.sessionStart).toHaveBeenCalledWith("demo session");
+
+    await dispatchCommand(client, "/session-show s1", DEFAULT_SETTINGS);
+    expect(client.sessionShow).toHaveBeenCalledWith("s1");
+
+    await dispatchCommand(client, "/episodic-search targeted", DEFAULT_SETTINGS);
+    expect(client.episodicSearch).toHaveBeenCalledWith("targeted");
+
+    await dispatchCommand(client, "/episodic run-1", DEFAULT_SETTINGS);
+    expect(client.episodicTimeline).toHaveBeenCalledWith("run-1");
   });
 
   it("/settings, /theme, /keybindings never touch the protocol client", async () => {

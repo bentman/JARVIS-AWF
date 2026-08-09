@@ -21,6 +21,16 @@ export type CommandClient = Pick<
   | "proposalUpdate"
   | "proposalPublish"
   | "proposalReject"
+  | "memorySearch"
+  | "memoryGet"
+  | "memoryPropose"
+  | "memoryPublish"
+  | "memoryReject"
+  | "memoryBlock"
+  | "sessionStart"
+  | "sessionShow"
+  | "episodicSearch"
+  | "episodicTimeline"
 >;
 
 export type CommandResult =
@@ -45,6 +55,16 @@ export const HELP_TEXT = `
 /proposal <id>                        Show a Workflow proposal
 /proposal-publish <id> <digest>       Publish a draft proposal
 /proposal-reject <id> <reason>        Reject a draft proposal
+/memory-search <query>                Search semantic and episodic memory
+/memory <name>@<version>              Show a Semantic Memory
+/memory-propose <path>                Draft a Semantic Memory proposal
+/memory-publish <id> <digest>         Publish a Semantic Memory proposal
+/memory-reject <id> <reason>          Reject a Semantic Memory proposal
+/memory-block <name>@<version>        Block a Semantic Memory
+/session-start [title]                Start an active session
+/session-show <session-id>            Show an active session
+/episodic-search <query>              Search event history
+/episodic <run-id>                    Show a Run timeline
 /agents                               Registered Agent Manifests
 /skills                               Registry Skills
 /workflows                            Registry Workflow definitions
@@ -129,6 +149,46 @@ export async function dispatchCommand(
     if (!args[0] || args.length < 2) throw new CommandError("usage: /proposal-reject <proposal-id> <reason>");
     const [id, ...reasonParts] = args;
     return { kind: "json", data: await client.proposalReject(id, reasonParts.join(" ")) };
+  }
+  if (name === "memory-search") {
+    if (args.length < 1) throw new CommandError("usage: /memory-search <query>");
+    return { kind: "json", data: await client.memorySearch(args.join(" ")) };
+  }
+  if (name === "memory") {
+    if (!args[0]) throw new CommandError("usage: /memory <name>@<version>");
+    return { kind: "json", data: await client.memoryGet(args[0]) };
+  }
+  if (name === "memory-propose") {
+    if (!args[0]) throw new CommandError("usage: /memory-propose <path>");
+    return { kind: "json", data: await client.memoryPropose(args[0]) };
+  }
+  if (name === "memory-publish") {
+    if (!args[0] || !args[1]) throw new CommandError("usage: /memory-publish <proposal-id> <digest>");
+    return { kind: "json", data: await client.memoryPublish(args[0], args[1]) };
+  }
+  if (name === "memory-reject") {
+    if (!args[0] || args.length < 2) throw new CommandError("usage: /memory-reject <proposal-id> <reason>");
+    const [id, ...reasonParts] = args;
+    return { kind: "json", data: await client.memoryReject(id, reasonParts.join(" ")) };
+  }
+  if (name === "memory-block") {
+    if (!args[0]) throw new CommandError("usage: /memory-block <name>@<version>");
+    return { kind: "json", data: await client.memoryBlock(args[0]) };
+  }
+  if (name === "session-start") {
+    return { kind: "json", data: await client.sessionStart(args.join(" ") || undefined) };
+  }
+  if (name === "session-show") {
+    if (!args[0]) throw new CommandError("usage: /session-show <session-id>");
+    return { kind: "json", data: await client.sessionShow(args[0]) };
+  }
+  if (name === "episodic-search") {
+    if (args.length < 1) throw new CommandError("usage: /episodic-search <query>");
+    return { kind: "json", data: await client.episodicSearch(args.join(" ")) };
+  }
+  if (name === "episodic") {
+    if (!args[0]) throw new CommandError("usage: /episodic <run-id>");
+    return { kind: "json", data: await client.episodicTimeline(args[0]) };
   }
   if (name === "secrets") return { kind: "json", data: await client.secretListNames() };
 

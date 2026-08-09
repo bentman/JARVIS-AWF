@@ -127,6 +127,67 @@ def cmd_proposal_reject(args: argparse.Namespace, repo_root: Path, conn) -> int:
     return 0
 
 
+def cmd_memory_search(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_memory_search(repo_root, conn, query=args.query, profile_ref=args.profile))
+    return 0
+
+
+def cmd_memory_get(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_memory_get(repo_root, conn, ref=args.ref))
+    return 0
+
+
+def cmd_memory_propose(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_memory_propose(repo_root, conn, path=Path(args.file), summary=args.summary))
+    return 0
+
+
+def cmd_memory_publish(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_memory_publish(repo_root, conn, proposal_id=args.proposal_id, digest=args.digest))
+    return 0
+
+
+def cmd_memory_reject(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_memory_reject(repo_root, conn, proposal_id=args.proposal_id, reason=args.reason))
+    return 0
+
+
+def cmd_memory_block(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_memory_block(conn, ref=args.ref))
+    return 0
+
+
+def cmd_session_start(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_session_start(conn, title=args.title, expires_at=args.expires_at))
+    return 0
+
+
+def cmd_session_append(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    content = json.loads(Path(args.json).read_text(encoding="utf-8"))
+    _print(ops.op_session_append(conn, session_id=args.session_id, role=args.role, content=content, summary=args.summary))
+    return 0
+
+
+def cmd_session_show(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_session_show(conn, session_id=args.session_id))
+    return 0
+
+
+def cmd_session_summarize(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_session_summarize(conn, session_id=args.session_id, summary=args.summary))
+    return 0
+
+
+def cmd_episodic_search(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_episodic_search(conn, query=args.query, run_id=args.run_id))
+    return 0
+
+
+def cmd_episodic_timeline(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_episodic_timeline(conn, run_id=args.run_id))
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace, repo_root: Path, conn) -> int:
     conn.close()  # the server owns its own connection lifecycle
     from awf.server.stdio import serve_stdio
@@ -251,6 +312,61 @@ def build_parser() -> argparse.ArgumentParser:
     proposal_reject_parser.add_argument("proposal_id")
     proposal_reject_parser.add_argument("--reason", required=False, default=None)
     proposal_reject_parser.set_defaults(func=cmd_proposal_reject)
+
+    memory_parser = sub.add_parser("memory")
+    memory_sub = memory_parser.add_subparsers(dest="memory_command", required=True)
+    memory_search_parser = memory_sub.add_parser("search")
+    memory_search_parser.add_argument("query")
+    memory_search_parser.add_argument("--profile", required=False, default="default@1.0.0")
+    memory_search_parser.set_defaults(func=cmd_memory_search)
+    memory_get_parser = memory_sub.add_parser("get")
+    memory_get_parser.add_argument("ref")
+    memory_get_parser.set_defaults(func=cmd_memory_get)
+    memory_propose_parser = memory_sub.add_parser("propose")
+    memory_propose_parser.add_argument("--file", required=True)
+    memory_propose_parser.add_argument("--summary", required=False, default=None)
+    memory_propose_parser.set_defaults(func=cmd_memory_propose)
+    memory_publish_parser = memory_sub.add_parser("publish")
+    memory_publish_parser.add_argument("proposal_id")
+    memory_publish_parser.add_argument("--digest", required=True)
+    memory_publish_parser.set_defaults(func=cmd_memory_publish)
+    memory_reject_parser = memory_sub.add_parser("reject")
+    memory_reject_parser.add_argument("proposal_id")
+    memory_reject_parser.add_argument("--reason", required=False, default=None)
+    memory_reject_parser.set_defaults(func=cmd_memory_reject)
+    memory_block_parser = memory_sub.add_parser("block")
+    memory_block_parser.add_argument("ref")
+    memory_block_parser.set_defaults(func=cmd_memory_block)
+
+    session_parser = sub.add_parser("session")
+    session_sub = session_parser.add_subparsers(dest="session_command", required=True)
+    session_start_parser = session_sub.add_parser("start")
+    session_start_parser.add_argument("--title", required=False, default=None)
+    session_start_parser.add_argument("--expires-at", required=False, default=None)
+    session_start_parser.set_defaults(func=cmd_session_start)
+    session_append_parser = session_sub.add_parser("append")
+    session_append_parser.add_argument("session_id")
+    session_append_parser.add_argument("--role", required=True)
+    session_append_parser.add_argument("--json", required=True)
+    session_append_parser.add_argument("--summary", required=False, default=None)
+    session_append_parser.set_defaults(func=cmd_session_append)
+    session_show_parser = session_sub.add_parser("show")
+    session_show_parser.add_argument("session_id")
+    session_show_parser.set_defaults(func=cmd_session_show)
+    session_summarize_parser = session_sub.add_parser("summarize")
+    session_summarize_parser.add_argument("session_id")
+    session_summarize_parser.add_argument("--summary", required=False, default=None)
+    session_summarize_parser.set_defaults(func=cmd_session_summarize)
+
+    episodic_parser = sub.add_parser("episodic")
+    episodic_sub = episodic_parser.add_subparsers(dest="episodic_command", required=True)
+    episodic_search_parser = episodic_sub.add_parser("search")
+    episodic_search_parser.add_argument("query")
+    episodic_search_parser.add_argument("--run-id", required=False, default=None)
+    episodic_search_parser.set_defaults(func=cmd_episodic_search)
+    episodic_timeline_parser = episodic_sub.add_parser("timeline")
+    episodic_timeline_parser.add_argument("run_id")
+    episodic_timeline_parser.set_defaults(func=cmd_episodic_timeline)
 
     llm_parser = sub.add_parser("llm")
     llm_sub = llm_parser.add_subparsers(dest="llm_command", required=True)

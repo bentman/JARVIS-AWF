@@ -19,6 +19,14 @@ contextBridge.exposeInMainWorld("awf", {
     ipcRenderer.invoke(CHANNELS.proposalPublish, proposalId, digest),
   proposalReject: (proposalId: string, reason?: string) =>
     ipcRenderer.invoke(CHANNELS.proposalReject, proposalId, reason),
+  memorySearch: (query: string, profile?: string) => ipcRenderer.invoke(CHANNELS.memorySearch, query, profile),
+  memoryGet: (ref: string) => ipcRenderer.invoke(CHANNELS.memoryGet, ref),
+  memoryPropose: (path: string, summary?: string) => ipcRenderer.invoke(CHANNELS.memoryPropose, path, summary),
+  memoryPublish: (proposalId: string, digest: string) =>
+    ipcRenderer.invoke(CHANNELS.memoryPublish, proposalId, digest),
+  memoryReject: (proposalId: string, reason?: string) =>
+    ipcRenderer.invoke(CHANNELS.memoryReject, proposalId, reason),
+  memoryBlock: (ref: string) => ipcRenderer.invoke(CHANNELS.memoryBlock, ref),
   voiceRoundTrip: (
     wakeAudioPath: string,
     commandAudioPath: string,

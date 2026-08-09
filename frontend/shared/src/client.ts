@@ -4,6 +4,7 @@ import {
   type Approval,
   type Artifact,
   type JsonRpcResponse,
+  type MemorySearchResult,
   type MethodName,
   type Proposal,
   type RegistryEntry,
@@ -142,6 +143,59 @@ export class ProtocolClient {
 
   proposalReject(proposalId: string, reason?: string): Promise<Proposal> {
     return this.call("awf/proposal.reject", { proposalId, reason });
+  }
+
+  memorySearch(query: string, profile = "default@1.0.0"): Promise<MemorySearchResult> {
+    return this.call("awf/memory.search", { query, profile });
+  }
+
+  memoryGet(ref: string): Promise<Record<string, unknown>> {
+    return this.call("awf/memory.get", { ref });
+  }
+
+  memoryPropose(path: string, summary?: string): Promise<Proposal> {
+    return this.call("awf/memory.propose", { path, summary });
+  }
+
+  memoryPublish(proposalId: string, digest: string): Promise<Record<string, unknown>> {
+    return this.call("awf/memory.publish", { proposalId, digest });
+  }
+
+  memoryReject(proposalId: string, reason?: string): Promise<Proposal> {
+    return this.call("awf/memory.reject", { proposalId, reason });
+  }
+
+  memoryBlock(ref: string): Promise<Record<string, unknown>> {
+    return this.call("awf/memory.block", { ref });
+  }
+
+  sessionStart(title?: string, expiresAt?: string): Promise<Record<string, unknown>> {
+    return this.call("awf/session.start", { title, expiresAt });
+  }
+
+  sessionAppend(
+    sessionId: string,
+    role: string,
+    content: Record<string, unknown>,
+    summary?: string,
+  ): Promise<Record<string, unknown>> {
+    return this.call("awf/session.append", { sessionId, role, content, summary });
+  }
+
+  sessionShow(sessionId: string): Promise<Record<string, unknown>> {
+    return this.call("awf/session.show", { sessionId });
+  }
+
+  sessionSummarize(sessionId: string, summary?: string): Promise<Record<string, unknown>> {
+    return this.call("awf/session.summarize", { sessionId, summary });
+  }
+
+  episodicSearch(query: string, runId?: string): Promise<Record<string, unknown>[]> {
+    return this.call("awf/episodic.search", { query, runId });
+  }
+
+  episodicTimeline(runId: string): Promise<Record<string, unknown>> {
+    return this.call("awf/episodic.timeline", { runId });
   }
 
   secretSet(name: string, value: string): Promise<Record<string, unknown>> {

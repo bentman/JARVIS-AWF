@@ -39,8 +39,10 @@ from awf.registry.kinds import (
     AGENTS,
     CAPABILITIES,
     MCP,
+    MEMORY_PROFILES,
     MODEL_PROFILES,
     PERSONAS,
+    SEMANTIC_MEMORIES,
     SKILLS,
     VOICE_PROFILES,
     WORKFLOWS,
@@ -50,9 +52,11 @@ from awf.registry.kinds import (
 from awf.registry.kinds import by_key as kind_by_key
 from awf.registry.kinds import object_path as kind_object_path
 from awf.registry.mcp_server import load_mcp_server, parse_mcp_server
+from awf.registry.memory_profile import load_memory_profile, parse_memory_profile
 from awf.registry.model_profile import load_model_profile, parse_model_profile
 from awf.registry.persona import load_persona, parse_persona
 from awf.registry.resolve import CONFIG_ROOT, DATA_ROOT, resolve_registry_object
+from awf.registry.semantic_memory import load_semantic_memory, parse_semantic_memory
 from awf.registry.skill import directory_digest, load_skill
 from awf.registry.voice_profile import load_voice_profile, parse_voice_profile
 from awf.secrets.store import list_secret_names, set_secret
@@ -462,6 +466,8 @@ _OBJECT_LOADERS = {
     VOICE_PROFILES: load_voice_profile,
     MODEL_PROFILES: load_model_profile,
     PERSONAS: load_persona,
+    MEMORY_PROFILES: load_memory_profile,
+    SEMANTIC_MEMORIES: load_semantic_memory,
 }
 
 
@@ -566,6 +572,12 @@ def op_registry_validate(path: Path, *, kind: str | None = None) -> dict:
     if registry_kind is PERSONAS:
         persona = parse_persona(raw)
         return {"kind": "Persona", "ref": persona.ref, "valid": True}
+    if registry_kind is MEMORY_PROFILES:
+        profile = parse_memory_profile(raw)
+        return {"kind": "MemoryProfile", "ref": profile.ref, "valid": True}
+    if registry_kind is SEMANTIC_MEMORIES:
+        memory = parse_semantic_memory(raw)
+        return {"kind": "SemanticMemory", "ref": memory.ref, "valid": True}
     if registry_kind is VOICE_PROFILES:
         profile = parse_voice_profile(raw)
         return {"kind": "VoiceProfile", "ref": profile.ref, "valid": True}
@@ -627,6 +639,12 @@ def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path
         elif registry_kind is PERSONAS:
             persona = parse_persona(raw)
             name, version = persona.name, persona.version
+        elif registry_kind is MEMORY_PROFILES:
+            profile = parse_memory_profile(raw)
+            name, version = profile.metadata.name, profile.metadata.version
+        elif registry_kind is SEMANTIC_MEMORIES:
+            memory = parse_semantic_memory(raw)
+            name, version = memory.metadata.name, memory.metadata.version
         elif registry_kind is VOICE_PROFILES:
             profile = parse_voice_profile(raw)
             persona_name, sep, persona_version = profile.persona_ref.partition("@")
@@ -773,6 +791,117 @@ def op_proposal_reject(
     try:
         return workflow_authoring.reject_proposal(repo_root, conn, proposal_id=proposal_id, reason=reason)
     except workflow_authoring.ProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
+def _split_ref(ref: str) -> tuple[str, str]:
+    name, sep, version = ref.partition("@")
+    if not sep or not name or not version:
+        raise CoreOpError(f"ref must be '<name>@<version>', got {ref!r}")
+    return name, version
+
+
+def op_memory_search(
+    repo_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    query: str,
+    profile_ref: str = "default@1.0.0",
+) -> dict:
+    from awf.memory.context import retrieve_memory_context
+    from awf.memory.episodic import search_events
+    from awf.memory.semantic import search_semantic_memories
+
+    try:
+        semantic = search_semantic_memories(repo_root, conn, query=query, profile_ref=profile_ref)
+        episodic = search_events(conn, query=query, limit=20)
+        context = retrieve_memory_context(repo_root, conn, query=query, profile_ref=profile_ref)
+    except ValueError as exc:
+        raise CoreOpError(str(exc)) from exc
+    return {"query": query, "profile_ref": profile_ref, "semantic": semantic, "episodic": episodic, "context": context}
+
+
+def op_memory_get(repo_root: Path, conn: sqlite3.Connection, *, ref: str) -> dict:
+    name, version = _split_ref(ref)
+    return op_registry_get(repo_root, conn, kind="semantic-memories", name=name, version=version)
+
+
+def op_memory_propose(repo_root: Path, conn: sqlite3.Connection, *, path: Path, summary: str | None = None) -> dict:
+    from awf.memory.proposals import MemoryProposalError, propose_semantic_memory
+
+    try:
+        return propose_semantic_memory(repo_root, conn, path=path, summary=summary)
+    except MemoryProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
+def op_memory_publish(repo_root: Path, conn: sqlite3.Connection, *, proposal_id: str, digest: str) -> dict:
+    return op_proposal_publish(repo_root, conn, proposal_id=proposal_id, digest=digest)
+
+
+def op_memory_reject(repo_root: Path, conn: sqlite3.Connection, *, proposal_id: str, reason: str | None = None) -> dict:
+    return op_proposal_reject(repo_root, conn, proposal_id=proposal_id, reason=reason)
+
+
+def op_memory_block(conn: sqlite3.Connection, *, ref: str) -> dict:
+    name, version = _split_ref(ref)
+    return op_registry_retire(conn, kind="semantic-memories", name=name, version=version)
+
+
+def op_session_start(
+    conn: sqlite3.Connection, *, title: str | None = None, expires_at: str | None = None
+) -> dict:
+    from awf.memory.sessions import start_session
+
+    return start_session(conn, title=title, expires_at=expires_at)
+
+
+def op_session_append(
+    conn: sqlite3.Connection,
+    *,
+    session_id: str,
+    role: str,
+    content: dict,
+    summary: str | None = None,
+) -> dict:
+    from awf.memory.sessions import SessionError, append_entry
+
+    try:
+        return append_entry(conn, session_id=session_id, role=role, content=content, summary=summary)
+    except SessionError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
+def op_session_show(conn: sqlite3.Connection, *, session_id: str) -> dict:
+    from awf.memory.sessions import SessionError, show_session
+
+    try:
+        return show_session(conn, session_id=session_id)
+    except SessionError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
+def op_session_summarize(conn: sqlite3.Connection, *, session_id: str, summary: str | None = None) -> dict:
+    from awf.memory.sessions import SessionError, summarize_session
+
+    try:
+        return summarize_session(conn, session_id=session_id, summary=summary)
+    except SessionError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
+def op_episodic_search(conn: sqlite3.Connection, *, query: str, run_id: str | None = None) -> list[dict]:
+    from awf.memory.episodic import search_events
+
+    return search_events(conn, query=query, run_id=run_id)
+
+
+def op_episodic_timeline(conn: sqlite3.Connection, *, run_id: str) -> dict:
+    from awf.memory.episodic import run_timeline
+
+    try:
+        return run_timeline(conn, run_id=run_id)
+    except ValueError as exc:
         raise CoreOpError(str(exc)) from exc
 
 

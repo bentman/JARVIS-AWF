@@ -44,6 +44,18 @@ METHOD_NAMES = (
     "awf/proposal.update",
     "awf/proposal.publish",
     "awf/proposal.reject",
+    "awf/memory.search",
+    "awf/memory.get",
+    "awf/memory.propose",
+    "awf/memory.publish",
+    "awf/memory.reject",
+    "awf/memory.block",
+    "awf/session.start",
+    "awf/session.append",
+    "awf/session.show",
+    "awf/session.summarize",
+    "awf/episodic.search",
+    "awf/episodic.timeline",
     "awf/secret.set",
     "awf/secret.listNames",
     "awf/events.subscribe",
@@ -124,6 +136,41 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
         return ops.op_proposal_publish(repo_root, conn, proposal_id=params["proposalId"], digest=params["digest"])
     if method == "awf/proposal.reject":
         return ops.op_proposal_reject(repo_root, conn, proposal_id=params["proposalId"], reason=params.get("reason"))
+    if method == "awf/memory.search":
+        return ops.op_memory_search(
+            repo_root,
+            conn,
+            query=params["query"],
+            profile_ref=params.get("profile", "default@1.0.0"),
+        )
+    if method == "awf/memory.get":
+        return ops.op_memory_get(repo_root, conn, ref=params["ref"])
+    if method == "awf/memory.propose":
+        return ops.op_memory_propose(repo_root, conn, path=Path(params["path"]), summary=params.get("summary"))
+    if method == "awf/memory.publish":
+        return ops.op_memory_publish(repo_root, conn, proposal_id=params["proposalId"], digest=params["digest"])
+    if method == "awf/memory.reject":
+        return ops.op_memory_reject(repo_root, conn, proposal_id=params["proposalId"], reason=params.get("reason"))
+    if method == "awf/memory.block":
+        return ops.op_memory_block(conn, ref=params["ref"])
+    if method == "awf/session.start":
+        return ops.op_session_start(conn, title=params.get("title"), expires_at=params.get("expiresAt"))
+    if method == "awf/session.append":
+        return ops.op_session_append(
+            conn,
+            session_id=params["sessionId"],
+            role=params["role"],
+            content=params["content"],
+            summary=params.get("summary"),
+        )
+    if method == "awf/session.show":
+        return ops.op_session_show(conn, session_id=params["sessionId"])
+    if method == "awf/session.summarize":
+        return ops.op_session_summarize(conn, session_id=params["sessionId"], summary=params.get("summary"))
+    if method == "awf/episodic.search":
+        return ops.op_episodic_search(conn, query=params["query"], run_id=params.get("runId"))
+    if method == "awf/episodic.timeline":
+        return ops.op_episodic_timeline(conn, run_id=params["runId"])
     if method == "awf/secret.set":
         return ops.op_secret_set(repo_root, conn, name=params["name"], value=params["value"])
     if method == "awf/secret.listNames":

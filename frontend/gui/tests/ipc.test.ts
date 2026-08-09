@@ -21,6 +21,12 @@ function makeFakeClient() {
     proposalGet: vi.fn().mockResolvedValue({ proposal_id: "p1" }),
     proposalPublish: vi.fn().mockResolvedValue({ status: "published" }),
     proposalReject: vi.fn().mockResolvedValue({ status: "rejected" }),
+    memorySearch: vi.fn().mockResolvedValue({ semantic: [], episodic: [] }),
+    memoryGet: vi.fn().mockResolvedValue({ ref: "pref@1.0.0" }),
+    memoryPropose: vi.fn().mockResolvedValue({ proposal_id: "p1" }),
+    memoryPublish: vi.fn().mockResolvedValue({ status: "published" }),
+    memoryReject: vi.fn().mockResolvedValue({ status: "rejected" }),
+    memoryBlock: vi.fn().mockResolvedValue({ trust_status: "blocked" }),
   } as any;
 }
 
@@ -54,5 +60,20 @@ describe("registerIpcHandlers", () => {
 
     await handlers.get(CHANNELS.proposalReject)?.({}, "p1", "not useful");
     expect(client.proposalReject).toHaveBeenCalledWith("p1", "not useful");
+
+    await handlers.get(CHANNELS.memorySearch)?.({}, "targeted", "default@1.0.0");
+    expect(client.memorySearch).toHaveBeenCalledWith("targeted", "default@1.0.0");
+
+    await handlers.get(CHANNELS.memoryGet)?.({}, "pref@1.0.0");
+    expect(client.memoryGet).toHaveBeenCalledWith("pref@1.0.0");
+
+    await handlers.get(CHANNELS.memoryPublish)?.({}, "p1", "abc");
+    expect(client.memoryPublish).toHaveBeenCalledWith("p1", "abc");
+
+    await handlers.get(CHANNELS.memoryReject)?.({}, "p1", "not useful");
+    expect(client.memoryReject).toHaveBeenCalledWith("p1", "not useful");
+
+    await handlers.get(CHANNELS.memoryBlock)?.({}, "pref@1.0.0");
+    expect(client.memoryBlock).toHaveBeenCalledWith("pref@1.0.0");
   });
 });

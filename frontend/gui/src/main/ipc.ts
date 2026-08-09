@@ -15,6 +15,12 @@ export const CHANNELS = {
   proposalGet: "awf:proposalGet",
   proposalPublish: "awf:proposalPublish",
   proposalReject: "awf:proposalReject",
+  memorySearch: "awf:memorySearch",
+  memoryGet: "awf:memoryGet",
+  memoryPropose: "awf:memoryPropose",
+  memoryPublish: "awf:memoryPublish",
+  memoryReject: "awf:memoryReject",
+  memoryBlock: "awf:memoryBlock",
 } as const;
 
 /** Registers IPC handlers that delegate to the same ProtocolClient the CLI
@@ -38,4 +44,18 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, client: ProtocolClient
   ipcMain.handle(CHANNELS.proposalReject, (_event, proposalId, reason) =>
     client.proposalReject(proposalId as string, reason as string | undefined),
   );
+  ipcMain.handle(CHANNELS.memorySearch, (_event, query, profile) =>
+    client.memorySearch(query as string, (profile as string | undefined) ?? "default@1.0.0"),
+  );
+  ipcMain.handle(CHANNELS.memoryGet, (_event, ref) => client.memoryGet(ref as string));
+  ipcMain.handle(CHANNELS.memoryPropose, (_event, path, summary) =>
+    client.memoryPropose(path as string, summary as string | undefined),
+  );
+  ipcMain.handle(CHANNELS.memoryPublish, (_event, proposalId, digest) =>
+    client.memoryPublish(proposalId as string, digest as string),
+  );
+  ipcMain.handle(CHANNELS.memoryReject, (_event, proposalId, reason) =>
+    client.memoryReject(proposalId as string, reason as string | undefined),
+  );
+  ipcMain.handle(CHANNELS.memoryBlock, (_event, ref) => client.memoryBlock(ref as string));
 }

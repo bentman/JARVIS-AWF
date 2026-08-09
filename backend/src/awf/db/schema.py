@@ -114,7 +114,7 @@ DDL_STATEMENTS = [
     """
     CREATE TABLE IF NOT EXISTS registry_proposals (
         proposal_id TEXT PRIMARY KEY,
-        kind TEXT NOT NULL CHECK (kind IN ('workflows')),
+        kind TEXT NOT NULL CHECK (kind IN ('workflows', 'semantic-memories')),
         name TEXT NOT NULL,
         version TEXT NOT NULL,
         status TEXT NOT NULL CHECK (status IN ('draft', 'published', 'rejected')),
@@ -139,6 +139,27 @@ DDL_STATEMENTS = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_registry_proposal_events_proposal_id ON registry_proposal_events (proposal_id)",
+    """
+    CREATE TABLE IF NOT EXISTS active_sessions (
+        session_id TEXT PRIMARY KEY,
+        title TEXT,
+        status TEXT NOT NULL CHECK (status IN ('active', 'summarized', 'expired')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        expires_at TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS active_session_entries (
+        entry_id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES active_sessions (session_id),
+        role TEXT NOT NULL CHECK (role IN ('operator', 'assistant', 'system', 'tool')),
+        content_json TEXT NOT NULL,
+        summary TEXT,
+        created_at TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_active_session_entries_session_id ON active_session_entries (session_id)",
 ]
 
 EXPECTED_TABLES = (
@@ -151,4 +172,6 @@ EXPECTED_TABLES = (
     "registry_index",
     "registry_proposals",
     "registry_proposal_events",
+    "active_sessions",
+    "active_session_entries",
 )

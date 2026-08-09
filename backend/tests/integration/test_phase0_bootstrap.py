@@ -90,6 +90,74 @@ def test_init_db_migrates_a_pre_existing_db_missing_the_risk_class_column(tmp_pa
     assert row == ("ap-1", "pending")
 
 
+def test_init_db_migrates_registry_proposal_kind_constraint_and_preserves_events(tmp_path):
+    db_path = tmp_path / "awf.db"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE registry_proposals (
+                proposal_id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL CHECK (kind IN ('workflows')),
+                name TEXT NOT NULL,
+                version TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('draft', 'published', 'rejected')),
+                draft_digest TEXT NOT NULL,
+                draft_path TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                decided_at TEXT,
+                published_digest TEXT,
+                rejection_reason TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE registry_proposal_events (
+                event_id TEXT PRIMARY KEY,
+                proposal_id TEXT NOT NULL REFERENCES registry_proposals (proposal_id),
+                event_type TEXT NOT NULL CHECK (event_type IN ('created', 'updated', 'published', 'rejected')),
+                occurred_at TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                payload_json TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO registry_proposals "
+            "(proposal_id, kind, name, version, status, draft_digest, draft_path, summary, created_at, updated_at) "
+            "VALUES ('p1', 'workflows', 'demo', '1.0.0', 'draft', 'abc', 'draft.yaml', 'demo', 't', 't')"
+        )
+        conn.execute(
+            "INSERT INTO registry_proposal_events "
+            "(event_id, proposal_id, event_type, occurred_at, actor, payload_json) "
+            "VALUES ('e1', 'p1', 'created', 't', 'test', '{}')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    init_db(db_path)
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute(
+            "INSERT INTO registry_proposals "
+            "(proposal_id, kind, name, version, status, draft_digest, draft_path, summary, created_at, updated_at) "
+            "VALUES ('p2', 'semantic-memories', 'memory', '1.0.0', 'draft', 'def', 'draft.yaml', 'memory', 't', 't')"
+        )
+        proposal = conn.execute("SELECT * FROM registry_proposals WHERE proposal_id = 'p1'").fetchone()
+        event = conn.execute("SELECT * FROM registry_proposal_events WHERE proposal_id = 'p1'").fetchone()
+    finally:
+        conn.close()
+
+    assert proposal["kind"] == "workflows"
+    assert event["event_id"] == "e1"
+
+
 def test_uuid7_has_correct_version_and_variant():
     value = uuid7()
     assert value[14] == "7"

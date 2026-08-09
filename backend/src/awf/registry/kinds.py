@@ -27,6 +27,8 @@ SKILLS = RegistryKind("skills", "directory", False)
 VOICE_PROFILES = RegistryKind("voice-profiles", "yaml", False)
 MODEL_PROFILES = RegistryKind("model-profiles", "yaml", True)
 PERSONAS = RegistryKind("personas", "yaml", False)
+MEMORY_PROFILES = RegistryKind("memory-profiles", "yaml", False)
+SEMANTIC_MEMORIES = RegistryKind("semantic-memories", "yaml", False)
 
 KINDS: tuple[RegistryKind, ...] = (
     WORKFLOWS,
@@ -37,6 +39,8 @@ KINDS: tuple[RegistryKind, ...] = (
     VOICE_PROFILES,
     MODEL_PROFILES,
     PERSONAS,
+    MEMORY_PROFILES,
+    SEMANTIC_MEMORIES,
 )
 
 _BY_KEY = {kind.key: kind for kind in KINDS}

@@ -237,3 +237,35 @@ def test_registry_trust_command_dispatches_to_core_ops(tmp_path, capsys, monkeyp
     assert captured == {"kind": "capabilities", "name": "demo", "version": "1.0.0", "status": "trusted"}
     out = json.loads(capsys.readouterr().out)
     assert out["trust_status"] == "trusted"
+
+
+def test_memory_search_command_dispatches_to_core_ops(tmp_path, monkeypatch):
+    repo_root = make_repo(tmp_path)
+    captured = {}
+
+    def fake_search(repo_root, conn, *, query, profile_ref):
+        captured.update(query=query, profile_ref=profile_ref)
+        return {"semantic": [], "episodic": []}
+
+    monkeypatch.setattr(cli_main.ops, "op_memory_search", fake_search)
+
+    exit_code = cli_main.run(["memory", "search", "targeted", "--profile", "default@1.0.0"], repo_root)
+
+    assert exit_code == 0
+    assert captured == {"query": "targeted", "profile_ref": "default@1.0.0"}
+
+
+def test_session_start_command_dispatches_to_core_ops(tmp_path, monkeypatch):
+    repo_root = make_repo(tmp_path)
+    captured = {}
+
+    def fake_start(conn, *, title, expires_at):
+        captured.update(title=title, expires_at=expires_at)
+        return {"session_id": "s1"}
+
+    monkeypatch.setattr(cli_main.ops, "op_session_start", fake_start)
+
+    exit_code = cli_main.run(["session", "start", "--title", "demo"], repo_root)
+
+    assert exit_code == 0
+    assert captured == {"title": "demo", "expires_at": None}

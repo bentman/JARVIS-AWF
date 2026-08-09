@@ -1,0 +1,52 @@
+default_server: llama-server
+
+servers:
+  llama-server:
+    managed: true
+    base_url: http://127.0.0.1:8080
+    openai_base_path: /v1
+    provider: openai
+    health_paths: [/health, /v1/models]
+    artifacts:
+      linux-x64-cpu:
+        url: https://github.com/ggml-org/llama.cpp/releases/download/b9704/llama-b9704-bin-ubuntu-x64.tar.gz
+        archive: tar_gz
+        binary: llama-server
+        accelerator: cpu
+      linux-arm64-cpu:
+        url: https://github.com/ggml-org/llama.cpp/releases/download/b9704/llama-b9704-bin-ubuntu-arm64.tar.gz
+        archive: tar_gz
+        binary: llama-server
+        accelerator: cpu
+      windows-x64-cpu:
+        url: https://github.com/ggml-org/llama.cpp/releases/download/b9704/llama-b9704-bin-win-cpu-x64.zip
+        archive: zip
+        binary: llama-server.exe
+        accelerator: cpu
+      windows-arm64-cpu:
+        url: https://github.com/ggml-org/llama.cpp/releases/download/b9704/llama-b9704-bin-win-cpu-arm64.zip
+        archive: zip
+        binary: llama-server.exe
+        accelerator: cpu
+    launch:
+      ctx_size: 4096
+      batch_size: 512
+      ubatch_size: 128
+      gpu_layers: 0
+      cache_type_k: q8_0
+      cache_type_v: q8_0
+
+  ollama:
+    managed: false
+    base_url: http://127.0.0.1:11434
+    openai_base_path: /v1
+    provider: ollama
+    health_paths: [/api/tags]
+
+  openai-compatible:
+    managed: false
+    base_url: http://127.0.0.1:8080
+    openai_base_path: /v1
+    provider: openai
+    health_paths: [/v1/models]
+    api_key_secret_name: null

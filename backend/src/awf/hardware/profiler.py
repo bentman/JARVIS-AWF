@@ -49,11 +49,13 @@ from awf.clock import utc_now_rfc3339
 from awf.events.writer import write_event
 from awf.hardware.preflight import collect_preflight_tokens, reset_preflight_cache
 from awf.hardware.readiness import (
+    derive_llm_readiness,
     derive_stt_readiness,
     derive_tts_readiness,
     derive_vad_readiness,
     derive_wake_readiness,
 )
+
 from awf.paths import REPO_ROOT
 from awf.registry.hardware_voice_manifest import artifact_paths
 
@@ -562,7 +564,38 @@ def resolve_hardware_profile_id(repo_root: Path) -> tuple[str, dict]:
         suffix = "cpu"
 
     profile_id = f"{os_name}-{arch}-{suffix}"
+
+    try:
+        from awf.llm.discovery import model_by_name
+        from awf.llm.selector import current_selection
+        from awf.llm.servers import load_servers
+
+        default_id, servers = load_servers(repo_root)
+        sel = current_selection(repo_root)
+        if sel is not None and sel.server_id in servers:
+            server = servers[sel.server_id]
+            model_p = None
+            if sel.model:
+                try:
+                    lm = model_by_name(repo_root, sel.model)
+                    model_p = lm.primary
+                except Exception:
+                    pass
+        else:
+            server = servers[default_id]
+            model_p = None
+
+
+        readiness["llm"] = derive_llm_readiness(
+            inventory, tokens, server=server, profile_id=profile_id, model_path=model_p, repo_root=repo_root
+        )
+    except Exception as exc:
+        from awf.hardware.readiness import Readiness
+
+        readiness["llm"] = Readiness(device="cpu", ready=False, reason=f"llm readiness resolution failed: {exc}")
+
     return profile_id, {"inventory": inventory, "tokens": tokens, "readiness": readiness}
+
 
 
 def _ensure_system_run(conn: sqlite3.Connection) -> None:

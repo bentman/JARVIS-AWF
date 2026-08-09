@@ -52,7 +52,7 @@ def test_resolve_hardware_profile_id_payload_carries_the_required_keys(repo_root
     _profile_id, payload = resolve_hardware_profile_id(repo_root)
     assert set(payload.keys()) == {"inventory", "tokens", "readiness"}
     assert isinstance(payload["tokens"], list)
-    assert set(payload["readiness"].keys()) == {"stt", "tts", "vad", "wake"}
+    assert set(payload["readiness"].keys()) == {"stt", "tts", "vad", "wake", "llm"}
 
 
 @pytest.mark.parametrize(
@@ -107,7 +107,7 @@ def test_run_hardware_profiler_writes_event_and_creates_system_run(tmp_path):
     payload = json.loads(event_row["payload_json"])
     assert payload["profile_id"] == profile_id
     assert set(payload.keys()) == {"profile_id", "inventory", "tokens", "readiness"}
-    assert set(payload["readiness"].keys()) == {"stt", "tts", "vad", "wake"}
+    assert set(payload["readiness"].keys()) == {"stt", "tts", "vad", "wake", "llm"}
 
 
 def test_run_hardware_profiler_reuses_existing_system_run(tmp_path):

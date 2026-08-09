@@ -49,3 +49,15 @@ def sandbox_dir(repo_root: Path) -> Path:
 
 def scratch_dir(repo_root: Path, run_id: str) -> Path:
     return sandbox_dir(repo_root) / run_id
+
+
+def config_llm_dir(repo_root: Path) -> Path:
+    return repo_root / "config" / "llm"
+
+
+def llm_models_dir(repo_root: Path) -> Path:
+    return repo_root / "models" / "llm"
+
+
+def runtimes_dir(repo_root: Path) -> Path:
+    return repo_root / "runtimes"

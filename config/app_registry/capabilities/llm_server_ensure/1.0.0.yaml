@@ -1,0 +1,5 @@
+identity: {type: activity, provider: awf, name: llm_server_ensure, version: 1.0.0}
+schema: {input: "", output: ""}
+effects: {operation: execute, reversible: false, idempotent: true, external_side_effect: false}
+risk_class: R1
+approval: never

@@ -188,6 +188,8 @@ Thumbs.db
 # Model artifacts (per-folder allowlist; prevent large binary commits
 # but permit `.gitkeep` placeholders)
 # ------------------------------------------------------------
+/models/llm/*
+!/models/llm/.gitkeep
 /models/stt/*
 !/models/stt/.gitkeep
 /models/tts/*
@@ -196,6 +198,14 @@ Thumbs.db
 !/models/vad/.gitkeep
 /models/wake/*
 !/models/wake/.gitkeep
+
+# ------------------------------------------------------------
+# Runtimes (acquired sidecar binaries; gitignored in full)
+# ------------------------------------------------------------
+/runtimes/*
+!/runtimes/.gitkeep
+!/runtimes/llama.cpp/.gitkeep
+
 
 # Model binary extensions (anywhere): kept out of source.
 # Note: `.onnx` is NOT globally banned — ONNX models live under /models/**

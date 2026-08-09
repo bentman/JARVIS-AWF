@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from awf.hardware.profiler import HardwareInventory
+    from awf.llm.servers import LlmServer
+
 
 _QNN_PROVIDER = "QNNExecutionProvider"
 _CUDA_PROVIDER = "CUDAExecutionProvider"
@@ -100,3 +102,85 @@ def derive_wake_readiness(
     if missing:
         return Readiness(device="cpu", ready=False, reason=f"missing artifacts: {missing}")
     return Readiness(device="cpu", ready=True, reason="all wake artifacts present")
+
+
+def derive_llm_readiness(
+    inventory: "HardwareInventory",
+    tokens: list[str],
+    *,
+    server: "LlmServer",
+    profile_id: str,
+    model_path: Path | None,
+    repo_root: Path | None = None,
+) -> Readiness:
+    if not server.managed:
+        return Readiness(
+            device="cpu",
+            ready=True,
+            reason=f"{server.id} is operator-run; device is the server's own concern",
+        )
+
+    from awf.llm.discovery import binary_path
+    from awf.paths import REPO_ROOT
+
+    if repo_root is None:
+        repo_root = REPO_ROOT
+
+    cuda_hw = inventory.gpu_vendor == "nvidia" and inventory.cuda_available
+    cuda_tok = "ep:CUDAExecutionProvider" in tokens
+
+    qnn_hw = inventory.npu_vendor == "qualcomm" and inventory.npu_available
+    qnn_tok = "ep:QNNExecutionProvider" in tokens and "dll:QnnHtp" in tokens
+
+    adreno_hw = inventory.gpu_vendor == "qualcomm" and inventory.gpu_available
+    adreno_tok = "opencl:adreno" in tokens
+
+    rungs = [
+        ("gpu.cuda", cuda_hw, cuda_tok, "gpu_vendor=nvidia, cuda_available, ep:CUDAExecutionProvider"),
+        ("npu.qnn", qnn_hw, qnn_tok, "npu_vendor=qualcomm, npu_available, ep:QNNExecutionProvider, dll:QnnHtp"),
+        ("gpu.opencl.adreno", adreno_hw, adreno_tok, "gpu_vendor=qualcomm, gpu_available, opencl:adreno"),
+        ("cpu", True, True, "cpu floor"),
+    ]
+
+    accelerator_unavailable_reason: str | None = None
+
+    for rung_accel, hw_ok, tok_ok, desc in rungs:
+        if hw_ok and tok_ok:
+            art = server.artifacts.get(profile_id)
+            if art is None or art.accelerator != rung_accel:
+                if rung_accel != "cpu" and accelerator_unavailable_reason is None:
+                    accelerator_unavailable_reason = (
+                        f"Degraded-accelerator-unavailable: no {rung_accel} artifact declared for {profile_id}"
+                    )
+                continue
+
+            bin_p = binary_path(repo_root, profile_id, art)
+            if not bin_p.is_file() or bin_p.stat().st_size == 0:
+                return Readiness(
+                    device=rung_accel,
+                    ready=False,
+                    reason=f"Degraded-no-sidecar-binary: {bin_p}",
+                )
+
+            if model_path is None or not model_path.is_file():
+                return Readiness(
+                    device=rung_accel,
+                    ready=False,
+                    reason=f"Degraded-no-local-model-artifact: {model_path}",
+                )
+
+            if rung_accel == "cpu":
+                if accelerator_unavailable_reason is not None:
+                    return Readiness(device="cpu", ready=True, reason=accelerator_unavailable_reason)
+                return Readiness(device="cpu", ready=True, reason="no verified accelerator artifact; running on cpu")
+
+            return Readiness(
+                device=rung_accel,
+                ready=True,
+                reason=f"{desc}, {rung_accel} artifact declared",
+            )
+
+    if accelerator_unavailable_reason is not None:
+        return Readiness(device="cpu", ready=True, reason=accelerator_unavailable_reason)
+
+    return Readiness(device="cpu", ready=True, reason="no verified accelerator artifact; running on cpu")

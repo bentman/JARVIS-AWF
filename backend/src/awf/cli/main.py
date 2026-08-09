@@ -93,13 +93,47 @@ def cmd_serve(args: argparse.Namespace, repo_root: Path, conn) -> int:
     return 0
 
 
+
+def cmd_llm_servers(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_llm_servers(repo_root))
+    return 0
+
+
+def cmd_llm_models(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_llm_models(repo_root))
+    return 0
+
+
+def cmd_llm_acquire(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_llm_acquire(repo_root))
+    return 0
+
+
+def cmd_llm_select(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(
+        ops.op_llm_select(
+            repo_root,
+            conn,
+            server_id=args.server_id,
+            model=args.model,
+            allow_remote=args.allow_remote,
+        )
+    )
+    return 0
+
+
+def cmd_llm_serve(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_llm_serve(repo_root, conn, action=args.action))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="awf")
     sub = parser.add_subparsers(dest="command", required=True)
 
     run_parser = sub.add_parser("run")
     run_parser.add_argument("workflow")
-    run_parser.add_argument("--input", required=False)
+    run_parser.add_argument("--input", required=False, default=None)
     run_parser.set_defaults(func=cmd_run)
 
     status_parser = sub.add_parser("status")
@@ -148,6 +182,28 @@ def build_parser() -> argparse.ArgumentParser:
     trust_parser.add_argument("version")
     trust_parser.add_argument("--status", required=True)
     trust_parser.set_defaults(func=cmd_registry_trust)
+
+    llm_parser = sub.add_parser("llm")
+    llm_sub = llm_parser.add_subparsers(dest="llm_command", required=True)
+
+    servers_parser = llm_sub.add_parser("servers")
+    servers_parser.set_defaults(func=cmd_llm_servers)
+
+    models_parser = llm_sub.add_parser("models")
+    models_parser.set_defaults(func=cmd_llm_models)
+
+    acquire_parser = llm_sub.add_parser("acquire")
+    acquire_parser.set_defaults(func=cmd_llm_acquire)
+
+    select_parser = llm_sub.add_parser("select")
+    select_parser.add_argument("server_id")
+    select_parser.add_argument("--model", required=False, default=None)
+    select_parser.add_argument("--allow-remote", action="store_true")
+    select_parser.set_defaults(func=cmd_llm_select)
+
+    serve_sub_parser = llm_sub.add_parser("serve")
+    serve_sub_parser.add_argument("action", choices=["start", "stop", "status"])
+    serve_sub_parser.set_defaults(func=cmd_llm_serve)
 
     secret_parser = sub.add_parser("secret")
     secret_parser.add_argument("secret_args", nargs=argparse.REMAINDER)

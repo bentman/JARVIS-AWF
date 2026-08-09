@@ -118,8 +118,7 @@ node with no `agentRef` — this is additive, not a breaking change to
   that declares neither `agentRef` nor a manifest.
 - `/agents` (`awf/registry.list` with kind `agents`) returns real content
   for the first time - verified live over the actual JSON-RPC transport.
-- `modelProfile` on a manifest and `reviewProfile` on a gate node (see the
-  Model Gateway fix in `CHANGE_LOG.md`, 2026-08-03 04:20) overlap in
+- `modelProfile` on a manifest and `reviewProfile` on a gate node overlap in
   purpose and are not unified: `modelProfile` is parsed and stored on
   `AgentManifest` but has no consumer, same as `mcp` (AWF has no MCP
   client implementation anywhere in `backend/src`). Whether to unify

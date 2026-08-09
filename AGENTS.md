@@ -64,6 +64,11 @@ The system must support these targets without assuming any one acceleration path
 ## Validation
 
 - Update tests with every behavioral change - add new only when shape/pattern does not exist.
+- Use proportional validation:
+  - Comment/docstring-only edits should not trigger a test run by default; use a quick syntax/import/type check only when useful.
+  - A change to one function or module should run the focused tests for that file/module first.
+  - Run broad `ci`/full frontend tests at natural milestones: before a changelog entry, before reporting a multi-file implementation complete, or when targeted coverage cannot bound the risk.
+  - When unsure, prefer the smallest command that can falsify the change. The full suite is the exception, not the default check-in step.
 - Hardware-dependent tests must report `SKIP` with a reason when the provider is unavailable, unless the test explicitly requires that provider.
 - The harness should expose focused targets plus a cumulative smoke target.
 - Do not claim runtime support from documentation alone; include command evidence.

@@ -441,7 +441,7 @@ def detect_npu_info() -> dict:
     """NPU presence, descriptive only. A vendor match here never grants a
     `-qnn` profile on its own; only a verified `QNNExecutionProvider` does.
 
-    Matching is deliberately narrow: an unfiltered device-name sweep matches
+    Matching is narrow because an unfiltered device-name sweep matches
     'Intel' on every Intel host and would report an NPU that isn't there.
     """
     processor = (platform.processor() or "").strip().lower()

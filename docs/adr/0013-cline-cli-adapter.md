@@ -33,10 +33,10 @@ Cline's presence on a host is a runtime/install fact (`awf-setup` /
 operator install), never an import-time assumption: the adapter must not
 import or probe Cline at module load.
 
-Earlier CLI generations offered no non-yolo headless mode — `man cline`
+Earlier CLI generations offered no non-yolo headless mode: `man cline`
 confirmed `-y`/`--no-interactive`/`--yolo` were three aliases for the single
-fully-autonomous mode, which `CHANGE_LOG.md` recorded as blocking Cline
-against Section 10.2's default profile. The current CLI resolves that: a
+fully-autonomous mode, which conflicts with Section 10.2's default profile.
+The current CLI resolves that: a
 positional prompt plus `--json` plus an explicit `--auto-approve true` is a
 fully non-interactive, non-yolo headless invocation, and a non-TTY with
 required approvals *denies* those calls (it never silently auto-approves), so

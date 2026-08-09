@@ -9,9 +9,9 @@ end of its own test - none of them need `fsync`-backed crash durability
 runs in a separate `subprocess.run` process that imports its own unpatched
 `sqlite3` module, so this has no effect on that test).
 
-Without this, every `conn.commit()` pays a disk fsync (~90-100ms on this
-host), which dominates the wall-clock time of most of the suite - the DB
-work in a typical test is microseconds; the fsync isn't.
+Without this, every `conn.commit()` pays a disk fsync, which dominates the
+wall-clock time of most of the suite; the DB work in a typical test is
+microseconds.
 """
 
 import sqlite3

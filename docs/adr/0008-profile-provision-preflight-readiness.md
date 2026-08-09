@@ -120,8 +120,8 @@ hardware fact and the runtime token both say so; either alone resolves to
 
 ## Rationale
 
-`cuda_verified: False` currently means "this environment's ONNX Runtime
-cannot use CUDA," and is read as "this host has no CUDA." Separating the
+`cuda_verified: False` previously meant "ONNX Runtime cannot use CUDA" and
+was read as "this host has no CUDA." Separating the
 stages makes the two statements separate values: `inventory.cuda_available`
 answers the first, `ep:CUDAExecutionProvider` answers the second, and their
 conjunction is what selects a device. AGENTS.md's Platform Contract requires

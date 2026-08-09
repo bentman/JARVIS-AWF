@@ -121,8 +121,8 @@ helpers resolve require that rootdir to be the repository root. Placing
 packaging in the same file keeps the repository at one project file, one
 install command, and one home for any later tooling configuration.
 
-The build sequence ends at Phase 12 and these changes sit after it, so the
-decision is recorded here rather than against a phase.
+The build sequence ends at Phase 12. This ADR covers validation and harness
+work outside the phase list.
 
 ## Deviation recorded
 

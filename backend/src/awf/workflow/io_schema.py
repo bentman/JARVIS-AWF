@@ -1,6 +1,5 @@
 """Enforces a WorkflowDefinition's `inputSchema`/`outputSchema` (Section 12.1)
-against real values - both were parsed and required since Phase 7 but never
-actually validated against anything until now.
+against real values.
 
 `outputs` templates are `{{ engine.<name> }}` strings referencing the small,
 fixed set of values `workflow/engine.py` tracks across a Run

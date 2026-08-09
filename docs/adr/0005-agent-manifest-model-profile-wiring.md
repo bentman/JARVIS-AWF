@@ -43,14 +43,10 @@ role-level flexibility already exists. `model_profile` would add a second,
 finer axis: which *model* a given adapter invocation runs as, independent
 of which adapter it is.
 
-This ADR is intentionally narrow. A broader question was raised and left
-open during the same conversation this ADR came out of: whether AWF
-itself, or any of the four adapters, can act as the "entry point"
-orchestrator for an ad hoc (e.g. voice-composed) chain of roles, and how
-that would stay inside AWF's durable/replayable model. That question is
-NOT addressed here - this draft only covers wiring an existing, narrow,
-already-scaffolded field. See project memory/prior discussion before
-picking that back up.
+This ADR covers only the existing `model_profile` field. It does not decide
+whether AWF itself, or any adapter, can act as the "entry point"
+orchestrator for a dynamically composed chain of roles, or how that would
+stay inside AWF's durable/replayable model.
 
 ## Decision
 

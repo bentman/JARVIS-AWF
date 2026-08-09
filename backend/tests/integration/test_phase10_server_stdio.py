@@ -116,3 +116,22 @@ def test_approval_approve_over_jsonrpc_refuses_r2_from_voice_channel(tmp_path):
     assert response["result"]["requires_on_screen_confirmation"] is True
     row = conn.execute("SELECT status FROM approvals WHERE approval_id = 'ap-1'").fetchone()
     assert row["status"] == "pending"
+
+
+def test_proposal_get_over_jsonrpc(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+    proposal_path = repo_root / "data" / "proposals" / "workflows" / "p1" / "demo" / "0.1.0.yaml"
+    proposal_path.parent.mkdir(parents=True)
+    proposal_path.write_text("apiVersion: awf/v1\n", encoding="utf-8")
+    conn.execute(
+        "INSERT INTO registry_proposals "
+        "(proposal_id, kind, name, version, status, draft_digest, draft_path, summary, created_at, updated_at) "
+        "VALUES ('p1', 'workflows', 'demo', '0.1.0', 'draft', 'abc', ?, 'summary', 't', 't')",
+        (str(proposal_path.relative_to(repo_root)),),
+    )
+    conn.commit()
+
+    response = send(repo_root, conn, {"jsonrpc": "2.0", "id": 7, "method": "awf/proposal.get", "params": {"proposalId": "p1"}})
+
+    assert response["result"]["proposal_id"] == "p1"
+    assert response["result"]["content"] == "apiVersion: awf/v1\n"

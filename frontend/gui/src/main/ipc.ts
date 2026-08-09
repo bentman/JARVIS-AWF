@@ -12,6 +12,9 @@ export const CHANNELS = {
   approvalList: "awf:approvalList",
   approvalApprove: "awf:approvalApprove",
   approvalReject: "awf:approvalReject",
+  proposalGet: "awf:proposalGet",
+  proposalPublish: "awf:proposalPublish",
+  proposalReject: "awf:proposalReject",
 } as const;
 
 /** Registers IPC handlers that delegate to the same ProtocolClient the CLI
@@ -27,5 +30,12 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, client: ProtocolClient
   );
   ipcMain.handle(CHANNELS.approvalReject, (_event, approvalId, reason) =>
     client.approvalReject(approvalId as string, reason as string),
+  );
+  ipcMain.handle(CHANNELS.proposalGet, (_event, proposalId) => client.proposalGet(proposalId as string));
+  ipcMain.handle(CHANNELS.proposalPublish, (_event, proposalId, digest) =>
+    client.proposalPublish(proposalId as string, digest as string),
+  );
+  ipcMain.handle(CHANNELS.proposalReject, (_event, proposalId, reason) =>
+    client.proposalReject(proposalId as string, reason as string | undefined),
   );
 }

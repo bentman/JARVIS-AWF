@@ -88,5 +88,28 @@ describe("ProtocolClient", () => {
       name: "read_file",
       version: "1.0.0",
     });
+
+    void client.registryPublish("/tmp/demo.yaml", "workflows");
+    expect(transport.lastRequest().params).toEqual({ path: "/tmp/demo.yaml", kind: "workflows" });
+  });
+
+  it("builds correct params for proposal methods", () => {
+    const { transport, client } = setup();
+
+    void client.workflowAuthorDraft({ objective: "make demo", name: "demo" });
+    expect(transport.lastRequest().method).toBe("awf/workflow.authorDraft");
+    expect(transport.lastRequest().params).toEqual({ objective: "make demo", name: "demo" });
+
+    void client.proposalGet("p1");
+    expect(transport.lastRequest().params).toEqual({ proposalId: "p1" });
+
+    void client.proposalUpdate("p1", "yaml", "edited");
+    expect(transport.lastRequest().params).toEqual({ proposalId: "p1", content: "yaml", summary: "edited" });
+
+    void client.proposalPublish("p1", "abc");
+    expect(transport.lastRequest().params).toEqual({ proposalId: "p1", digest: "abc" });
+
+    void client.proposalReject("p1", "not useful");
+    expect(transport.lastRequest().params).toEqual({ proposalId: "p1", reason: "not useful" });
   });
 });

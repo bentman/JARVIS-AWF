@@ -111,6 +111,34 @@ DDL_STATEMENTS = [
         PRIMARY KEY (kind, name, version)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS registry_proposals (
+        proposal_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('workflows')),
+        name TEXT NOT NULL,
+        version TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('draft', 'published', 'rejected')),
+        draft_digest TEXT NOT NULL,
+        draft_path TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        decided_at TEXT,
+        published_digest TEXT,
+        rejection_reason TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS registry_proposal_events (
+        event_id TEXT PRIMARY KEY,
+        proposal_id TEXT NOT NULL REFERENCES registry_proposals (proposal_id),
+        event_type TEXT NOT NULL CHECK (event_type IN ('created', 'updated', 'published', 'rejected')),
+        occurred_at TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        payload_json TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_registry_proposal_events_proposal_id ON registry_proposal_events (proposal_id)",
 ]
 
 EXPECTED_TABLES = (
@@ -121,4 +149,6 @@ EXPECTED_TABLES = (
     "approvals",
     "secrets",
     "registry_index",
+    "registry_proposals",
+    "registry_proposal_events",
 )

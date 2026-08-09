@@ -16,6 +16,11 @@ export type CommandClient = Pick<
   | "artifactList"
   | "secretListNames"
   | "registryList"
+  | "workflowAuthorDraft"
+  | "proposalGet"
+  | "proposalUpdate"
+  | "proposalPublish"
+  | "proposalReject"
 >;
 
 export type CommandResult =
@@ -36,6 +41,10 @@ export const HELP_TEXT = `
 /approve <id>                         Approve a pending approval
 /reject <id> <reason>                 Reject a pending approval
 /artifacts <run-id>                   List artifacts for a Run
+/author-workflow <objective>          Draft a Workflow proposal
+/proposal <id>                        Show a Workflow proposal
+/proposal-publish <id> <digest>       Publish a draft proposal
+/proposal-reject <id> <reason>        Reject a draft proposal
 /agents                               Registered Agent Manifests
 /skills                               Registry Skills
 /workflows                            Registry Workflow definitions
@@ -103,6 +112,23 @@ export async function dispatchCommand(
   if (name === "artifacts") {
     if (!args[0]) throw new CommandError("usage: /artifacts <run-id>");
     return { kind: "json", data: await client.artifactList(args[0]) };
+  }
+  if (name === "author-workflow") {
+    if (args.length < 1) throw new CommandError("usage: /author-workflow <objective>");
+    return { kind: "json", data: await client.workflowAuthorDraft({ objective: args.join(" ") }) };
+  }
+  if (name === "proposal") {
+    if (!args[0]) throw new CommandError("usage: /proposal <proposal-id>");
+    return { kind: "json", data: await client.proposalGet(args[0]) };
+  }
+  if (name === "proposal-publish") {
+    if (!args[0] || !args[1]) throw new CommandError("usage: /proposal-publish <proposal-id> <digest>");
+    return { kind: "json", data: await client.proposalPublish(args[0], args[1]) };
+  }
+  if (name === "proposal-reject") {
+    if (!args[0] || args.length < 2) throw new CommandError("usage: /proposal-reject <proposal-id> <reason>");
+    const [id, ...reasonParts] = args;
+    return { kind: "json", data: await client.proposalReject(id, reasonParts.join(" ")) };
   }
   if (name === "secrets") return { kind: "json", data: await client.secretListNames() };
 

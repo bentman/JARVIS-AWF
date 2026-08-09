@@ -18,6 +18,9 @@ function makeFakeClient() {
     approvalList: vi.fn().mockResolvedValue([]),
     approvalApprove: vi.fn().mockResolvedValue({ status: "approved" }),
     approvalReject: vi.fn().mockResolvedValue({ status: "rejected" }),
+    proposalGet: vi.fn().mockResolvedValue({ proposal_id: "p1" }),
+    proposalPublish: vi.fn().mockResolvedValue({ status: "published" }),
+    proposalReject: vi.fn().mockResolvedValue({ status: "rejected" }),
   } as any;
 }
 
@@ -42,5 +45,14 @@ describe("registerIpcHandlers", () => {
 
     await handlers.get(CHANNELS.approvalList)?.({});
     expect(client.approvalList).toHaveBeenCalled();
+
+    await handlers.get(CHANNELS.proposalGet)?.({}, "p1");
+    expect(client.proposalGet).toHaveBeenCalledWith("p1");
+
+    await handlers.get(CHANNELS.proposalPublish)?.({}, "p1", "abc");
+    expect(client.proposalPublish).toHaveBeenCalledWith("p1", "abc");
+
+    await handlers.get(CHANNELS.proposalReject)?.({}, "p1", "not useful");
+    expect(client.proposalReject).toHaveBeenCalledWith("p1", "not useful");
   });
 });

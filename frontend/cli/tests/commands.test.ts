@@ -14,6 +14,11 @@ function makeFakeClient(overrides: Partial<CommandClient> = {}): CommandClient {
     artifactList: vi.fn().mockResolvedValue([]),
     secretListNames: vi.fn().mockResolvedValue([]),
     registryList: vi.fn().mockResolvedValue([]),
+    workflowAuthorDraft: vi.fn().mockResolvedValue({ proposal_id: "p1", status: "draft" }),
+    proposalGet: vi.fn().mockResolvedValue({ proposal_id: "p1", status: "draft" }),
+    proposalUpdate: vi.fn().mockResolvedValue({ proposal_id: "p1", status: "draft" }),
+    proposalPublish: vi.fn().mockResolvedValue({ proposal: { proposal_id: "p1", status: "published" } }),
+    proposalReject: vi.fn().mockResolvedValue({ proposal_id: "p1", status: "rejected" }),
     ...overrides,
   } as CommandClient;
 }
@@ -103,6 +108,30 @@ describe("dispatchCommand", () => {
     const client = makeFakeClient();
     await dispatchCommand(client, "/secrets", DEFAULT_SETTINGS);
     expect(client.secretListNames).toHaveBeenCalled();
+  });
+
+  it("/author-workflow calls workflowAuthorDraft with the objective text", async () => {
+    const client = makeFakeClient();
+    await dispatchCommand(client, "/author-workflow make a demo workflow", DEFAULT_SETTINGS);
+    expect(client.workflowAuthorDraft).toHaveBeenCalledWith({ objective: "make a demo workflow" });
+  });
+
+  it("/proposal calls proposalGet", async () => {
+    const client = makeFakeClient();
+    await dispatchCommand(client, "/proposal p1", DEFAULT_SETTINGS);
+    expect(client.proposalGet).toHaveBeenCalledWith("p1");
+  });
+
+  it("/proposal-publish calls proposalPublish", async () => {
+    const client = makeFakeClient();
+    await dispatchCommand(client, "/proposal-publish p1 abc", DEFAULT_SETTINGS);
+    expect(client.proposalPublish).toHaveBeenCalledWith("p1", "abc");
+  });
+
+  it("/proposal-reject joins remaining args as reason", async () => {
+    const client = makeFakeClient();
+    await dispatchCommand(client, "/proposal-reject p1 not useful", DEFAULT_SETTINGS);
+    expect(client.proposalReject).toHaveBeenCalledWith("p1", "not useful");
   });
 
   it("/settings, /theme, /keybindings never touch the protocol client", async () => {

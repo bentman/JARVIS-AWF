@@ -20,6 +20,7 @@ from awf.adapters.claude_code import invoke as claude_code_invoke
 from awf.adapters.cline_cli import invoke as cline_invoke
 from awf.adapters.codex_cli import invoke as codex_invoke
 from awf.adapters.copilot_cli import invoke as copilot_invoke
+from awf.authoring import workflow as workflow_authoring
 from awf.clock import utc_now_rfc3339
 from awf.engine.recovery import scan_incomplete_runs
 from awf.engine.run import create_run
@@ -675,6 +676,104 @@ def op_registry_trust(conn: sqlite3.Connection, *, kind: str, name: str, version
 
 def op_registry_retire(conn: sqlite3.Connection, *, kind: str, name: str, version: str) -> dict:
     return op_registry_trust(conn, kind=kind, name=name, version=version, status="blocked")
+
+
+def op_workflow_author_draft(
+    repo_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    objective: str,
+    name: str | None = None,
+    version: str | None = None,
+    profile_ref: str = workflow_authoring.DEFAULT_AUTHOR_PROFILE,
+) -> dict:
+    try:
+        return workflow_authoring.author_workflow_draft(
+            repo_root,
+            conn,
+            objective=objective,
+            name=name,
+            version=version,
+            profile_ref=profile_ref,
+        )
+    except workflow_authoring.ProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
+def op_proposal_get(repo_root: Path, conn: sqlite3.Connection, *, proposal_id: str) -> dict:
+    try:
+        return workflow_authoring.get_proposal(repo_root, conn, proposal_id=proposal_id)
+    except workflow_authoring.ProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
+def op_proposal_update(
+    repo_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    proposal_id: str,
+    content: str,
+    summary: str | None = None,
+) -> dict:
+    try:
+        return workflow_authoring.update_proposal(
+            repo_root,
+            conn,
+            proposal_id=proposal_id,
+            content=content,
+            summary=summary,
+        )
+    except workflow_authoring.ProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
+def op_proposal_publish(
+    repo_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    proposal_id: str,
+    digest: str,
+) -> dict:
+    try:
+        proposal = workflow_authoring.get_proposal(repo_root, conn, proposal_id=proposal_id)
+    except workflow_authoring.ProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
+    if proposal["status"] != "draft":
+        raise CoreOpError(f"proposal {proposal_id} is not draft (status={proposal['status']})")
+    if proposal["draft_digest"] != digest:
+        raise CoreOpError(
+            f"proposal {proposal_id} draft digest mismatch: expected {proposal['draft_digest']}, got {digest}"
+        )
+    draft_path = repo_root / proposal["draft_path"]
+    actual_digest = hashlib.sha256(draft_path.read_bytes()).hexdigest()
+    if actual_digest != digest:
+        raise CoreOpError(
+            f"proposal {proposal_id} draft file digest mismatch: expected {digest}, actual {actual_digest}"
+        )
+    published = op_registry_publish(repo_root, conn, path=draft_path, kind=proposal["kind"])
+    try:
+        marked = workflow_authoring.mark_published(
+            repo_root,
+            conn,
+            proposal_id=proposal_id,
+            published_digest=published["digest"],
+        )
+    except workflow_authoring.ProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
+    return {"proposal": marked, "published": published}
+
+
+def op_proposal_reject(
+    repo_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    proposal_id: str,
+    reason: str | None = None,
+) -> dict:
+    try:
+        return workflow_authoring.reject_proposal(repo_root, conn, proposal_id=proposal_id, reason=reason)
+    except workflow_authoring.ProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
 
 
 def op_secret_set(repo_root: Path, conn: sqlite3.Connection, *, name: str, value: str) -> dict:

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ApprovalConfirmation } from "./ApprovalConfirmation.js";
 import { Dashboard, type ApprovalSummary, type RunSummary } from "./Dashboard.js";
+import { ProposalReview, type ProposalSummary } from "./ProposalReview.js";
 import { Transcript, type TranscriptEntry } from "./Transcript.js";
 import { VoiceActivation } from "./VoiceActivation.js";
 import type { RiskClass } from "../voiceApproval.js";
@@ -27,6 +28,9 @@ export interface AppProps {
   onVoiceRoundTrip?: VoiceRoundTripFn;
   onRunList?: () => Promise<RunSummary[]>;
   onApprovalList?: () => Promise<ApprovalSummary[]>;
+  onProposalGet?: (proposalId: string) => Promise<ProposalSummary>;
+  onProposalPublish?: (proposalId: string, digest: string) => Promise<unknown>;
+  onProposalReject?: (proposalId: string, reason?: string) => Promise<unknown>;
 }
 
 // An approval whose node never declared `riskClass` (Section 12.2) has no
@@ -50,6 +54,9 @@ export function App({
   onVoiceRoundTrip,
   onRunList,
   onApprovalList,
+  onProposalGet,
+  onProposalPublish,
+  onProposalReject,
 }: AppProps): React.JSX.Element {
   const [entries, setEntries] = useState<TranscriptEntry[]>(initialTranscript);
   const nextId = useRef(initialTranscript.length);
@@ -106,6 +113,13 @@ export function App({
     <div>
       {(onRunList || onApprovalList) && (
         <Dashboard runs={runs} approvals={approvals} onRefresh={() => void refresh()} refreshing={refreshing} />
+      )}
+      {onProposalGet && onProposalPublish && onProposalReject && (
+        <ProposalReview
+          onProposalGet={onProposalGet}
+          onProposalPublish={onProposalPublish}
+          onProposalReject={onProposalReject}
+        />
       )}
       <Transcript entries={entries} />
       {onVoiceRoundTrip && <VoiceActivation onRoundTrip={handleRoundTrip} />}

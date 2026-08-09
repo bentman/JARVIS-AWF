@@ -39,6 +39,11 @@ METHOD_NAMES = (
     "awf/registry.reindex",
     "awf/registry.retire",
     "awf/registry.trust",
+    "awf/workflow.authorDraft",
+    "awf/proposal.get",
+    "awf/proposal.update",
+    "awf/proposal.publish",
+    "awf/proposal.reject",
     "awf/secret.set",
     "awf/secret.listNames",
     "awf/events.subscribe",
@@ -96,6 +101,29 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
         return ops.op_registry_trust(
             conn, kind=params["kind"], name=params["name"], version=params["version"], status=params["status"]
         )
+    if method == "awf/workflow.authorDraft":
+        return ops.op_workflow_author_draft(
+            repo_root,
+            conn,
+            objective=params["objective"],
+            name=params.get("name"),
+            version=params.get("version"),
+            profile_ref=params.get("profile", ops.workflow_authoring.DEFAULT_AUTHOR_PROFILE),
+        )
+    if method == "awf/proposal.get":
+        return ops.op_proposal_get(repo_root, conn, proposal_id=params["proposalId"])
+    if method == "awf/proposal.update":
+        return ops.op_proposal_update(
+            repo_root,
+            conn,
+            proposal_id=params["proposalId"],
+            content=params["content"],
+            summary=params.get("summary"),
+        )
+    if method == "awf/proposal.publish":
+        return ops.op_proposal_publish(repo_root, conn, proposal_id=params["proposalId"], digest=params["digest"])
+    if method == "awf/proposal.reject":
+        return ops.op_proposal_reject(repo_root, conn, proposal_id=params["proposalId"], reason=params.get("reason"))
     if method == "awf/secret.set":
         return ops.op_secret_set(repo_root, conn, name=params["name"], value=params["value"])
     if method == "awf/secret.listNames":

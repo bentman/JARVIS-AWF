@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.js";
 import type { ApprovalSummary, RunSummary } from "./Dashboard.js";
+import type { ProposalSummary } from "./ProposalReview.js";
 
 interface VoiceRoundTripResult {
   wake_detected: boolean;
@@ -21,6 +22,9 @@ declare global {
       approvalList: () => Promise<ApprovalSummary[]>;
       approvalApprove: (approvalId: string) => Promise<unknown>;
       approvalReject: (approvalId: string, reason: string) => Promise<unknown>;
+      proposalGet: (proposalId: string) => Promise<ProposalSummary>;
+      proposalPublish: (proposalId: string, digest: string) => Promise<unknown>;
+      proposalReject: (proposalId: string, reason?: string) => Promise<unknown>;
       voiceRoundTrip: (
         wakeAudioPath: string,
         commandAudioPath: string,
@@ -42,6 +46,9 @@ if (container) {
         window.awf.voiceRoundTrip(wakeAudioPath, commandAudioPath, voiceId, "/tmp/awf-gui-response.wav"),
       onRunList: () => window.awf.runList(),
       onApprovalList: () => window.awf.approvalList(),
+      onProposalGet: (proposalId: string) => window.awf.proposalGet(proposalId),
+      onProposalPublish: (proposalId: string, digest: string) => window.awf.proposalPublish(proposalId, digest),
+      onProposalReject: (proposalId: string, reason?: string) => window.awf.proposalReject(proposalId, reason),
     }),
   );
 }

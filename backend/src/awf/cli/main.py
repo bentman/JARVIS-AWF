@@ -85,6 +85,48 @@ def cmd_registry_trust(args: argparse.Namespace, repo_root: Path, conn) -> int:
     return 0
 
 
+def cmd_author_workflow(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(
+        ops.op_workflow_author_draft(
+            repo_root,
+            conn,
+            objective=args.objective,
+            name=args.name,
+            version=args.version,
+            profile_ref=args.profile,
+        )
+    )
+    return 0
+
+
+def cmd_proposal_show(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_proposal_get(repo_root, conn, proposal_id=args.proposal_id))
+    return 0
+
+
+def cmd_proposal_update(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(
+        ops.op_proposal_update(
+            repo_root,
+            conn,
+            proposal_id=args.proposal_id,
+            content=Path(args.file).read_text(encoding="utf-8"),
+            summary=args.summary,
+        )
+    )
+    return 0
+
+
+def cmd_proposal_publish(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_proposal_publish(repo_root, conn, proposal_id=args.proposal_id, digest=args.digest))
+    return 0
+
+
+def cmd_proposal_reject(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_proposal_reject(repo_root, conn, proposal_id=args.proposal_id, reason=args.reason))
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace, repo_root: Path, conn) -> int:
     conn.close()  # the server owns its own connection lifecycle
     from awf.server.stdio import serve_stdio
@@ -181,6 +223,34 @@ def build_parser() -> argparse.ArgumentParser:
     trust_parser.add_argument("version")
     trust_parser.add_argument("--status", required=True)
     trust_parser.set_defaults(func=cmd_registry_trust)
+
+    author_parser = sub.add_parser("author")
+    author_sub = author_parser.add_subparsers(dest="author_command", required=True)
+    author_workflow_parser = author_sub.add_parser("workflow")
+    author_workflow_parser.add_argument("--objective", required=True)
+    author_workflow_parser.add_argument("--name", required=False, default=None)
+    author_workflow_parser.add_argument("--version", required=False, default=None)
+    author_workflow_parser.add_argument("--profile", required=False, default=ops.workflow_authoring.DEFAULT_AUTHOR_PROFILE)
+    author_workflow_parser.set_defaults(func=cmd_author_workflow)
+
+    proposal_parser = sub.add_parser("proposal")
+    proposal_sub = proposal_parser.add_subparsers(dest="proposal_command", required=True)
+    proposal_show_parser = proposal_sub.add_parser("show")
+    proposal_show_parser.add_argument("proposal_id")
+    proposal_show_parser.set_defaults(func=cmd_proposal_show)
+    proposal_update_parser = proposal_sub.add_parser("update")
+    proposal_update_parser.add_argument("proposal_id")
+    proposal_update_parser.add_argument("--file", required=True)
+    proposal_update_parser.add_argument("--summary", required=False, default=None)
+    proposal_update_parser.set_defaults(func=cmd_proposal_update)
+    proposal_publish_parser = proposal_sub.add_parser("publish")
+    proposal_publish_parser.add_argument("proposal_id")
+    proposal_publish_parser.add_argument("--digest", required=True)
+    proposal_publish_parser.set_defaults(func=cmd_proposal_publish)
+    proposal_reject_parser = proposal_sub.add_parser("reject")
+    proposal_reject_parser.add_argument("proposal_id")
+    proposal_reject_parser.add_argument("--reason", required=False, default=None)
+    proposal_reject_parser.set_defaults(func=cmd_proposal_reject)
 
     llm_parser = sub.add_parser("llm")
     llm_sub = llm_parser.add_subparsers(dest="llm_command", required=True)

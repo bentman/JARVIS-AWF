@@ -6,7 +6,7 @@ from cryptography.fernet import Fernet
 from awf.cognition.envelope import PromptEnvelope, PromptSegment
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
-from awf.gateway.client import GatewayError, complete, complete_envelope
+from awf.gateway.client import GatewayError, complete, complete_envelope, complete_structured
 from awf.registry.model_profile import (
     ModelProfileValidationError,
     load_model_profile,
@@ -126,6 +126,50 @@ def test_complete_supplies_dummy_api_key_for_loopback_openai_compatible(monkeypa
     monkeypatch.setattr("awf.gateway.client.litellm.completion", fake_completion)
 
     assert complete(profile, [{"role": "user", "content": "ping"}]) == "ok"
+    assert captured["api_key"] == "local-dev"
+
+
+def test_complete_structured_passes_json_schema_and_validates_response(monkeypatch):
+    profile = parse_model_profile(
+        {
+            "name": "demo",
+            "version": "1.0.0",
+            "purpose": "general-reasoning",
+            "privacy": {"maximum_data_class": "internal", "local_only": True},
+            "candidates": [
+                {
+                    "provider": "openai",
+                    "model": "local",
+                    "priority": 1,
+                    "enabled": True,
+                    "api_base": "http://127.0.0.1:8080/v1",
+                }
+            ],
+            "fallback": {"mode": "none", "allow_quality_degrade": False},
+            "limits": {"max_input_tokens_per_call": 1, "max_output_tokens_per_call": 1, "max_cost_usd_per_call": 0},
+        }
+    )
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["answer"],
+        "properties": {"answer": {"type": "string"}},
+    }
+    captured = {}
+
+    def fake_completion(**kwargs):
+        captured.update(kwargs)
+        return _fake_response('{"answer": "ok"}')
+
+    monkeypatch.setattr("awf.gateway.client.litellm.completion", fake_completion)
+
+    result = complete_structured(profile, [{"role": "user", "content": "ping"}], schema_name="demo_schema", schema=schema)
+
+    assert result == {"answer": "ok"}
+    assert captured["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "demo_schema", "schema": schema, "strict": True},
+    }
     assert captured["api_key"] == "local-dev"
 
 

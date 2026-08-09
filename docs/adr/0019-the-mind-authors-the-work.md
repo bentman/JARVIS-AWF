@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Implemented. Acceptance evidence: focused backend authoring/gateway/CLI/JSON-RPC/bootstrap tests passed, frontend shared/CLI/GUI tests passed, frontend build passed, Ruff passed, and whitespace checks passed on 2026-08-09.
 
 ## Context
 
@@ -148,17 +148,15 @@ CREATE TABLE IF NOT EXISTS registry_proposals (
     name TEXT NOT NULL,
     version TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN (
-        'draft', 'pending_review', 'published', 'rejected', 'superseded'
+        'draft', 'published', 'rejected'
     )),
+    draft_digest TEXT NOT NULL,
     draft_path TEXT NOT NULL,
-    draft_sha256 TEXT NOT NULL,
-    model_profile_ref TEXT,
-    objective TEXT NOT NULL,
-    validation_json TEXT NOT NULL,
+    summary TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    published_at TEXT,
-    rejected_at TEXT,
+    decided_at TEXT,
+    published_digest TEXT,
     rejection_reason TEXT
 )
 ```
@@ -167,12 +165,12 @@ CREATE TABLE IF NOT EXISTS registry_proposals (
 CREATE TABLE IF NOT EXISTS registry_proposal_events (
     event_id TEXT PRIMARY KEY,
     proposal_id TEXT NOT NULL REFERENCES registry_proposals (proposal_id),
-    prior_status TEXT,
-    new_status TEXT NOT NULL,
+    event_type TEXT NOT NULL CHECK (event_type IN (
+        'created', 'updated', 'published', 'rejected'
+    )),
+    occurred_at TEXT NOT NULL,
     actor TEXT NOT NULL,
-    reason_code TEXT NOT NULL,
-    payload_json TEXT NOT NULL,
-    occurred_at TEXT NOT NULL
+    payload_json TEXT NOT NULL
 )
 ```
 
@@ -185,14 +183,11 @@ data/proposals/workflows/<proposal-id>/<name>/<version>.yaml
 Status transitions:
 
 ```text
-draft -> pending_review
-pending_review -> published
-pending_review -> rejected
-pending_review -> draft
-draft -> superseded
+draft -> published
+draft -> rejected
 ```
 
-`published`, `rejected`, and `superseded` are terminal.
+Updates keep the proposal in `draft`. `published` and `rejected` are terminal.
 
 ### Task B — Structured authoring module
 
@@ -204,9 +199,9 @@ def author_workflow_draft(
     conn: sqlite3.Connection,
     *,
     objective: str,
-    model_profile_ref: str = "resident-mind@1.0.0",
     name: str | None = None,
-    version: str = "1.0.0",
+    version: str | None = None,
+    profile_ref: str = "resident-mind@1.0.0",
 ) -> dict: ...
 
 def get_proposal(repo_root: Path, conn: sqlite3.Connection, *, proposal_id: str) -> dict: ...
@@ -217,21 +212,23 @@ def update_proposal(
     *,
     proposal_id: str,
     content: str,
+    summary: str | None = None,
 ) -> dict: ...
 
-def publish_proposal(
+def reject_proposal(
     repo_root: Path,
     conn: sqlite3.Connection,
     *,
     proposal_id: str,
-    expected_sha256: str,
+    reason: str | None = None,
 ) -> dict: ...
 
-def reject_proposal(
+def mark_published(
+    repo_root: Path,
     conn: sqlite3.Connection,
     *,
     proposal_id: str,
-    reason: str,
+    published_digest: str,
 ) -> dict: ...
 ```
 
@@ -249,21 +246,21 @@ def reject_proposal(
 6. Validates the YAML with `parse_workflow`.
 7. Writes the draft file.
 8. Writes `registry_proposals` and a proposal event.
-9. Returns proposal id, path, digest, validation status, and a summary.
+9. Returns proposal id, path, digest, content, event log, status, and summary.
 
 `update_proposal`:
 
-1. Rejects terminal proposals.
-2. Writes the caller-provided content to the same draft path.
-3. Recomputes the digest.
-4. Revalidates through `parse_workflow`.
+1. Requires `status == 'draft'`.
+2. Validates the caller-provided Workflow YAML with `parse_workflow`.
+3. Writes the normalized draft under the proposal path.
+4. Recomputes the file digest.
 5. Updates the proposal row and event log.
 
-`publish_proposal`:
+`op_proposal_publish`:
 
-1. Requires `status == 'pending_review'`.
+1. Requires `status == 'draft'`.
 2. Recomputes the draft digest from disk.
-3. Requires `actual_sha256 == expected_sha256`.
+3. Requires `actual_digest == caller_digest`.
 4. Validates the Workflow again.
 5. Calls `op_registry_publish(repo_root, conn, path=draft_path, kind="workflows")`.
 6. Marks the proposal `published`.
@@ -320,7 +317,7 @@ Add CLI commands:
 awf author workflow --objective <text> [--profile <name>@<version>] [--name <name>] [--version <version>]
 awf proposal show <proposal-id>
 awf proposal update <proposal-id> --file <path>
-awf proposal publish <proposal-id> --digest sha256:<digest>
+awf proposal publish <proposal-id> --digest <draft-digest>
 awf proposal reject <proposal-id> --reason <text>
 ```
 
@@ -343,17 +340,16 @@ Extend `frontend/shared` with proposal types and ProtocolClient methods.
 AWF-CLI adds slash commands:
 
 ```text
-/author workflow <objective>
+/author-workflow <objective>
 /proposal <id>
-/proposal-publish <id> <sha256:digest>
+/proposal-publish <id> <draft-digest>
 /proposal-reject <id> <reason>
 ```
 
 AWF-GUI adds a proposal review card:
 
-- objective;
 - proposed name and version;
-- validation result;
+- status;
 - draft path;
 - digest;
 - readable Workflow content;
@@ -368,7 +364,7 @@ operator registry state.
 
 - A mocked structured-output model response creates a Workflow proposal and
   draft file.
-- The proposal is listed/readable through CLI and JSON-RPC.
+- The proposal is readable through CLI and JSON-RPC.
 - The draft validates through existing Workflow validation.
 - Publishing with the current digest writes the Workflow through
   `op_registry_publish`.
@@ -386,9 +382,9 @@ operator registry state.
 Focused backend tests:
 
 ```text
-backend/tests/unit/test_workflow_authoring.py
-backend/tests/unit/test_model_gateway_structured.py
-backend/tests/integration/test_workflow_proposals.py
+backend/tests/integration/test_workflow_authoring_proposals.py
+backend/tests/integration/test_phase3_model_gateway.py
+backend/tests/integration/test_phase10_cli_main.py
 backend/tests/integration/test_phase10_server_stdio.py
 ```
 
@@ -397,17 +393,20 @@ Focused frontend tests:
 ```text
 frontend/shared/tests/client.test.ts
 frontend/cli/tests/commands.test.ts
-frontend/gui/tests/App.dashboard.test.tsx
+frontend/gui/tests/ProposalReview.test.tsx
+frontend/gui/tests/ipc.test.ts
 ```
 
 Validation commands:
 
 ```text
-backend/.venv/bin/python -m pytest backend/tests/unit/test_workflow_authoring.py backend/tests/unit/test_model_gateway_structured.py backend/tests/integration/test_workflow_proposals.py backend/tests/integration/test_phase10_server_stdio.py -q
-npm --prefix frontend/shared test
-npm --prefix frontend/cli test
-npm --prefix frontend/gui test
-scripts/validate_backend.py lint
+backend/.venv/bin/python -m pytest backend/tests/integration/test_workflow_authoring_proposals.py backend/tests/integration/test_phase3_model_gateway.py backend/tests/integration/test_phase10_cli_main.py backend/tests/integration/test_phase10_server_stdio.py backend/tests/integration/test_phase0_bootstrap.py
+npm --prefix frontend --workspace @awf/protocol-client test
+npm --prefix frontend --workspace awf-cli test
+npm --prefix frontend --workspace awf-gui test
+npm --prefix frontend run build
+backend/.venv/bin/python -m ruff check backend/src backend/tests
+git diff --check
 ```
 
 Live model validation is optional and must be skipped unless a reachable

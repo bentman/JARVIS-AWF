@@ -15,6 +15,14 @@ export type MethodName =
   | "awf/registry.get"
   | "awf/registry.validate"
   | "awf/registry.publish"
+  | "awf/registry.reindex"
+  | "awf/registry.retire"
+  | "awf/registry.trust"
+  | "awf/workflow.authorDraft"
+  | "awf/proposal.get"
+  | "awf/proposal.update"
+  | "awf/proposal.publish"
+  | "awf/proposal.reject"
   | "awf/secret.set"
   | "awf/secret.listNames"
   | "awf/events.subscribe";
@@ -101,6 +109,24 @@ export interface RegistryEntry {
   kind: string;
   name: string;
   version: string;
+}
+
+export interface Proposal {
+  proposal_id: string;
+  kind: "workflows";
+  name: string;
+  version: string;
+  status: "draft" | "published" | "rejected";
+  draft_digest: string;
+  draft_path: string;
+  summary: string;
+  created_at: string;
+  updated_at: string;
+  decided_at: string | null;
+  published_digest: string | null;
+  rejection_reason: string | null;
+  content: string;
+  events: Record<string, unknown>[];
 }
 
 export class ProtocolError extends Error {

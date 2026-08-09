@@ -5,6 +5,7 @@ import {
   type Artifact,
   type JsonRpcResponse,
   type MethodName,
+  type Proposal,
   type RegistryEntry,
   type RunStartResult,
   type RunStatus,
@@ -114,8 +115,33 @@ export class ProtocolClient {
     return this.call("awf/registry.validate", { path });
   }
 
-  registryPublish(path: string): Promise<Record<string, unknown>> {
-    return this.call("awf/registry.publish", { path });
+  registryPublish(path: string, kind: string): Promise<Record<string, unknown>> {
+    return this.call("awf/registry.publish", { path, kind });
+  }
+
+  workflowAuthorDraft(options: {
+    objective: string;
+    name?: string;
+    version?: string;
+    profile?: string;
+  }): Promise<Proposal> {
+    return this.call("awf/workflow.authorDraft", options);
+  }
+
+  proposalGet(proposalId: string): Promise<Proposal> {
+    return this.call("awf/proposal.get", { proposalId });
+  }
+
+  proposalUpdate(proposalId: string, content: string, summary?: string): Promise<Proposal> {
+    return this.call("awf/proposal.update", { proposalId, content, summary });
+  }
+
+  proposalPublish(proposalId: string, digest: string): Promise<Record<string, unknown>> {
+    return this.call("awf/proposal.publish", { proposalId, digest });
+  }
+
+  proposalReject(proposalId: string, reason?: string): Promise<Proposal> {
+    return this.call("awf/proposal.reject", { proposalId, reason });
   }
 
   secretSet(name: string, value: string): Promise<Record<string, unknown>> {

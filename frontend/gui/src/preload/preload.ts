@@ -14,6 +14,11 @@ contextBridge.exposeInMainWorld("awf", {
   approvalApprove: (approvalId: string) => ipcRenderer.invoke(CHANNELS.approvalApprove, approvalId),
   approvalReject: (approvalId: string, reason: string) =>
     ipcRenderer.invoke(CHANNELS.approvalReject, approvalId, reason),
+  proposalGet: (proposalId: string) => ipcRenderer.invoke(CHANNELS.proposalGet, proposalId),
+  proposalPublish: (proposalId: string, digest: string) =>
+    ipcRenderer.invoke(CHANNELS.proposalPublish, proposalId, digest),
+  proposalReject: (proposalId: string, reason?: string) =>
+    ipcRenderer.invoke(CHANNELS.proposalReject, proposalId, reason),
   voiceRoundTrip: (
     wakeAudioPath: string,
     commandAudioPath: string,

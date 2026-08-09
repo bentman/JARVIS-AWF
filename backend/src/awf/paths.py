@@ -39,6 +39,10 @@ def artifacts_dir(repo_root: Path) -> Path:
     return repo_root / "data" / "artifacts"
 
 
+def proposals_dir(repo_root: Path) -> Path:
+    return repo_root / "data" / "proposals"
+
+
 def config_voice_dir(repo_root: Path) -> Path:
     return repo_root / "config" / "voice"
 

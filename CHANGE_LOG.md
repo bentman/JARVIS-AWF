@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-09 09:04
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0019 workflow authorship as a digest-bound proposal pipeline backed by structured resident-mind output, durable proposal storage, CLI/JSON-RPC methods, and frontend proposal review controls.
+  - Scope: `backend/src/awf/authoring/*`, proposal schema/bootstrap, Model Gateway structured output, CLI/core ops/stdio proposal methods, frontend shared/CLI/GUI proposal surfaces, focused tests, and ADR-0019.
+  - Validation: `backend/.venv/bin/python -m pytest backend/tests/integration/test_workflow_authoring_proposals.py backend/tests/integration/test_phase3_model_gateway.py backend/tests/integration/test_phase10_server_stdio.py backend/tests/integration/test_phase10_cli_main.py backend/tests/integration/test_phase0_bootstrap.py` -> 53 passed; frontend shared tests -> 8 passed; frontend CLI tests -> 35 passed; frontend GUI tests -> 31 passed; `npm --prefix frontend run build` passed; `backend/.venv/bin/python -m ruff check backend/src backend/tests` passed; `git diff --check` passed.
+  - Notes: live resident-mind runtime commands remain outside-sandbox evidence; deterministic acceptance uses mocked structured model output. Frontend commands passed in the current shell with Node v22.19.0; the repo policy remains Node >=26.
+
 - Timestamp: 2026-08-09 08:32
   - Host class(es): Linux/WSL2, AMD64, NVIDIA CUDA
   - Summary: Fixed managed resident-mind sidecar lifecycle and fallback behavior so `awf llm serve start` leaves a stoppable process, CPU fallback is selected when an accelerator artifact is unavailable, and local OpenAI-compatible llama.cpp calls do not require an operator secret.

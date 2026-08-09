@@ -140,6 +140,46 @@ def test_registry_validate_command(tmp_path, capsys, fixtures_dir):
     assert out["kind"] == "CapabilityRecord"
 
 
+def test_author_workflow_command_dispatches_to_core_ops(tmp_path, monkeypatch):
+    repo_root = make_repo(tmp_path)
+    captured = {}
+
+    def fake_author(repo_root, conn, *, objective, name, version, profile_ref):
+        captured.update({"objective": objective, "name": name, "version": version, "profile_ref": profile_ref})
+        return {"proposal_id": "p1", "status": "draft"}
+
+    monkeypatch.setattr(cli_main.ops, "op_workflow_author_draft", fake_author)
+
+    exit_code = cli_main.run(
+        ["author", "workflow", "--objective", "make demo", "--name", "demo", "--version", "0.1.0"],
+        repo_root,
+    )
+
+    assert exit_code == 0
+    assert captured == {
+        "objective": "make demo",
+        "name": "demo",
+        "version": "0.1.0",
+        "profile_ref": "resident-mind@1.0.0",
+    }
+
+
+def test_proposal_publish_command_dispatches_to_core_ops(tmp_path, monkeypatch):
+    repo_root = make_repo(tmp_path)
+    captured = {}
+
+    def fake_publish(repo_root, conn, *, proposal_id, digest):
+        captured.update({"proposal_id": proposal_id, "digest": digest})
+        return {"proposal": {"proposal_id": proposal_id, "status": "published"}}
+
+    monkeypatch.setattr(cli_main.ops, "op_proposal_publish", fake_publish)
+
+    exit_code = cli_main.run(["proposal", "publish", "p1", "--digest", "abc"], repo_root)
+
+    assert exit_code == 0
+    assert captured == {"proposal_id": "p1", "digest": "abc"}
+
+
 def test_registry_reindex_command_dispatches_to_core_ops(tmp_path, capsys, monkeypatch):
     repo_root = make_repo(tmp_path)
     monkeypatch.setattr(

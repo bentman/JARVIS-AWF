@@ -14,9 +14,7 @@ class WorktreeError(RuntimeError):
 
 
 def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
-    result = subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True
-    )
+    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
     if result.returncode != 0:
         raise WorktreeError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
     return result
@@ -42,9 +40,7 @@ def create_worktree(repo_root: Path, run_id: str, base_ref: str = "HEAD") -> Pat
 def commit_all_changes(worktree_path: Path, message: str) -> str | None:
     """Commit all changes, or return None if there was nothing to commit."""
     _run_git(["add", "-A"], cwd=worktree_path)
-    staged = subprocess.run(
-        ["git", "diff", "--cached", "--quiet"], cwd=worktree_path
-    )
+    staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=worktree_path)
     if staged.returncode == 0:
         return None
     _run_git(["commit", "-m", message], cwd=worktree_path)
@@ -81,7 +77,9 @@ def merge_branch(worktree_path: Path, branch: str, *, message: str) -> None:
     merge cleanly and raises, rather than picking a side."""
     result = subprocess.run(
         ["git", "merge", "--no-ff", branch, "-m", message],
-        cwd=worktree_path, capture_output=True, text=True,
+        cwd=worktree_path,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         subprocess.run(["git", "merge", "--abort"], cwd=worktree_path, capture_output=True, text=True)
@@ -92,9 +90,13 @@ def remove_worktree(repo_root: Path, run_id: str) -> None:
     path = worktree_path(repo_root, run_id)
     subprocess.run(
         ["git", "worktree", "remove", "--force", str(path)],
-        cwd=repo_root, capture_output=True, text=True,
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
     )
     subprocess.run(
         ["git", "branch", "-D", branch_name(run_id)],
-        cwd=repo_root, capture_output=True, text=True,
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
     )

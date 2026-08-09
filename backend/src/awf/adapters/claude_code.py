@@ -26,17 +26,17 @@ class ClaudeCodeAdapterError(RuntimeError):
 def invoke(invocation: AgentInvocation) -> AgentResult:
     permission_mode = invocation.constraints.get("permission_mode", "acceptEdits")
     if permission_mode == FORBIDDEN_PERMISSION_MODE:
-        raise ClaudeCodeAdapterError(
-            "bypassPermissions MUST NOT be used outside an explicit container/VM escalation"
-        )
+        raise ClaudeCodeAdapterError("bypassPermissions MUST NOT be used outside an explicit container/VM escalation")
     timeout_seconds = invocation.constraints.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
 
     command = [
         "claude",
         "--print",
         invocation.objective,
-        "--permission-mode", permission_mode,
-        "--output-format", "json",
+        "--permission-mode",
+        permission_mode,
+        "--output-format",
+        "json",
     ]
     model_override = invocation.constraints.get("model_override")
     if model_override:

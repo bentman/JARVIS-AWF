@@ -1,7 +1,5 @@
 import json
 import subprocess
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -49,7 +47,9 @@ def make_handoff_workflow(max_hops=4, payload_schema=None):
             "kind": "Workflow",
             "metadata": {"name": "handoff-demo", "version": "1.0.0", "digest": "sha256:abc"},
             "spec": {
-                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "inputSchema": {},
+                "outputSchema": {},
+                "budgets": {},
                 "nodes": [
                     {
                         "id": "loop",
@@ -92,9 +92,7 @@ def test_handoff_completes_on_success_path_before_max_hops(worktree, conn):
     executor = make_handoff_node_executor(adapter_registry, worktree)
 
     workflow = make_handoff_workflow(max_hops=4)
-    result = run_workflow_definition(
-        conn, run_id="run-1", workflow=workflow, node_executors={"handoff": executor}
-    )
+    result = run_workflow_definition(conn, run_id="run-1", workflow=workflow, node_executors={"handoff": executor})
 
     assert result["status"] == "SUCCEEDED"
     assert hops["n"] == 2
@@ -115,9 +113,7 @@ def test_handoff_reaches_max_hops_moves_run_to_waiting_input(worktree, conn):
     executor = make_handoff_node_executor(adapter_registry, worktree)
 
     workflow = make_handoff_workflow(max_hops=2)
-    result = run_workflow_definition(
-        conn, run_id="run-1", workflow=workflow, node_executors={"handoff": executor}
-    )
+    result = run_workflow_definition(conn, run_id="run-1", workflow=workflow, node_executors={"handoff": executor})
 
     assert result["status"] == "WAITING_INPUT"
     assert result["hops_used"] == 2
@@ -136,6 +132,7 @@ def test_handoff_alternates_between_the_two_adapters(worktree, conn):
                 json.dumps({"handoff_complete": completed, "summary": name})
             )
             return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
         return adapter_fn
 
     adapter_registry = {"a": make_adapter("a"), "b": make_adapter("b")}
@@ -166,9 +163,7 @@ def test_handoff_missing_status_file_fails_run_cleanly_with_tool_error(worktree,
     assert result["status"] == "FAILED"
     row = conn.execute("SELECT status FROM runs WHERE run_id = 'run-1'").fetchone()
     assert row["status"] == "FAILED"
-    step_row = conn.execute(
-        "SELECT status FROM steps WHERE step_id = 'run-1:loop#1:hop1'"
-    ).fetchone()
+    step_row = conn.execute("SELECT status FROM steps WHERE step_id = 'run-1:loop#1:hop1'").fetchone()
     assert step_row["status"] == "SUCCEEDED"
 
 
@@ -233,8 +228,6 @@ def test_handoff_adapter_failure_fails_run_cleanly_with_tool_error(worktree, con
     result = run_workflow_definition(conn, run_id="run-1", workflow=workflow, node_executors={"handoff": executor})
 
     assert result["status"] == "FAILED"
-    step_row = conn.execute(
-        "SELECT status, failure_class FROM steps WHERE step_id = 'run-1:loop#1:hop1'"
-    ).fetchone()
+    step_row = conn.execute("SELECT status, failure_class FROM steps WHERE step_id = 'run-1:loop#1:hop1'").fetchone()
     assert step_row["status"] == "FAILED"
     assert step_row["failure_class"] == "TOOL_ERROR"

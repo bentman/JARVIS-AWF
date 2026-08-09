@@ -15,7 +15,7 @@ from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.envfile import get_env_value, set_env_value
 from awf.paths import REPO_ROOT, db_path, env_path
-from awf.secrets.store import get_secret, list_secret_names, rotate_key, set_secret
+from awf.secrets.store import list_secret_names, rotate_key, set_secret
 
 
 def _load_key(repo_root: Path) -> bytes:

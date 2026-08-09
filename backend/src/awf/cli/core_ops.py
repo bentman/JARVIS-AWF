@@ -28,18 +28,26 @@ from awf.gates.gate_node import make_trifecta_gate_executor
 from awf.ids import uuid7
 from awf.isolation.scratch import create_scratch_dir, remove_scratch_dir, scratch_path
 from awf.isolation.worktree import create_worktree, remove_worktree, worktree_path
-from awf.paths import artifacts_dir
+from awf.paths import artifacts_dir, env_path
 from awf.paths import db_path as resolve_db_path
-from awf.paths import env_path
 from awf.registry import index as registry_index
 from awf.registry.agent_manifest import load_agent_manifest
 from awf.registry.capability_record import load_capability_record, parse_capability_record
 from awf.registry.index import latest_version
-from awf.registry.kinds import AGENTS, CAPABILITIES, MCP, MODEL_PROFILES, PERSONAS, SKILLS, VOICE_PROFILES, WORKFLOWS
-from awf.registry.kinds import UnknownRegistryKindError
+from awf.registry.kinds import (
+    AGENTS,
+    CAPABILITIES,
+    MCP,
+    MODEL_PROFILES,
+    PERSONAS,
+    SKILLS,
+    VOICE_PROFILES,
+    WORKFLOWS,
+    UnknownRegistryKindError,
+    version_names,
+)
 from awf.registry.kinds import by_key as kind_by_key
 from awf.registry.kinds import object_path as kind_object_path
-from awf.registry.kinds import version_names
 from awf.registry.mcp_server import load_mcp_server, parse_mcp_server
 from awf.registry.model_profile import load_model_profile, parse_model_profile
 from awf.registry.persona import load_persona, parse_persona
@@ -166,7 +174,9 @@ def _make_run_map_item(artifacts_root: Path, repo_root: Path):
             child_workflow = _resolve_workflow(repo_root, workflow_ref)
             child_run_id = uuid7()
             create_run(
-                item_conn, run_id=child_run_id, workflow_ref=child_workflow.ref,
+                item_conn,
+                run_id=child_run_id,
+                workflow_ref=child_workflow.ref,
                 input_json=json.dumps({"item": item, "index": index}),
             )
             item_worktree = create_worktree(repo_root, child_run_id, base_ref=parent_head)
@@ -213,9 +223,7 @@ def _build_node_executors(
             # nothing here infers it automatically) to reach the full
             # Trifecta Adversary pass instead of Builder+Verifier only.
             review_profile, review_secret_key = _resolve_review_profile(node, repo_root)
-            adversary_review_profile, adversary_review_secret_key = _resolve_adversary_review_profile(
-                node, repo_root
-            )
+            adversary_review_profile, adversary_review_secret_key = _resolve_adversary_review_profile(node, repo_root)
             executors["gate"] = make_trifecta_gate_executor(
                 check_fn=_make_check_fn(node, worktree),
                 check_summary=node.get("check", node["id"]),
@@ -292,9 +300,7 @@ def op_run_status(conn: sqlite3.Connection, *, run_id: str) -> dict:
     run_row = conn.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
     if run_row is None:
         raise CoreOpError(f"no such run: {run_id}")
-    steps = conn.execute(
-        "SELECT * FROM steps WHERE run_id = ? ORDER BY started_at", (run_id,)
-    ).fetchall()
+    steps = conn.execute("SELECT * FROM steps WHERE run_id = ? ORDER BY started_at", (run_id,)).fetchall()
     return {**dict(run_row), "steps": [dict(row) for row in steps]}
 
 
@@ -312,9 +318,7 @@ def op_run_resume(repo_root: Path, conn: sqlite3.Connection) -> list[dict]:
         workflow = _resolve_workflow(repo_root, run_row["workflow_ref"], conn=conn)
         worktree = worktree_path(repo_root, run_id)
         run_scratch_dir = scratch_path(repo_root, run_id)
-        node_executors = _build_node_executors(
-            workflow, worktree, artifacts_dir(repo_root), repo_root, run_scratch_dir
-        )
+        node_executors = _build_node_executors(workflow, worktree, artifacts_dir(repo_root), repo_root, run_scratch_dir)
         result = _run_workflow_safely(conn, run_id=run_id, workflow=workflow, node_executors=node_executors)
         _cleanup_run_workspace(repo_root, run_id, result)
         results.append({"run_id": run_id, **result})
@@ -322,9 +326,7 @@ def op_run_resume(repo_root: Path, conn: sqlite3.Connection) -> list[dict]:
 
 
 def op_approval_list(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute(
-        "SELECT * FROM approvals WHERE status = 'pending' ORDER BY requested_at"
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM approvals WHERE status = 'pending' ORDER BY requested_at").fetchall()
     return [dict(row) for row in rows]
 
 
@@ -385,9 +387,7 @@ def op_approval_reject(conn: sqlite3.Connection, *, approval_id: str, reason: st
 
 
 def op_artifact_list(conn: sqlite3.Connection, *, run_id: str) -> list[dict]:
-    rows = conn.execute(
-        "SELECT * FROM artifacts WHERE run_id = ? ORDER BY created_at", (run_id,)
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM artifacts WHERE run_id = ? ORDER BY created_at", (run_id,)).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -454,9 +454,14 @@ def op_registry_get(repo_root: Path, conn: sqlite3.Connection, *, kind: str, nam
     obj = dataclasses.asdict(_load_registry_object(repo_root, registry_kind, path))
 
     return {
-        "kind": kind, "name": name, "version": version, "source": source,
+        "kind": kind,
+        "name": name,
+        "version": version,
+        "source": source,
         "content": path.read_text(),
-        "digest": digest, "trust_status": trust_status, "object": obj,
+        "digest": digest,
+        "trust_status": trust_status,
+        "object": obj,
     }
 
 
@@ -562,7 +567,13 @@ def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path
             (skill.name, skill.version, digest, str(target_dir.relative_to(repo_root)), utc_now_rfc3339()),
         )
         conn.commit()
-        return {"kind": "skills", "name": skill.name, "version": skill.version, "digest": digest, "path": str(target_dir)}
+        return {
+            "kind": "skills",
+            "name": skill.name,
+            "version": skill.version,
+            "digest": digest,
+            "path": str(target_dir),
+        }
 
     if registry_kind is AGENTS:
         manifest = load_agent_manifest(path)
@@ -694,7 +705,7 @@ def op_llm_models(repo_root: Path) -> dict:
     from awf.llm.sidecar import probe
 
     models = local_models(repo_root)
-    res: dict[str, Any] = {
+    res: dict[str, object] = {
         "local_models": [
             {
                 "name": m.name,

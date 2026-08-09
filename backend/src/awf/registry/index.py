@@ -45,15 +45,31 @@ def set_trust_status(conn: sqlite3.Connection, kind: str, name: str, version: st
     return index_row(conn, kind, name, version)
 
 
-def _upsert(conn: sqlite3.Connection, *, kind: str, name: str, version: str, digest: str, source: str, path: Path, repo_root: Path) -> None:
+def _upsert(
+    conn: sqlite3.Connection,
+    *,
+    kind: str,
+    name: str,
+    version: str,
+    digest: str,
+    source: str,
+    path: Path,
+    repo_root: Path,
+) -> None:
     conn.execute(
         "INSERT INTO registry_index (kind, name, version, digest, source, path, trust_status, indexed_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(kind, name, version) DO UPDATE SET "
         "digest=excluded.digest, path=excluded.path, source=excluded.source, indexed_at=excluded.indexed_at",
         (
-            kind, name, version, digest, source, str(path.relative_to(repo_root)),
-            _DEFAULT_TRUST_STATUS[source], utc_now_rfc3339(),
+            kind,
+            name,
+            version,
+            digest,
+            source,
+            str(path.relative_to(repo_root)),
+            _DEFAULT_TRUST_STATUS[source],
+            utc_now_rfc3339(),
         ),
     )
 
@@ -77,8 +93,14 @@ def reindex(repo_root: Path, conn: sqlite3.Connection) -> dict:
                     path = object_path(name_dir, kind, version)
                     digest = compute_digest(path, kind)
                     _upsert(
-                        conn, kind=kind.key, name=name_dir.name, version=version,
-                        digest=digest, source=source, path=path, repo_root=repo_root,
+                        conn,
+                        kind=kind.key,
+                        name=name_dir.name,
+                        version=version,
+                        digest=digest,
+                        source=source,
+                        path=path,
+                        repo_root=repo_root,
                     )
                     counts[kind.key][source] += 1
     conn.commit()

@@ -93,7 +93,9 @@ def test_derive_llm_readiness_cuda_hardware_missing_artifact(tmp_path):
         api_key_secret_name=None,
     )
 
-    r = derive_llm_readiness(inv, tokens, server=s, profile_id="linux-x64-cuda", model_path=model_path, repo_root=tmp_path)
+    r = derive_llm_readiness(
+        inv, tokens, server=s, profile_id="linux-x64-cuda", model_path=model_path, repo_root=tmp_path
+    )
     assert r.device == "cpu"
     assert r.ready is True
     assert "Degraded-accelerator-unavailable: no gpu.cuda artifact declared for linux-x64-cuda" in r.reason
@@ -172,7 +174,9 @@ def test_derive_llm_readiness_fully_ready(tmp_path):
     model_path = _write_ready_artifacts(tmp_path, "linux-x64-cpu")
     s = _managed_server("linux-x64-cpu", "cpu")
 
-    r = derive_llm_readiness(inv, tokens, server=s, profile_id="linux-x64-cpu", model_path=model_path, repo_root=tmp_path)
+    r = derive_llm_readiness(
+        inv, tokens, server=s, profile_id="linux-x64-cpu", model_path=model_path, repo_root=tmp_path
+    )
     assert r.device == "cpu"
     assert r.ready is True
     assert "running on cpu" in r.reason
@@ -196,6 +200,26 @@ def test_derive_llm_readiness_returns_cuda_when_declared_and_present(tmp_path):
     assert r.device == "gpu.cuda"
     assert r.ready is True
     assert "gpu.cuda artifact declared" in r.reason
+
+
+def test_derive_llm_readiness_returns_vulkan_when_declared_and_present(tmp_path):
+    model_path = _write_ready_artifacts(tmp_path, "linux-x64-gpu")
+    s = _managed_server("linux-x64-gpu", "gpu.vulkan")
+    inv = HardwareInventory(gpu_available=True, gpu_vendor="amd")
+    tokens = ["vulkan:available"]
+
+    r = derive_llm_readiness(
+        inv,
+        tokens,
+        server=s,
+        profile_id="linux-x64-gpu",
+        model_path=model_path,
+        repo_root=tmp_path,
+    )
+
+    assert r.device == "gpu.vulkan"
+    assert r.ready is True
+    assert "gpu.vulkan artifact declared" in r.reason
 
 
 def test_derive_llm_readiness_returns_qnn_when_declared_and_present(tmp_path):

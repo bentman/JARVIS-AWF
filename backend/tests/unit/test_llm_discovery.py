@@ -1,7 +1,6 @@
 """Unit tests for LLM local model discovery and binary acquisition (ADR-0017)."""
 
 import zipfile
-from pathlib import Path
 
 import pytest
 
@@ -51,6 +50,24 @@ def test_acquire_binary_present(tmp_path):
     res = acquire_binary(tmp_path, prof_id, art)
     assert res["status"] == "PRESENT"
     assert res["path"] == str(b_path)
+
+
+def test_acquire_binary_manual_missing_reports_operator_action(tmp_path):
+    prof_id = "linux-x64-cuda"
+    art = Artifact(
+        profile_id=prof_id,
+        url="manual://llama.cpp/b9704/linux-x64-cuda",
+        archive="manual",
+        binary="llama-server",
+        accelerator="gpu.cuda",
+        launch={},
+    )
+
+    with pytest.raises(LlmServerError) as exc_info:
+        acquire_binary(tmp_path, prof_id, art)
+
+    assert "declared as manual" in str(exc_info.value)
+    assert "runtimes/llama.cpp/linux-x64-cuda" in str(exc_info.value)
 
 
 def test_acquire_binary_extract(tmp_path, monkeypatch):

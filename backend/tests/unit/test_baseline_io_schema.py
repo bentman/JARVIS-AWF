@@ -19,9 +19,7 @@ def test_validate_input_rejects_missing_required_field():
 
 
 def test_render_outputs_resolves_engine_template():
-    rendered = render_outputs(
-        {"repairs": "{{ engine.repairs_used }}"}, {"repairs_used": 2, "hops_used": 0}
-    )
+    rendered = render_outputs({"repairs": "{{ engine.repairs_used }}"}, {"repairs_used": 2, "hops_used": 0})
     assert rendered == {"repairs": 2}
 
 
@@ -41,4 +39,7 @@ def test_validate_output_accepts_conforming_data():
 
 def test_validate_output_rejects_type_mismatch():
     with pytest.raises(OutputValidationError):
-        validate_output({"repairs": None}, {"type": "object", "properties": {"repairs": {"type": "integer"}}, "required": ["repairs"]})
+        validate_output(
+            {"repairs": None},
+            {"type": "object", "properties": {"repairs": {"type": "integer"}}, "required": ["repairs"]},
+        )

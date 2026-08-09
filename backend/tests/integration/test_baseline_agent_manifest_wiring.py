@@ -169,8 +169,7 @@ def test_agent_ref_mcp_list_is_threaded_through_to_the_adapter(tmp_path, conn):
     fetch_dir = tmp_path / "config" / "app_registry" / "mcp" / "fetch"
     fetch_dir.mkdir(parents=True)
     (fetch_dir / "1.0.0.yaml").write_text(
-        "name: fetch\nversion: 1.0.0\ntype: stdio\ncommand: npx\n"
-        "args: ['-y', '@modelcontextprotocol/server-fetch']\n"
+        "name: fetch\nversion: 1.0.0\ntype: stdio\ncommand: npx\nargs: ['-y', '@modelcontextprotocol/server-fetch']\n"
     )
     captured = {}
 
@@ -190,8 +189,7 @@ def test_agent_ref_skills_list_is_threaded_through_to_the_objective(tmp_path, co
     publish_manifest(
         tmp_path,
         "skilled-builder",
-        "name: skilled-builder\nversion: 1.0.0\ndescription: x\nadapter: claude-code\n"
-        "skills: [demo-skill@1.0.0]\n",
+        "name: skilled-builder\nversion: 1.0.0\ndescription: x\nadapter: claude-code\nskills: [demo-skill@1.0.0]\n",
         instructions="You are the skilled builder.",
     )
     skill_dir = tmp_path / "config" / "app_registry" / "skills" / "demo-skill" / "1.0.0"
@@ -221,8 +219,7 @@ def test_agent_ref_model_profile_is_threaded_through_to_the_adapter(tmp_path, co
     publish_manifest(
         tmp_path,
         "local-builder",
-        "name: local-builder\nversion: 1.0.0\ndescription: x\nadapter: claude-code\n"
-        "modelProfile: local-model@1.0.0\n",
+        "name: local-builder\nversion: 1.0.0\ndescription: x\nadapter: claude-code\nmodelProfile: local-model@1.0.0\n",
     )
     profile_dir = tmp_path / "data" / "registry" / "model-profiles" / "local-model"
     profile_dir.mkdir(parents=True)

@@ -20,11 +20,10 @@ files already passed in, logging the result to the `events` table.
 
 import json
 import sqlite3
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable
 
-from awf.clock import utc_now_rfc3339
 from awf.events.writer import write_event
 from awf.hardware.preflight import collect_preflight_tokens
 from awf.hardware.profiler import SYSTEM_RUN_ID, collect_inventory, run_hardware_profiler
@@ -59,9 +58,7 @@ class VoiceRoundTripResult:
     response_audio: "tuple"  # (samples: np.ndarray, sample_rate: int)
 
 
-def _verify_and_log_pinned_models(
-    conn: sqlite3.Connection, repo_root: Path, profile_id: str, readiness: dict
-) -> None:
+def _verify_and_log_pinned_models(conn: sqlite3.Connection, repo_root: Path, profile_id: str, readiness: dict) -> None:
     """Section 16.4's pinned manifests (`config/voice/*`) exist and are
     checked here, but a missing artifact is logged, not raised - this is an
     audit record of what's actually installed against what's named, the
@@ -70,7 +67,10 @@ def _verify_and_log_pinned_models(
     follows, not a hard gate on whether the round trip may proceed."""
     verifications = verify_models(repo_root)
     write_event(
-        conn, run_id=SYSTEM_RUN_ID, new_status="VERIFIED", actor="hardware_profiler",
+        conn,
+        run_id=SYSTEM_RUN_ID,
+        new_status="VERIFIED",
+        actor="hardware_profiler",
         reason_code="pinned_model_verification",
         payload_json=json.dumps(
             {
@@ -130,9 +130,7 @@ def run_voice_round_trip(
         threshold=wake_threshold,
     )
     if not wake_result["detected"]:
-        raise VoicePipelineError(
-            f"wake word did not fire on {wake_audio_path} (score={wake_result['score']:.4f})"
-        )
+        raise VoicePipelineError(f"wake word did not fire on {wake_audio_path} (score={wake_result['score']:.4f})")
 
     segments = speech_segments(command_audio_path, vad_model_path)
     if not segments:

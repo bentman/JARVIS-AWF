@@ -41,7 +41,9 @@ def test_loop_stops_when_condition_field_goes_false(conn):
 
     executor = make_loop_node_executor(run_child)
     output = executor(
-        conn, "run-1", "unused-step-id",
+        conn,
+        "run-1",
+        "unused-step-id",
         {"id": "retry-loop", "type": "loop", "workflowRef": "child@1.0.0", "maxIterations": 10},
     )
 
@@ -59,7 +61,9 @@ def test_loop_reaching_max_iterations_while_still_true_waits_for_input(conn):
 
     executor = make_loop_node_executor(run_child)
     output = executor(
-        conn, "run-1", "unused-step-id",
+        conn,
+        "run-1",
+        "unused-step-id",
         {"id": "retry-loop", "type": "loop", "workflowRef": "child@1.0.0", "maxIterations": 3},
     )
 
@@ -78,6 +82,8 @@ def test_loop_raises_when_a_child_iteration_fails(conn):
 
     with pytest.raises(LoopNodeError):
         executor(
-            conn, "run-1", "unused-step-id",
+            conn,
+            "run-1",
+            "unused-step-id",
             {"id": "retry-loop", "type": "loop", "workflowRef": "child@1.0.0", "maxIterations": 3},
         )

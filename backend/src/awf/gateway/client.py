@@ -62,7 +62,7 @@ def complete(
         try:
             response = litellm.completion(**kwargs)
             return response.choices[0].message.content
-        except Exception as exc:  # noqa: BLE001 - candidate-fallback boundary
+        except Exception as exc:
             last_error = exc
             if profile.fallback.mode != "ordered":
                 raise

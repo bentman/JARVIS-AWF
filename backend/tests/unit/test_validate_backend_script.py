@@ -17,7 +17,9 @@ def _load_validator(repo_root: Path):
 def test_parse_pytest_summary_counts_includes_all_reported_outcomes(repo_root):
     validator = _load_validator(repo_root)
 
-    counts = validator._parse_pytest_summary_counts("1 passed, 2 failed, 3 skipped, 4 deselected, 5 warnings, 6 errors\n")
+    counts = validator._parse_pytest_summary_counts(
+        "1 passed, 2 failed, 3 skipped, 4 deselected, 5 warnings, 6 errors\n"
+    )
 
     assert counts == {
         "passed": 1,

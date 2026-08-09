@@ -34,9 +34,13 @@ def test_invoke_builds_non_interactive_acceptedits_command(monkeypatch):
     result = invoke(make_invocation())
 
     assert captured["command"] == [
-        "claude", "--print", "do the thing",
-        "--permission-mode", "acceptEdits",
-        "--output-format", "json",
+        "claude",
+        "--print",
+        "do the thing",
+        "--permission-mode",
+        "acceptEdits",
+        "--output-format",
+        "json",
     ]
     assert "--dangerously-skip-permissions" not in captured["command"]
     assert result.status == AgentStatus.COMPLETED

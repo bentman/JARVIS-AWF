@@ -24,19 +24,19 @@ trusting a malformed or incomplete payload.
 
 import json
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import jsonschema
 
-from awf.adapters.base import AgentInvocation, AgentStatus
+from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
 from awf.clock import utc_now_rfc3339
 from awf.engine.executor import run_step
 from awf.engine.run import create_step
 from awf.events.writer import write_event
 from awf.isolation.worktree import commit_all_changes
 
-AdapterFn = Callable[[AgentInvocation], "AgentResult"]
+AdapterFn = Callable[[AgentInvocation], AgentResult]
 
 DEFAULT_STATUS_FILENAME = "handoff_status.json"
 
@@ -80,11 +80,14 @@ def make_handoff_node_executor(
             invocation = AgentInvocation(objective=objective, inputs={}, workspace_root=worktree_path)
             hop_step_id = f"{step_id}:hop{hop_count}"
             create_step(
-                conn, step_id=hop_step_id, run_id=run_id,
-                node_id=f"{node['id']}:hop{hop_count}", attempt=1,
+                conn,
+                step_id=hop_step_id,
+                run_id=run_id,
+                node_id=f"{node['id']}:hop{hop_count}",
+                attempt=1,
             )
 
-            def fn(_payload: dict, adapter_fn=adapter_fn, invocation=invocation) -> dict:
+            def fn(_payload: dict, adapter_fn=adapter_fn, invocation=invocation, hop_count=hop_count) -> dict:
                 result = adapter_fn(invocation)
                 if result.status != AgentStatus.COMPLETED:
                     raise HandoffError(
@@ -120,8 +123,11 @@ def make_handoff_node_executor(
         )
         conn.commit()
         write_event(
-            conn, run_id=run_id, new_status="WAITING_INPUT",
-            actor="engine", reason_code="handoff_max_hops_reached",
+            conn,
+            run_id=run_id,
+            new_status="WAITING_INPUT",
+            actor="engine",
+            reason_code="handoff_max_hops_reached",
         )
         return {"completed": False, "hops_used": hop_count, "waiting_input": True}
 

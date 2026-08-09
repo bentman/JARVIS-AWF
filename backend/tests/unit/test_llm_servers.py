@@ -2,7 +2,7 @@
 
 import pytest
 
-from awf.llm.servers import Artifact, LlmServerError, artifact_for, load_servers
+from awf.llm.servers import LlmServerError, artifact_for, load_servers
 
 
 def test_load_servers_valid(tmp_path):
@@ -43,6 +43,22 @@ servers:
     assert art.launch["ctx_size"] == 4096
 
     assert artifact_for(s, "windows-x64-cpu") is None
+
+
+def test_load_real_servers_declares_every_canonical_profile(repo_root):
+    from awf.hardware.profiler import CANONICAL_PROFILES
+
+    _default_id, servers = load_servers(repo_root)
+    llama_server = servers["llama-server"]
+
+    assert set(llama_server.artifacts) == set(CANONICAL_PROFILES)
+    assert artifact_for(llama_server, "linux-x64-cuda").archive == "manual"
+    assert artifact_for(llama_server, "linux-x64-cuda").accelerator == "gpu.cuda"
+    assert artifact_for(llama_server, "windows-x64-cuda").archive == "zip"
+    assert "llama-b9704-bin-win-cuda-12.4-x64.zip" in artifact_for(llama_server, "windows-x64-cuda").url
+    assert artifact_for(llama_server, "linux-x64-gpu").accelerator == "gpu.vulkan"
+    assert artifact_for(llama_server, "windows-arm64-gpu").accelerator == "gpu.opencl.adreno"
+    assert artifact_for(llama_server, "windows-arm64-qnn").accelerator == "npu.qnn"
 
 
 def test_load_servers_invalid_canonical_profile(tmp_path):

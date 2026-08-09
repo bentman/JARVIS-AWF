@@ -49,8 +49,8 @@ import hashlib
 import json
 import shutil
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
 from awf.cognition.envelope import PromptEnvelope, PromptSegment
@@ -173,8 +173,12 @@ def _apply_mcp(
                 target.write_bytes(source.read_bytes())
 
     write_event(
-        conn, run_id=run_id, step_id=step_id, new_status="mcp_rendered",
-        actor=actor, reason_code="mcp_rendered",
+        conn,
+        run_id=run_id,
+        step_id=step_id,
+        new_status="mcp_rendered",
+        actor=actor,
+        reason_code="mcp_rendered",
         payload_json=json.dumps({"servers": refs_with_digest}),
     )
 
@@ -302,10 +306,18 @@ def _apply_skills(
             constraints["skill_env_overlay"] = env_overlay
 
         write_event(
-            conn, run_id=run_id, step_id=step_id, new_status="skills_resolved",
-            actor=actor, reason_code="skills_resolved",
+            conn,
+            run_id=run_id,
+            step_id=step_id,
+            new_status="skills_resolved",
+            actor=actor,
+            reason_code="skills_resolved",
             payload_json=json.dumps(
-                {"skills": [{"ref": ref.ref, "digest": digest, "shared": ref.share} for ref, _s, digest, _d in resolved]}
+                {
+                    "skills": [
+                        {"ref": ref.ref, "digest": digest, "shared": ref.share} for ref, _s, digest, _d in resolved
+                    ]
+                }
             ),
         )
         resolved_skill_refs = tuple(ref.ref for ref, _skill, _digest, _dir in resolved)
@@ -450,8 +462,7 @@ def run_agent_step(
         result = adapter_fn(modeled_invocation)
         if result.status != AgentStatus.COMPLETED:
             raise AgentStepError(
-                f"adapter did not complete: status={result.status.value} "
-                f"reason={result.termination_reason!r}",
+                f"adapter did not complete: status={result.status.value} reason={result.termination_reason!r}",
                 failure_class=AGENT_STATUS_FAILURE_CLASSES.get(result.status, "INTERNAL"),
             )
         output = {"status": result.status.value, "termination_reason": result.termination_reason}

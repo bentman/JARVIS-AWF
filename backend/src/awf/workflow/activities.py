@@ -9,7 +9,7 @@ durable way to invoke the Hardware Profiler mid-Run, not just at voice setup.
 """
 
 import sqlite3
-from typing import Callable
+from collections.abc import Callable
 
 from awf.hardware.gpu_sampler import sample_gpu_utilization
 from awf.hardware.profiler import run_hardware_profiler
@@ -73,7 +73,6 @@ ACTIVITY_REGISTRY: dict[str, ActivityFn] = {
     "gpu_utilization_sample": _gpu_utilization_sample,
     "llm_server_ensure": _llm_server_ensure,
 }
-
 
 
 class UnknownActivityError(RuntimeError):

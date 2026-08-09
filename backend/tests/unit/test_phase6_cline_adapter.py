@@ -47,9 +47,13 @@ def test_invoke_builds_headless_command_and_no_yolo(monkeypatch):
     result = invoke(make_invocation())
 
     assert captured["command"] == [
-        "cline", "do the thing", "--json",
-        "--auto-approve", "true",
-        "--cwd", "/tmp/does-not-matter",
+        "cline",
+        "do the thing",
+        "--json",
+        "--auto-approve",
+        "true",
+        "--cwd",
+        "/tmp/does-not-matter",
     ]
     assert "--yolo" not in captured["command"]
     assert "--dangerously-skip-permissions" not in captured["command"]
@@ -171,4 +175,3 @@ def test_invoke_refuses_yolo_constraint():
 def test_invoke_refuses_dangerously_skip_permissions_constraint():
     with pytest.raises(ClineAdapterError):
         invoke(make_invocation(dangerously_skip_permissions=True))
-

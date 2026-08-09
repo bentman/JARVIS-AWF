@@ -4,7 +4,6 @@ import pytest
 
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
-from awf.llm.discovery import local_models
 from awf.llm.selector import current_selection, select
 from awf.llm.servers import LlmServerError
 

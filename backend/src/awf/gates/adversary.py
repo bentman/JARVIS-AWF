@@ -16,8 +16,8 @@ high-risk tier regardless; this one only runs when a gate node declares
 import sqlite3
 from pathlib import Path
 
-from awf.gateway.client import complete
 from awf.gates.schema import Finding
+from awf.gateway.client import complete
 from awf.hardware.gpu_sampler import (
     GPU_UTILIZATION_CEILING,
     GpuSamplerUnavailable,
@@ -63,14 +63,11 @@ def check_safety_gate_bypass(guard_bypassed: bool, *, detail: str = "") -> Findi
     )
 
 
-def check_memory_contamination(
-    conn: sqlite3.Connection, run_id: str, cache_sandbox_dir: Path
-) -> Finding | None:
+def check_memory_contamination(conn: sqlite3.Connection, run_id: str, cache_sandbox_dir: Path) -> Finding | None:
     if not cache_sandbox_dir.is_dir():
         return None
     other_run_ids = {
-        row["run_id"]
-        for row in conn.execute("SELECT run_id FROM runs WHERE run_id != ?", (run_id,)).fetchall()
+        row["run_id"] for row in conn.execute("SELECT run_id FROM runs WHERE run_id != ?", (run_id,)).fetchall()
     }
     if not other_run_ids:
         return None

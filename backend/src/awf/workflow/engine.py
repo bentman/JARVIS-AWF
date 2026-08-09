@@ -51,10 +51,10 @@ exception propagate to the caller as an unhandled crash.
 """
 
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
-from awf.adapters.base import AgentInvocation
+from awf.adapters.base import AgentInvocation, AgentResult
 from awf.clock import utc_now_rfc3339
 from awf.engine.agent_step import run_agent_step
 from awf.engine.executor import StepFailure, run_step
@@ -69,7 +69,7 @@ from awf.workflow.definition import WorkflowDefinition
 from awf.workflow.io_schema import OutputValidationError, render_outputs, validate_output
 
 NodeExecutor = Callable[[sqlite3.Connection, str, str, dict], dict]
-AdapterFn = Callable[[AgentInvocation], "AgentResult"]
+AdapterFn = Callable[[AgentInvocation], AgentResult]
 
 EXECUTABLE_NODE_TYPES = ("activity", "agent", "gate", "handoff", "approval", "subworkflow", "map", "loop")
 
@@ -87,7 +87,9 @@ def _synthesized_capability_for_node(node: dict, adapter_name: str) -> Capabilit
     doesn't declare a real one - still real enough to be evaluated and
     logged by the Guard, never a rubber stamp."""
     return CapabilityRecord(
-        identity=Identity(type="cli-adapter-action", provider=adapter_name, name=f"agent_node_{node['id']}", version="0.0.0"),
+        identity=Identity(
+            type="cli-adapter-action", provider=adapter_name, name=f"agent_node_{node['id']}", version="0.0.0"
+        ),
         schema_input="",
         schema_output="",
         effects=Effects(operation="update", reversible=True, idempotent=False, external_side_effect=True),
@@ -120,9 +122,7 @@ def make_agent_node_executor(
         manifest = _resolve_agent_manifest(node, repo_root)
         adapter_name = node.get("adapter") or (manifest.adapter if manifest else None)
         if not adapter_name:
-            raise WorkflowEngineError(
-                f"agent node '{node['id']}': no adapter - declare 'adapter' or 'agentRef'"
-            )
+            raise WorkflowEngineError(f"agent node '{node['id']}': no adapter - declare 'adapter' or 'agentRef'")
 
         invocation = AgentInvocation(
             objective=node["objective"],
@@ -190,9 +190,7 @@ def make_activity_node_executor(
         def fn(_payload: dict) -> dict:
             activity_fn = activity_registry.get(node["function"])
             if activity_fn is None:
-                raise UnknownActivityError(
-                    f"node '{node['id']}': no registered activity named '{node['function']}'"
-                )
+                raise UnknownActivityError(f"node '{node['id']}': no registered activity named '{node['function']}'")
             if repo_root is not None:
                 capability = _resolve_activity_capability(node, repo_root)
                 decision = authorize(
@@ -286,9 +284,7 @@ def run_workflow_definition(
             else:
                 terminal_failure = output.get("terminal_failure", False)
                 if terminal_failure or repairs_used >= max_repairs:
-                    reason_code = (
-                        "gate_terminal_failure" if terminal_failure else "gate_repair_budget_exhausted"
-                    )
+                    reason_code = "gate_terminal_failure" if terminal_failure else "gate_repair_budget_exhausted"
                     _mark_run_failed(conn, run_id=run_id, reason_code=reason_code)
                     return {
                         "status": "FAILED",

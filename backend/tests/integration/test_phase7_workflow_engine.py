@@ -49,7 +49,9 @@ def test_straight_pass_no_repair_needed(tmp_path):
         return {"passed": True}
 
     result = run_workflow_definition(
-        conn, run_id="run-1", workflow=workflow,
+        conn,
+        run_id="run-1",
+        workflow=workflow,
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
@@ -72,7 +74,9 @@ def test_gate_fails_once_then_repair_succeeds(tmp_path):
         return {"passed": len(gate_calls) > 1}
 
     result = run_workflow_definition(
-        conn, run_id="run-1", workflow=workflow,
+        conn,
+        run_id="run-1",
+        workflow=workflow,
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
@@ -91,7 +95,9 @@ def test_budget_exhausted_marks_run_failed(tmp_path):
         return {"passed": False}
 
     result = run_workflow_definition(
-        conn, run_id="run-1", workflow=workflow,
+        conn,
+        run_id="run-1",
+        workflow=workflow,
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
@@ -111,7 +117,9 @@ def test_node_type_with_no_registered_executor_raises(tmp_path):
             "kind": "Workflow",
             "metadata": {"name": "demo", "version": "1.0.0", "digest": "sha256:abc"},
             "spec": {
-                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "inputSchema": {},
+                "outputSchema": {},
+                "budgets": {},
                 "nodes": [{"id": "a", "type": "approval"}],
                 "outputs": {},
             },

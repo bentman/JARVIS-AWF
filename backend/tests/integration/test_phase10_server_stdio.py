@@ -1,8 +1,6 @@
 import io
 import json
 
-import pytest
-
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.run import create_run
@@ -28,7 +26,9 @@ def test_run_status_over_jsonrpc(tmp_path):
     repo_root, conn = make_repo(tmp_path)
     create_run(conn, run_id="run-1", workflow_ref="demo@1.0.0")
 
-    response = send(repo_root, conn, {"jsonrpc": "2.0", "id": 1, "method": "awf/run.status", "params": {"runId": "run-1"}})
+    response = send(
+        repo_root, conn, {"jsonrpc": "2.0", "id": 1, "method": "awf/run.status", "params": {"runId": "run-1"}}
+    )
 
     assert response["id"] == 1
     assert response["result"]["run_id"] == "run-1"
@@ -81,7 +81,8 @@ def test_approval_approve_over_jsonrpc(tmp_path):
     conn.commit()
 
     response = send(
-        repo_root, conn,
+        repo_root,
+        conn,
         {"jsonrpc": "2.0", "id": 5, "method": "awf/approval.approve", "params": {"approvalId": "ap-1"}},
     )
 
@@ -101,9 +102,12 @@ def test_approval_approve_over_jsonrpc_refuses_r2_from_voice_channel(tmp_path):
     conn.commit()
 
     response = send(
-        repo_root, conn,
+        repo_root,
+        conn,
         {
-            "jsonrpc": "2.0", "id": 6, "method": "awf/approval.approve",
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "awf/approval.approve",
             "params": {"approvalId": "ap-1", "channel": "voice", "riskClass": "R2"},
         },
     )

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from awf.cognition.envelope import PromptEnvelope, PromptSegment, SYSTEM_AUTHORITIES
+from awf.cognition.envelope import SYSTEM_AUTHORITIES, PromptEnvelope, PromptSegment
 
 
 @dataclass(frozen=True)

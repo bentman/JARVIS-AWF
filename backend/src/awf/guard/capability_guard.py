@@ -14,6 +14,7 @@ different role in its own output is a separate concern belonging to
 `AgentResult` post-processing, not this pre-execution check.
 """
 
+import json
 import sqlite3
 from enum import Enum
 
@@ -33,9 +34,7 @@ class Decision(Enum):
     APPROVAL_REQUIRED = "approval_required"
 
 
-def evaluate(
-    capability: CapabilityRecord, agent_allowlist: list[str], role: str | None = None
-) -> tuple[Decision, str]:
+def evaluate(capability: CapabilityRecord, agent_allowlist: list[str], role: str | None = None) -> tuple[Decision, str]:
     if capability.ref not in agent_allowlist:
         return Decision.DENY, "not_in_agent_allowlist"
 
@@ -80,13 +79,6 @@ def authorize(
         new_status=decision.value,
         actor=actor,
         reason_code=reason_code,
-        payload_json=(
-            '{"capability_ref": "%s", "risk_class": "%s", "role": %s}'
-            % (
-                capability.ref,
-                capability.risk_class,
-                f'"{role}"' if role is not None else "null",
-            )
-        ),
+        payload_json=json.dumps({"capability_ref": capability.ref, "risk_class": capability.risk_class, "role": role}),
     )
     return decision

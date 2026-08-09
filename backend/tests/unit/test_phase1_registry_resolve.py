@@ -61,9 +61,7 @@ def test_model_profiles_never_falls_back_to_config(tmp_path):
 
 
 def test_skills_resolve_to_skill_md(tmp_path):
-    expected = _make_object(
-        tmp_path, "data/registry", "skills", "demo", "1.0.0", is_skill=True
-    )
+    expected = _make_object(tmp_path, "data/registry", "skills", "demo", "1.0.0", is_skill=True)
 
     path, source = resolve_registry_object(tmp_path, "skills", "demo", "1.0.0")
 

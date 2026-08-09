@@ -40,9 +40,7 @@ def test_load_r0_capability_record(load_fixture):
     ],
 )
 def test_load_shipped_adr0009_capability_records(repo_root, name, expected_provider, expected_risk_class):
-    record = load_capability_record(
-        repo_root / "config" / "app_registry" / "capabilities" / name / "1.0.0.yaml"
-    )
+    record = load_capability_record(repo_root / "config" / "app_registry" / "capabilities" / name / "1.0.0.yaml")
     assert record.identity.name == name
     assert record.identity.provider == expected_provider
     assert record.risk_class == expected_risk_class
@@ -117,9 +115,7 @@ def test_authorize_writes_decision_event_before_use(tmp_path, load_fixture):
             actor="test-agent",
         )
 
-        rows = conn.execute(
-            "SELECT new_status, reason_code FROM events WHERE run_id = 'run-1'"
-        ).fetchall()
+        rows = conn.execute("SELECT new_status, reason_code FROM events WHERE run_id = 'run-1'").fetchall()
     finally:
         conn.close()
 
@@ -196,9 +192,7 @@ def test_authorize_records_role_in_event_payload(tmp_path, load_fixture):
             role="verifier",
         )
 
-        row = conn.execute(
-            "SELECT reason_code, payload_json FROM events WHERE run_id = 'run-1'"
-        ).fetchone()
+        row = conn.execute("SELECT reason_code, payload_json FROM events WHERE run_id = 'run-1'").fetchone()
     finally:
         conn.close()
 

@@ -79,9 +79,7 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
     if method == "awf/artifact.list":
         return ops.op_artifact_list(conn, run_id=params["runId"])
     if method == "awf/artifact.read":
-        return ops.op_artifact_read(
-            conn, artifact_id=params["artifactId"], artifacts_root=artifacts_dir(repo_root)
-        )
+        return ops.op_artifact_read(conn, artifact_id=params["artifactId"], artifacts_root=artifacts_dir(repo_root))
     if method == "awf/registry.list":
         return ops.op_registry_list(repo_root, kind=params["kind"], conn=conn)
     if method == "awf/registry.get":
@@ -126,7 +124,7 @@ def handle_line(repo_root: Path, conn, line: str, out_stream) -> None:
         _write(out_stream, {"jsonrpc": "2.0", "id": request_id, "result": result})
     except JsonRpcError as exc:
         _write(out_stream, {"jsonrpc": "2.0", "id": request_id, "error": {"code": exc.code, "message": exc.message}})
-    except Exception as exc:  # noqa: BLE001 - JSON-RPC boundary: a bad request must not crash the server
+    except Exception as exc:
         _write(out_stream, {"jsonrpc": "2.0", "id": request_id, "error": {"code": INTERNAL_ERROR, "message": str(exc)}})
 
 

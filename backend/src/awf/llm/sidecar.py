@@ -1,7 +1,6 @@
 """Managed LLM sidecar process runner and lifecycle controller (ADR-0017)."""
 
 import json
-import os
 import subprocess
 import time
 import urllib.parse
@@ -13,10 +12,9 @@ from typing import TYPE_CHECKING, Any
 from awf.hardware.profiler import SYSTEM_RUN_ID
 from awf.llm.discovery import LocalModel, binary_path
 from awf.llm.servers import Artifact, LlmServer
-from awf.paths import REPO_ROOT, db_path
 
 if TYPE_CHECKING:
-    import sqlite3
+    pass
 
 HEALTH_TIMEOUT_SECONDS = 60.0
 HEALTH_POLL_SECONDS = 0.5
@@ -172,7 +170,6 @@ def _record_event(conn: Any, reason_code: str, payload: dict) -> None:
         )
     except Exception:
         pass
-
 
 
 def start(

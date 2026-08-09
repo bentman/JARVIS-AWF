@@ -103,7 +103,9 @@ def test_run_workflow_definition_waits_then_resumes_past_a_real_approval(tmp_pat
             "kind": "Workflow",
             "metadata": {"name": "demo", "version": "1.0.0", "digest": "sha256:abc"},
             "spec": {
-                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "inputSchema": {},
+                "outputSchema": {},
+                "budgets": {},
                 "nodes": [{"id": "confirm", "type": "approval", "next": None}],
                 "outputs": {},
             },
@@ -116,9 +118,7 @@ def test_run_workflow_definition_waits_then_resumes_past_a_real_approval(tmp_pat
     run_row = conn.execute("SELECT status FROM runs WHERE run_id = 'run-2'").fetchone()
     assert run_row["status"] == "WAITING_APPROVAL"
 
-    approval_id = conn.execute(
-        "SELECT approval_id FROM approvals WHERE run_id = 'run-2'"
-    ).fetchone()["approval_id"]
+    approval_id = conn.execute("SELECT approval_id FROM approvals WHERE run_id = 'run-2'").fetchone()["approval_id"]
     op_approval_approve(conn, approval_id=approval_id)
 
     second = run_workflow_definition(conn, run_id="run-2", workflow=workflow, node_executors=executors)

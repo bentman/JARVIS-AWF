@@ -17,6 +17,8 @@ import ctypes
 import importlib
 import os
 import platform
+import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -135,9 +137,7 @@ def activate_qnn_execution_provider() -> QnnActivation:
 
     qnn_module = _load_optional("onnxruntime_qnn")
     if qnn_module is None:
-        return QnnActivation(
-            provider_registered=False, backend_path=backend_str, error="onnxruntime_qnn import failed"
-        )
+        return QnnActivation(provider_registered=False, backend_path=backend_str, error="onnxruntime_qnn import failed")
 
     library_path = _qnn_provider_library_path(qnn_module)
     if library_path is None:
@@ -216,6 +216,24 @@ def _opencl_platform_count() -> int:
     return 0
 
 
+def _vulkan_available() -> bool:
+    """Return true when the host can enumerate a Vulkan runtime.
+
+    This is intentionally a shallow executable probe, mirroring the preflight
+    module's rule that capability tokens describe installed runtime surfaces,
+    not a full model-serving acceptance test.
+    """
+    vulkaninfo = shutil.which("vulkaninfo")
+    if vulkaninfo is None:
+        return False
+    try:
+        result = subprocess.run([vulkaninfo, "--summary"], capture_output=True, text=True, timeout=5)
+    except Exception:
+        return False
+    output = f"{result.stdout}\n{result.stderr}".lower()
+    return result.returncode == 0 and ("device" in output or "gpu" in output)
+
+
 def _import_tokens() -> list[str]:
     tokens = []
     for module_name in _IMPORT_CHECK_MODULES:
@@ -255,6 +273,9 @@ def collect_preflight_tokens(inventory: "HardwareInventory", *, refresh: bool = 
 
     if _opencl_platform_count() > 0 and inventory.gpu_vendor == "qualcomm":
         tokens.append("opencl:adreno")
+
+    if _vulkan_available():
+        tokens.append("vulkan:available")
 
     tokens.append(f"ct2:cuda:{_ct2_cuda_count()}")
 

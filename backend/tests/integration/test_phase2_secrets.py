@@ -1,5 +1,3 @@
-import sqlite3
-
 import pytest
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -68,9 +66,7 @@ def test_set_is_overwrite_only_no_partial_update(tmp_path, monkeypatch):
     set_secret(conn, "api-key", "v1", key)
     set_secret(conn, "api-key", "v2", key)
 
-    row = conn.execute(
-        "SELECT created_at, updated_at FROM secrets WHERE name = 'api-key'"
-    ).fetchone()
+    row = conn.execute("SELECT created_at, updated_at FROM secrets WHERE name = 'api-key'").fetchone()
     assert tuple(row) == ("2026-01-01T00:00:00Z", "2026-01-01T00:05:00Z")
     assert get_secret(conn, "api-key", key) == "v2"
     assert conn.execute("SELECT COUNT(*) FROM secrets").fetchone()[0] == 1

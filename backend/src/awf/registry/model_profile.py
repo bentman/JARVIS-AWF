@@ -69,9 +69,7 @@ class ModelProfile:
         return f"{self.name}@{self.version}"
 
     def enabled_candidates_by_priority(self) -> tuple[Candidate, ...]:
-        return tuple(
-            sorted((c for c in self.candidates if c.enabled), key=lambda c: c.priority)
-        )
+        return tuple(sorted((c for c in self.candidates if c.enabled), key=lambda c: c.priority))
 
 
 def parse_model_profile(raw: dict) -> ModelProfile:

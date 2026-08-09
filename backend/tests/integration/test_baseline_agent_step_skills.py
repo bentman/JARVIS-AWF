@@ -45,13 +45,13 @@ def conn(tmp_path):
 def _write_demo_skill(repo_root, body="Do the demo thing."):
     skill_dir = repo_root / "config" / "app_registry" / "skills" / "demo-skill" / "1.0.0"
     skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
-        f"---\nname: demo-skill\ndescription: A minimal demo skill.\n---\n\n{body}\n"
-    )
+    (skill_dir / "SKILL.md").write_text(f"---\nname: demo-skill\ndescription: A minimal demo skill.\n---\n\n{body}\n")
     return skill_dir
 
 
-def _run(conn, worktree, repo_root, adapter_fn, *, actor="claude-code", instructions="", skill_refs=None, persona_ref=None):
+def _run(
+    conn, worktree, repo_root, adapter_fn, *, actor="claude-code", instructions="", skill_refs=None, persona_ref=None
+):
     invocation = AgentInvocation(objective="the real task", inputs={}, workspace_root=worktree)
     return run_agent_step(
         conn,
@@ -89,9 +89,7 @@ def test_default_tier_folds_body_into_objective_and_writes_no_directory(repo_and
     assert not (worktree / ".agents" / "skills").exists()
     assert seen["invocation"].skills == ("demo-skill@1.0.0",)
 
-    event = conn.execute(
-        "SELECT payload_json FROM events WHERE new_status = 'skills_resolved'"
-    ).fetchone()
+    event = conn.execute("SELECT payload_json FROM events WHERE new_status = 'skills_resolved'").fetchone()
     assert event is not None
     assert '"shared": false' in event["payload_json"]
 
@@ -108,8 +106,7 @@ def test_instructions_fold_in_even_with_no_skills(repo_and_worktree, conn):
 
     objective = seen["invocation"].objective
     assert objective == (
-        "[application/instruction]\nYou are a careful builder.\n\n"
-        "[user/input, untrusted]\nthe real task"
+        "[application/instruction]\nYou are a careful builder.\n\n[user/input, untrusted]\nthe real task"
     )
 
 
@@ -141,14 +138,20 @@ def test_codex_shared_tier_symlinks_scratch_home_to_the_worktree_copy(repo_and_w
         return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
 
     _run(
-        conn, worktree, repo_root, adapter_fn, actor="codex",
+        conn,
+        worktree,
+        repo_root,
+        adapter_fn,
+        actor="codex",
         skill_refs=[SkillRef(ref="demo-skill@1.0.0", share=True)],
     )
 
     home_dir = repo_root / "cache" / "sandbox" / "run-1" / "codex_home" / "codex"
     link_path = home_dir / "skills" / "demo-skill"
     assert link_path.is_symlink()
-    assert (link_path / "SKILL.md").read_text() == (worktree / ".claude" / "skills" / "demo-skill" / "SKILL.md").read_text()
+    assert (link_path / "SKILL.md").read_text() == (
+        worktree / ".claude" / "skills" / "demo-skill" / "SKILL.md"
+    ).read_text()
 
     overlay = seen["invocation"].constraints["skill_env_overlay"]
     assert overlay["CODEX_HOME"] == str(home_dir)

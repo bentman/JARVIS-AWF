@@ -45,11 +45,15 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
 
     command = [
         "agy",
-        "--print", invocation.objective,
-        "--mode", mode,
+        "--print",
+        invocation.objective,
+        "--mode",
+        mode,
         "--sandbox",
-        "--output-format", "json",
-        "--add-dir", str(invocation.workspace_root),
+        "--output-format",
+        "json",
+        "--add-dir",
+        str(invocation.workspace_root),
         "--new-project",
     ]
     model_override = invocation.constraints.get("model_override")

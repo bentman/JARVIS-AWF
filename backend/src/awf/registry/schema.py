@@ -4,7 +4,7 @@ Each loader passes its own error class via `error=`, so its exception types
 and message text stay exactly what they were before this module existed.
 """
 
-from typing import Callable
+from collections.abc import Callable
 
 import yaml
 
@@ -27,9 +27,7 @@ def require_enum(
     return value  # type: ignore[return-value]
 
 
-def split_frontmatter(
-    text: str, *, label: str, error: Callable = RegistryValidationError
-) -> tuple[dict, str]:
+def split_frontmatter(text: str, *, label: str, error: Callable = RegistryValidationError) -> tuple[dict, str]:
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         raise error(f"{label} must start with a '---' YAML frontmatter block")

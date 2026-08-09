@@ -132,7 +132,9 @@ def _reconcile_models(repo_root: Path, stt_model: str) -> list[dict]:
     removed = []
     for function in _FILE_FUNCTIONS:
         manifest = load_voice_manifest(repo_root, function)
-        removed.extend(_reconcile_file_directory(function, models_dir(repo_root, function), {file.name for file in manifest.files}))
+        removed.extend(
+            _reconcile_file_directory(function, models_dir(repo_root, function), {file.name for file in manifest.files})
+        )
     removed.extend(_reconcile_stt_directory(models_dir(repo_root, "stt"), stt_model))
     return removed
 

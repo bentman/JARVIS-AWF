@@ -21,8 +21,8 @@ merge conflict between two items' changes is a real failure
 
 import concurrent.futures
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from awf.engine.executor import run_step
 from awf.isolation.worktree import WorktreeError, branch_name, current_head, merge_branch, remove_worktree
@@ -65,19 +65,16 @@ def make_map_node_executor(run_map_item: RunMapItemFn, *, worktree_path: Path, r
                 for index in range(len(items)):
                     child_run_id, _item_worktree, result = results_by_index[index]
                     if result.get("status") != "SUCCEEDED":
-                        raise MapNodeError(
-                            f"map item {index} (child run {child_run_id}) did not succeed: {result}"
-                        )
+                        raise MapNodeError(f"map item {index} (child run {child_run_id}) did not succeed: {result}")
                     child_run_ids.append(child_run_id)
                     try:
                         merge_branch(
-                            worktree_path, branch_name(child_run_id),
+                            worktree_path,
+                            branch_name(child_run_id),
                             message=f"map: merge item {index} (child run {child_run_id})",
                         )
                     except WorktreeError as exc:
-                        raise MapNodeError(
-                            f"map item {index}: {exc}", failure_class="INTEGRITY_FAILURE"
-                        ) from exc
+                        raise MapNodeError(f"map item {index}: {exc}", failure_class="INTEGRITY_FAILURE") from exc
             finally:
                 for child_run_id, _item_worktree, _result in results_by_index.values():
                     remove_worktree(repo_root, child_run_id)

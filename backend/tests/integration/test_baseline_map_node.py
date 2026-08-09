@@ -67,10 +67,16 @@ def test_map_runs_items_concurrently_and_merges_results_in_order(repo, parent_wo
 
     executor = make_map_node_executor(run_map_item, worktree_path=parent_worktree, repo_root=repo)
     output = executor(
-        conn, "run-1", "step-1",
+        conn,
+        "run-1",
+        "step-1",
         {
-            "id": "fan-out", "type": "map", "workflowRef": "child@1.0.0",
-            "items": ["a", "b", "c"], "maxItems": 5, "maxConcurrency": 2,
+            "id": "fan-out",
+            "type": "map",
+            "workflowRef": "child@1.0.0",
+            "items": ["a", "b", "c"],
+            "maxItems": 5,
+            "maxConcurrency": 2,
         },
     )
 
@@ -103,10 +109,16 @@ def test_map_rejects_more_items_than_max_items(repo, parent_worktree, conn):
 
     with pytest.raises(MapNodeError):
         executor(
-            conn, "run-1", "step-1",
+            conn,
+            "run-1",
+            "step-1",
             {
-                "id": "fan-out", "type": "map", "workflowRef": "child@1.0.0",
-                "items": ["a", "b", "c"], "maxItems": 2, "maxConcurrency": 2,
+                "id": "fan-out",
+                "type": "map",
+                "workflowRef": "child@1.0.0",
+                "items": ["a", "b", "c"],
+                "maxItems": 2,
+                "maxConcurrency": 2,
             },
         )
 
@@ -125,10 +137,16 @@ def test_map_raises_when_any_item_fails_and_leaves_earlier_merges_in_place(repo,
 
     with pytest.raises(MapNodeError):
         executor(
-            conn, "run-1", "step-1",
+            conn,
+            "run-1",
+            "step-1",
             {
-                "id": "fan-out", "type": "map", "workflowRef": "child@1.0.0",
-                "items": ["a", "b"], "maxItems": 5, "maxConcurrency": 2,
+                "id": "fan-out",
+                "type": "map",
+                "workflowRef": "child@1.0.0",
+                "items": ["a", "b"],
+                "maxItems": 5,
+                "maxConcurrency": 2,
             },
         )
 
@@ -156,10 +174,16 @@ def test_map_merge_conflict_aborts_cleanly_and_fails_with_integrity_failure(repo
 
     with pytest.raises(MapNodeError) as exc_info:
         executor(
-            conn, "run-1", "step-1",
+            conn,
+            "run-1",
+            "step-1",
             {
-                "id": "fan-out", "type": "map", "workflowRef": "child@1.0.0",
-                "items": ["a", "b"], "maxItems": 5, "maxConcurrency": 2,
+                "id": "fan-out",
+                "type": "map",
+                "workflowRef": "child@1.0.0",
+                "items": ["a", "b"],
+                "maxItems": 5,
+                "maxConcurrency": 2,
             },
         )
     assert exc_info.value.failure_class == "INTEGRITY_FAILURE"

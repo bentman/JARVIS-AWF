@@ -30,7 +30,6 @@ from awf.db.connection import get_connection
 from awf.engine.run import create_run, create_step
 from awf.gates.artifacts import write_finding_artifact
 from awf.gates.schema import Finding
-from awf.ids import uuid7
 from awf.registry.mcp_server import McpServerValidationError
 
 
@@ -155,9 +154,7 @@ def test_artifact_list_and_read(tmp_path):
 
 
 def test_registry_validate_recognizes_capability_record(fixtures_dir):
-    result = op_registry_validate(
-        fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml", kind="capabilities"
-    )
+    result = op_registry_validate(fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml", kind="capabilities")
     assert result["kind"] == "CapabilityRecord"
     assert result["valid"] is True
 
@@ -206,9 +203,16 @@ def test_registry_publish_then_list_and_get_find_it(tmp_path, fixtures_dir):
     published = op_registry_publish(repo_root, conn, path=source, kind="capabilities")
 
     listed = op_registry_list(repo_root, kind="capabilities")
-    assert {"source": "data", "kind": "capabilities", "name": published["name"], "version": published["version"]} in listed
+    assert {
+        "source": "data",
+        "kind": "capabilities",
+        "name": published["name"],
+        "version": published["version"],
+    } in listed
 
-    fetched = op_registry_get(repo_root, conn, kind="capabilities", name=published["name"], version=published["version"])
+    fetched = op_registry_get(
+        repo_root, conn, kind="capabilities", name=published["name"], version=published["version"]
+    )
     assert fetched["source"] == "data"
 
 
@@ -444,16 +448,14 @@ def test_registry_retire_then_trust_restores_resolution(tmp_path, fixtures_dir):
     from awf.registry.resolve import RegistryBlockedError, resolve_registry_object
 
     with pytest.raises(RegistryBlockedError):
-        resolve_registry_object(
-            repo_root, "capabilities", published["name"], published["version"], conn=conn
-        )
+        resolve_registry_object(repo_root, "capabilities", published["name"], published["version"], conn=conn)
 
     trusted = op_registry_trust(
         conn, kind="capabilities", name=published["name"], version=published["version"], status="local"
     )
     assert trusted["trust_status"] == "local"
 
-    path, source_side = resolve_registry_object(
+    _path, source_side = resolve_registry_object(
         repo_root, "capabilities", published["name"], published["version"], conn=conn
     )
     assert source_side == "data"
@@ -482,7 +484,7 @@ def test_registry_list_never_shows_config_side_model_profiles(tmp_path):
     # Section 9.3: model-profiles has no config/app_registry/ counterpart -
     # ADR-0001's reference examples under config/app_registry/model-profiles/
     # MUST NOT appear in a listing as if they were real, resolvable objects.
-    repo_root, conn = make_repo(tmp_path)
+    repo_root, _conn = make_repo(tmp_path)
     example_dir = repo_root / "config" / "app_registry" / "model-profiles" / "example-demo"
     example_dir.mkdir(parents=True)
     (example_dir / "1.0.0.yaml").write_text("purpose: coding\n")
@@ -514,7 +516,14 @@ def make_git_repo(tmp_path):
 
 
 def publish_workflow(repo_root, raw: dict) -> None:
-    target = repo_root / "config" / "app_registry" / "workflows" / raw["metadata"]["name"] / f"{raw['metadata']['version']}.yaml"
+    target = (
+        repo_root
+        / "config"
+        / "app_registry"
+        / "workflows"
+        / raw["metadata"]["name"]
+        / f"{raw['metadata']['version']}.yaml"
+    )
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(yaml.safe_dump(raw))
 
@@ -533,7 +542,9 @@ def test_op_run_start_fails_cleanly_for_an_unknown_activity_name(tmp_path):
             "kind": "Workflow",
             "metadata": {"name": "unbuilt-node-demo", "version": "1.0.0", "digest": "sha256:demo"},
             "spec": {
-                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "inputSchema": {},
+                "outputSchema": {},
+                "budgets": {},
                 "nodes": [{"id": "a", "type": "activity", "function": "not-a-real-activity", "next": None}],
                 "outputs": {},
             },
@@ -554,7 +565,9 @@ def _single_gate_workflow(name: str, version: str, digest: str) -> dict:
         "kind": "Workflow",
         "metadata": {"name": name, "version": version, "digest": digest},
         "spec": {
-            "inputSchema": {}, "outputSchema": {}, "budgets": {},
+            "inputSchema": {},
+            "outputSchema": {},
+            "budgets": {},
             "nodes": [{"id": "check", "type": "gate", "checkCommand": "true", "next": None}],
             "outputs": {},
         },
@@ -590,7 +603,9 @@ def test_run_resume_uses_the_pinned_version_not_a_newer_publish(tmp_path):
             "kind": "Workflow",
             "metadata": {"name": "resume-demo", "version": "2.0.0", "digest": "sha256:v2"},
             "spec": {
-                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "inputSchema": {},
+                "outputSchema": {},
+                "budgets": {},
                 "nodes": [{"id": "a", "type": "activity", "function": "not-a-real-activity", "next": None}],
                 "outputs": {},
             },
@@ -618,7 +633,8 @@ def test_op_run_start_rejects_input_that_violates_inputschema(tmp_path):
             "metadata": {"name": "requires-objective", "version": "1.0.0", "digest": "sha256:demo"},
             "spec": {
                 "inputSchema": {"type": "object", "required": ["objective"]},
-                "outputSchema": {}, "budgets": {},
+                "outputSchema": {},
+                "budgets": {},
                 "nodes": [{"id": "check", "type": "gate", "checkCommand": "true", "next": None}],
                 "outputs": {},
             },
@@ -640,7 +656,8 @@ def test_op_run_start_renders_and_validates_real_outputs(tmp_path):
             "kind": "Workflow",
             "metadata": {"name": "reports-repairs", "version": "1.0.0", "digest": "sha256:demo"},
             "spec": {
-                "inputSchema": {}, "budgets": {},
+                "inputSchema": {},
+                "budgets": {},
                 "outputSchema": {
                     "type": "object",
                     "properties": {"repairs_used": {"type": "integer"}},
@@ -667,7 +684,8 @@ def test_op_run_start_fails_run_when_rendered_outputs_violate_outputschema(tmp_p
             "kind": "Workflow",
             "metadata": {"name": "unresolvable-output", "version": "1.0.0", "digest": "sha256:demo"},
             "spec": {
-                "inputSchema": {}, "budgets": {},
+                "inputSchema": {},
+                "budgets": {},
                 "outputSchema": {
                     "type": "object",
                     "properties": {"totally_unresolvable": {"type": "integer"}},
@@ -694,7 +712,9 @@ def publish_trivial_gate_workflow(repo_root, *, name: str, version: str = "1.0.0
             "kind": "Workflow",
             "metadata": {"name": name, "version": version, "digest": "sha256:demo"},
             "spec": {
-                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "inputSchema": {},
+                "outputSchema": {},
+                "budgets": {},
                 "nodes": [{"id": "check", "type": "gate", "checkCommand": "true", "next": None}],
                 "outputs": {},
             },
@@ -712,7 +732,9 @@ def test_op_run_start_runs_a_real_subworkflow_node_to_completion(tmp_path):
             "kind": "Workflow",
             "metadata": {"name": "delegates-to-child", "version": "1.0.0", "digest": "sha256:demo"},
             "spec": {
-                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "inputSchema": {},
+                "outputSchema": {},
+                "budgets": {},
                 "nodes": [{"id": "delegate", "type": "subworkflow", "workflowRef": "child-ok@1.0.0", "next": None}],
                 "outputs": {},
             },
@@ -723,9 +745,7 @@ def test_op_run_start_runs_a_real_subworkflow_node_to_completion(tmp_path):
 
     assert result["status"] == "SUCCEEDED"
     # A real, independent child `runs` row was created and completed.
-    child_runs = conn.execute(
-        "SELECT run_id, status FROM runs WHERE workflow_ref = 'child-ok@1.0.0'"
-    ).fetchall()
+    child_runs = conn.execute("SELECT run_id, status FROM runs WHERE workflow_ref = 'child-ok@1.0.0'").fetchall()
     assert len(child_runs) == 1
     assert child_runs[0]["status"] == "SUCCEEDED"
 
@@ -740,11 +760,18 @@ def test_op_run_start_runs_a_real_map_node_fanning_out_to_three_children(tmp_pat
             "kind": "Workflow",
             "metadata": {"name": "fan-out-demo", "version": "1.0.0", "digest": "sha256:demo"},
             "spec": {
-                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "inputSchema": {},
+                "outputSchema": {},
+                "budgets": {},
                 "nodes": [
                     {
-                        "id": "fan-out", "type": "map", "workflowRef": "child-ok@1.0.0",
-                        "items": ["a", "b", "c"], "maxItems": 5, "maxConcurrency": 2, "next": None,
+                        "id": "fan-out",
+                        "type": "map",
+                        "workflowRef": "child-ok@1.0.0",
+                        "items": ["a", "b", "c"],
+                        "maxItems": 5,
+                        "maxConcurrency": 2,
+                        "next": None,
                     }
                 ],
                 "outputs": {},
@@ -755,9 +782,7 @@ def test_op_run_start_runs_a_real_map_node_fanning_out_to_three_children(tmp_pat
     result = op_run_start(repo_root, conn, workflow_ref="fan-out-demo@1.0.0", input_data={})
 
     assert result["status"] == "SUCCEEDED"
-    child_runs = conn.execute(
-        "SELECT run_id, status FROM runs WHERE workflow_ref = 'child-ok@1.0.0'"
-    ).fetchall()
+    child_runs = conn.execute("SELECT run_id, status FROM runs WHERE workflow_ref = 'child-ok@1.0.0'").fetchall()
     assert len(child_runs) == 3
     assert all(row["status"] == "SUCCEEDED" for row in child_runs)
 
@@ -776,11 +801,17 @@ def test_op_run_start_runs_a_real_loop_node_until_max_iterations(tmp_path):
             "kind": "Workflow",
             "metadata": {"name": "retry-loop-demo", "version": "1.0.0", "digest": "sha256:demo"},
             "spec": {
-                "inputSchema": {}, "outputSchema": {}, "budgets": {},
+                "inputSchema": {},
+                "outputSchema": {},
+                "budgets": {},
                 "nodes": [
                     {
-                        "id": "retry", "type": "loop", "workflowRef": "child-ok@1.0.0",
-                        "maxIterations": 2, "conditionField": "passed", "next": None,
+                        "id": "retry",
+                        "type": "loop",
+                        "workflowRef": "child-ok@1.0.0",
+                        "maxIterations": 2,
+                        "conditionField": "passed",
+                        "next": None,
                     }
                 ],
                 "outputs": {},
@@ -791,8 +822,6 @@ def test_op_run_start_runs_a_real_loop_node_until_max_iterations(tmp_path):
     result = op_run_start(repo_root, conn, workflow_ref="retry-loop-demo@1.0.0", input_data={})
 
     assert result["status"] == "WAITING_INPUT"
-    child_runs = conn.execute(
-        "SELECT run_id, status FROM runs WHERE workflow_ref = 'child-ok@1.0.0'"
-    ).fetchall()
+    child_runs = conn.execute("SELECT run_id, status FROM runs WHERE workflow_ref = 'child-ok@1.0.0'").fetchall()
     assert len(child_runs) == 2
     assert all(row["status"] == "SUCCEEDED" for row in child_runs)

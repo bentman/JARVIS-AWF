@@ -20,7 +20,14 @@ def minimal_raw(**overrides):
         "persona_ref": "demo-persona@1.0.0",
         "tts": {
             "candidates": [
-                {"engine": "kokoro", "model": "kokoro-v1.0", "voice_id": "bf_isabella", "speed": 1.0, "priority": 1, "enabled": True}
+                {
+                    "engine": "kokoro",
+                    "model": "kokoro-v1.0",
+                    "voice_id": "bf_isabella",
+                    "speed": 1.0,
+                    "priority": 1,
+                    "enabled": True,
+                }
             ],
             "fallback": {"mode": "none", "allow_quality_degrade": False},
         },

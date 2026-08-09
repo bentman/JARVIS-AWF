@@ -44,15 +44,11 @@ def _action_digest(run_id: str, node: dict) -> str:
 
 def make_approval_node_executor():
     def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
-        step_row = conn.execute(
-            "SELECT status, output_json FROM steps WHERE step_id = ?", (step_id,)
-        ).fetchone()
+        step_row = conn.execute("SELECT status, output_json FROM steps WHERE step_id = ?", (step_id,)).fetchone()
         if step_row["status"] == "SUCCEEDED":
             return json.loads(step_row["output_json"])
 
-        row = conn.execute(
-            "SELECT approval_id, status FROM approvals WHERE step_id = ?", (step_id,)
-        ).fetchone()
+        row = conn.execute("SELECT approval_id, status FROM approvals WHERE step_id = ?", (step_id,)).fetchone()
 
         if row is None:
             approval_id = uuid7()
@@ -72,8 +68,12 @@ def make_approval_node_executor():
             )
             conn.commit()
             write_event(
-                conn, run_id=run_id, step_id=step_id, new_status="WAITING_APPROVAL",
-                actor="engine", reason_code="approval_requested",
+                conn,
+                run_id=run_id,
+                step_id=step_id,
+                new_status="WAITING_APPROVAL",
+                actor="engine",
+                reason_code="approval_requested",
                 payload_json=json.dumps({"approval_id": approval_id}),
             )
             return {"waiting_input": True, "approval_id": approval_id}
@@ -90,8 +90,12 @@ def make_approval_node_executor():
             )
             conn.commit()
             write_event(
-                conn, run_id=run_id, step_id=step_id, new_status="FAILED",
-                actor="engine", reason_code="approval_rejected",
+                conn,
+                run_id=run_id,
+                step_id=step_id,
+                new_status="FAILED",
+                actor="engine",
+                reason_code="approval_rejected",
                 payload_json=json.dumps({"approval_id": row["approval_id"]}),
             )
             raise ApprovalRejectedError(f"approval {row['approval_id']} was rejected")
@@ -105,8 +109,13 @@ def make_approval_node_executor():
         )
         conn.commit()
         write_event(
-            conn, run_id=run_id, step_id=step_id, new_status="SUCCEEDED",
-            actor="engine", reason_code="approval_granted", payload_json=json.dumps(output),
+            conn,
+            run_id=run_id,
+            step_id=step_id,
+            new_status="SUCCEEDED",
+            actor="engine",
+            reason_code="approval_granted",
+            payload_json=json.dumps(output),
         )
         return output
 

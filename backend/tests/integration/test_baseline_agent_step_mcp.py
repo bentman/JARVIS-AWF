@@ -47,8 +47,7 @@ def _write_fetch_server(repo_root):
     server_dir = repo_root / "config" / "app_registry" / "mcp" / "fetch"
     server_dir.mkdir(parents=True)
     (server_dir / "1.0.0.yaml").write_text(
-        "name: fetch\nversion: 1.0.0\ntype: stdio\ncommand: npx\n"
-        "args: ['-y', '@modelcontextprotocol/server-fetch']\n"
+        "name: fetch\nversion: 1.0.0\ntype: stdio\ncommand: npx\nargs: ['-y', '@modelcontextprotocol/server-fetch']\n"
     )
 
 
@@ -79,9 +78,7 @@ def test_mcp_ref_renders_config_and_passes_extra_args_to_adapter(repo_and_worktr
     assert "--mcp-config" in rendered_invocation.constraints["mcp_extra_args"]
     assert (worktree / "mcp" / "claude-code.mcp.json").is_file()
 
-    event = conn.execute(
-        "SELECT new_status, payload_json FROM events WHERE new_status = 'mcp_rendered'"
-    ).fetchone()
+    event = conn.execute("SELECT new_status, payload_json FROM events WHERE new_status = 'mcp_rendered'").fetchone()
     assert event is not None
     assert "fetch@1.0.0" in event["payload_json"]
 
@@ -119,8 +116,7 @@ def test_quarantined_mcp_ref_is_refused_before_adapter_runs(repo_and_worktree, c
     server_dir.mkdir(parents=True)
     server_path = server_dir / "1.0.0.yaml"
     server_path.write_text(
-        "name: fetch\nversion: 1.0.0\ntype: stdio\ncommand: npx\n"
-        "args: ['-y', '@modelcontextprotocol/server-fetch']\n"
+        "name: fetch\nversion: 1.0.0\ntype: stdio\ncommand: npx\nargs: ['-y', '@modelcontextprotocol/server-fetch']\n"
     )
     conn.execute(
         "INSERT INTO registry_index (kind, name, version, digest, source, path, trust_status, indexed_at) "
@@ -154,7 +150,9 @@ def test_quarantined_mcp_ref_is_refused_before_adapter_runs(repo_and_worktree, c
     assert conn.execute("SELECT 1 FROM events WHERE new_status = 'mcp_rendered'").fetchone() is None
 
 
-def test_antigravity_mcp_ref_materializes_a_scratch_home_never_the_real_one(repo_and_worktree, conn, tmp_path, monkeypatch):
+def test_antigravity_mcp_ref_materializes_a_scratch_home_never_the_real_one(
+    repo_and_worktree, conn, tmp_path, monkeypatch
+):
     repo_root, worktree = repo_and_worktree
     _write_fetch_server(repo_root)
 
@@ -188,7 +186,9 @@ def test_antigravity_mcp_ref_materializes_a_scratch_home_never_the_real_one(repo
 
     scratch_home = repo_root / "cache" / "sandbox" / "run-1" / "scratch_home" / "antigravity"
     assert (scratch_home / ".gemini" / "config" / "mcp_config.json").is_file()
-    assert (scratch_home / ".gemini" / "antigravity-cli" / "antigravity-oauth-token").read_text() == "real-token-contents"
+    assert (
+        scratch_home / ".gemini" / "antigravity-cli" / "antigravity-oauth-token"
+    ).read_text() == "real-token-contents"
     # the real home directory itself was never written to
     assert not (fake_real_home / ".gemini" / "config").exists()
 

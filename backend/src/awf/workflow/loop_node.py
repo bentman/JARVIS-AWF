@@ -34,8 +34,7 @@ class LoopNodeError(RuntimeError):
 
 def _last_step_output(conn: sqlite3.Connection, run_id: str) -> dict:
     row = conn.execute(
-        "SELECT output_json FROM steps WHERE run_id = ? AND output_json IS NOT NULL "
-        "ORDER BY started_at DESC LIMIT 1",
+        "SELECT output_json FROM steps WHERE run_id = ? AND output_json IS NOT NULL ORDER BY started_at DESC LIMIT 1",
         (run_id,),
     ).fetchone()
     if row is None:
@@ -74,8 +73,11 @@ def make_loop_node_executor(run_child: RunChildFn):
         )
         conn.commit()
         write_event(
-            conn, run_id=run_id, new_status="WAITING_INPUT",
-            actor="engine", reason_code="loop_max_iterations_reached",
+            conn,
+            run_id=run_id,
+            new_status="WAITING_INPUT",
+            actor="engine",
+            reason_code="loop_max_iterations_reached",
         )
         return {
             "completed": False,
@@ -85,4 +87,3 @@ def make_loop_node_executor(run_child: RunChildFn):
         }
 
     return executor
-

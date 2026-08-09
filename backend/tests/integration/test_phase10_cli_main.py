@@ -51,7 +51,8 @@ def test_run_command_calls_op_run_start_and_reports_failure_exit_code(tmp_path, 
 def test_run_command_success_exit_code(tmp_path, monkeypatch):
     repo_root = make_repo(tmp_path)
     monkeypatch.setattr(
-        cli_main.ops, "op_run_start",
+        cli_main.ops,
+        "op_run_start",
         lambda repo_root, conn, *, workflow_ref, input_data: {"run_id": "run-1", "status": "SUCCEEDED"},
     )
 
@@ -80,9 +81,7 @@ def test_run_command_reports_a_coreoperror_cleanly_not_a_traceback(tmp_path, cap
     input_file = tmp_path / "input.json"
     input_file.write_text(json.dumps({}))
 
-    exit_code = cli_main.run(
-        ["run", "requires-objective@1.0.0", "--input", str(input_file)], repo_root
-    )
+    exit_code = cli_main.run(["run", "requires-objective@1.0.0", "--input", str(input_file)], repo_root)
 
     assert exit_code == 1
     assert "inputSchema" in capsys.readouterr().err
@@ -143,7 +142,9 @@ def test_registry_validate_command(tmp_path, capsys, fixtures_dir):
 
 def test_registry_reindex_command_dispatches_to_core_ops(tmp_path, capsys, monkeypatch):
     repo_root = make_repo(tmp_path)
-    monkeypatch.setattr(cli_main.ops, "op_registry_reindex", lambda repo_root, conn: {"capabilities": {"config": 1, "data": 0}})
+    monkeypatch.setattr(
+        cli_main.ops, "op_registry_reindex", lambda repo_root, conn: {"capabilities": {"config": 1, "data": 0}}
+    )
 
     exit_code = cli_main.run(["registry", "reindex"], repo_root)
 
@@ -190,9 +191,7 @@ def test_registry_trust_command_dispatches_to_core_ops(tmp_path, capsys, monkeyp
 
     monkeypatch.setattr(cli_main.ops, "op_registry_trust", fake_trust)
 
-    exit_code = cli_main.run(
-        ["registry", "trust", "capabilities", "demo", "1.0.0", "--status", "trusted"], repo_root
-    )
+    exit_code = cli_main.run(["registry", "trust", "capabilities", "demo", "1.0.0", "--status", "trusted"], repo_root)
 
     assert exit_code == 0
     assert captured == {"kind": "capabilities", "name": "demo", "version": "1.0.0", "status": "trusted"}

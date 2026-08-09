@@ -59,7 +59,6 @@ def model_by_name(repo_root: Path, name: str) -> LocalModel:
     raise LlmServerError(f"Local model directory '{name}' contains no .gguf artifacts")
 
 
-
 def binary_path(repo_root: Path, profile_id: str, artifact: Artifact) -> Path:
     return runtimes_dir(repo_root) / "llama.cpp" / profile_id / artifact.binary
 
@@ -73,6 +72,12 @@ def acquire_binary(repo_root: Path, profile_id: str, artifact: Artifact) -> dict
             "path": str(target_binary),
             "url": artifact.url,
         }
+
+    if artifact.archive == "manual":
+        raise LlmServerError(
+            f"Artifact '{profile_id}' is declared as manual; place '{artifact.binary}' and sibling runtime files "
+            f"under '{target_binary.parent}'"
+        )
 
     cache_dir = repo_root / "cache" / "llm" / profile_id
     cache_dir.mkdir(parents=True, exist_ok=True)

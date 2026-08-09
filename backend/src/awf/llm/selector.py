@@ -149,16 +149,13 @@ def select(
         },
     }
 
-
     yaml_text = yaml.dump(profile_data, sort_keys=False)
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as tf:
         tf.write(yaml_text)
         temp_path = Path(tf.name)
 
     try:
-        pub_result = op_registry_publish(
-            repo_root, conn, path=temp_path, kind="model-profiles"
-        )
+        pub_result = op_registry_publish(repo_root, conn, path=temp_path, kind="model-profiles")
     finally:
         if temp_path.exists():
             temp_path.unlink()

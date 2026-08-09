@@ -12,15 +12,32 @@ TRAIT_LEVELS = ("none", "low", "medium", "high", "strong")
 HUMOR_LEVELS = ("none", "light", "medium", "high", "dry")
 
 ALLOWED_FIELDS = (
-    "name", "version", "display_name", "description", "locale",
-    "system", "style", "traits", "examples", "generation", "enabled",
+    "name",
+    "version",
+    "display_name",
+    "description",
+    "locale",
+    "system",
+    "style",
+    "traits",
+    "examples",
+    "generation",
+    "enabled",
 )
 
 PROHIBITED_FIELDS = (
-    "capabilities", "tool_permissions", "tool_policy",
-    "routing_policy", "model_routing", "model_profile", "mcp", "skills",
-    "memory_policy", "memory_permissions",
-    "safety_overrides", "hidden_instructions",
+    "capabilities",
+    "tool_permissions",
+    "tool_policy",
+    "routing_policy",
+    "model_routing",
+    "model_profile",
+    "mcp",
+    "skills",
+    "memory_policy",
+    "memory_permissions",
+    "safety_overrides",
+    "hidden_instructions",
 )
 
 GENERATION_FIELDS = ("temperature", "top_p", "top_k", "repeat_penalty", "max_tokens", "stop")
@@ -170,11 +187,15 @@ def parse_persona(raw: dict) -> Persona:
             avoid=_string_tuple(_require(style_raw, "avoid", "persona.style"), "persona.style.avoid"),
         ),
         traits=PersonaTraits(
-            warmth=_require_enum(_require(traits_raw, "warmth", "persona.traits"), TRAIT_LEVELS, "persona.traits.warmth"),
+            warmth=_require_enum(
+                _require(traits_raw, "warmth", "persona.traits"), TRAIT_LEVELS, "persona.traits.warmth"
+            ),
             assertiveness=_require_enum(
                 _require(traits_raw, "assertiveness", "persona.traits"), TRAIT_LEVELS, "persona.traits.assertiveness"
             ),
-            detail=_require_enum(_require(traits_raw, "detail", "persona.traits"), TRAIT_LEVELS, "persona.traits.detail"),
+            detail=_require_enum(
+                _require(traits_raw, "detail", "persona.traits"), TRAIT_LEVELS, "persona.traits.detail"
+            ),
             humor=_require_enum(_require(traits_raw, "humor", "persona.traits"), HUMOR_LEVELS, "persona.traits.humor"),
         ),
         examples=tuple(examples),

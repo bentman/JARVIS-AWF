@@ -19,6 +19,34 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-09 05:41
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Expanded ADR-0017 llama.cpp runtime declarations to cover every canonical host profile, including Linux/Windows CPU, generic GPU, CUDA, ARM Adreno GPU, and QNN/Hexagon manual artifacts.
+  - Scope: `config/llm/servers.yaml`, `backend/src/awf/llm/{servers.py,discovery.py}`, `backend/src/awf/hardware/{preflight.py,readiness.py}`, focused LLM tests, and ADR-0017.
+  - Validation: focused LLM config/discovery/readiness/sidecar/CLI tests -> 22 passed; direct config check confirms `linux-x64-cuda` resolves to `runtimes/llama.cpp/linux-x64-cuda/llama-server` and the repaired binary is present.
+  - Notes: official CPU/Vulkan artifacts and Windows x64 CUDA 12.4 remain acquire-able archives; Linux CUDA, QNN/Hexagon, and Windows ARM64 Adreno entries stay manual because those builds are operator-provided or backend-specific rather than universally acquire-able by the existing single-archive acquisition path.
+
+- Timestamp: 2026-08-09 04:58
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Added Ruff as the repo-standard Python formatter/linter, cleaned current backend compliance, and wired linting into setup/provision and validation.
+  - Scope: `pyproject.toml`, `scripts/validate_backend.py`, `backend/src/awf/setup.py`, `backend/tests/unit/test_setup_run.py`, `backend/tests/unit/test_validate_backend_script.py`, both QuickStarts, and Ruff-normalized Python under `backend/src`, `backend/tests`, and `scripts`.
+  - Validation: `awf-setup --verify` -> reports `ruff_version: 0.16.2` and `pip_check: OK`; `scripts/validate_backend.py lint` -> PASS; focused setup/validator tests -> 13 passed; `scripts/validate_backend.py runtime` -> 17 passed, 1 skipped; `scripts/validate_backend.py ci` -> 509 passed, 18 deselected; `git diff --check` -> PASS.
+  - Notes: `awf-setup --install` installs `.[<hardware-extra>,dev]`, so Ruff is acquired through the setup/provision path rather than being a manual venv-only add.
+
+- Timestamp: 2026-08-09 04:57
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0018 (personas and the prompt envelope).
+  - Scope: see `docs/adr/0018-personas-and-prompt-envelope.md` for full detail.
+  - Validation: ADR-0018 status now records the acceptance run; backend CI evidence includes focused persona and prompt-envelope coverage.
+  - Notes: corrective documentation entry added after implementation was completed.
+
+- Timestamp: 2026-08-09 04:56
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0017 (resident-mind local LLM server selection, acquisition, and lifecycle).
+  - Scope: see `docs/adr/0017-resident-mind-llm.md` for full detail.
+  - Validation: ADR-0017 status now records the acceptance run; backend CI evidence includes LLM discovery, readiness, sidecar, selector, CLI, and runtime coverage.
+  - Notes: corrective documentation entry added after implementation was completed.
+
 - Timestamp: 2026-08-08 09:35
   - Host class(es): Linux/WSL2, AMD64, NVIDIA CUDA
   - Summary: Fixed validation report host classification to use the same inventory and dependency-extra decision as `awf-setup --provision`; see ADR-0015.
@@ -48,6 +76,13 @@
   - Scope: `frontend/package.json` (`allowScripts` for `esbuild@0.28.1`), `docs/adr/0014-node-26-current-frontend-policy.md`, and `CHANGE_LOG.md`.
   - Validation: `npm --prefix frontend install-scripts ls` -> `No packages with unreviewed install scripts.`
   - Notes: ADR-0014 contains the policy, exact version pin, npm precedence behavior, and refresh/review procedure; this entry is deliberately brief.
+
+- Timestamp: 2026-08-08 07:00
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0014 (Node.js 26+ current frontend policy).
+  - Scope: see `docs/adr/0014-node-26-current-frontend-policy.md` for full detail.
+  - Validation: ADR-0014 records the implemented policy and acceptance evidence; later changelog entries record follow-up frontend install-script approval.
+  - Notes: corrective documentation entry added after the implementation entry was found missing.
 
 - Timestamp: 2026-08-08 05:40
   - Host class(es): Linux/WSL2, AMD64
@@ -90,6 +125,13 @@
   - Scope: `backend/src/awf/adapters/codex_cli.py` (repo root now from `awf.paths.REPO_ROOT` instead of `Path(__file__).resolve().parents[4]`); `backend/src/awf/server/stdio.py` and `backend/src/awf/cli/core_ops.py` (db path now from `awf.paths.db_path()` instead of a hardcoded `"data" / "awf_db" / "awf.db"` join); `backend/src/awf/hardware/profiler.py` (`HardwareInventory` docstring reworded to describe the readiness roll-up instead of the pre-ADR execution-provider-verification design); `backend/tests/unit/test_hardware_readiness.py` (added `arch` parametrization to the directml/qualcomm/no-accelerator readiness cases, matching ADR Scope item 10's literal "both architectures" wording); `docs/adr/0008-profile-provision-preflight-readiness.md` (Status section records this pass).
   - Validation: `pytest backend/tests` -> 423 passed (up from 419, same 0 skips); all six `scripts/validate_backend.py` commands returned exit 0; `grep -rn "parents\[" backend/src/awf/adapters/codex_cli.py` empty; `grep -rn '"data" / "awf_db" / "awf.db"' backend/src/awf` matches only `awf/paths.py`; manually confirmed `awf.paths.db_path()` and `codex_cli.DEFAULT_PROFILE_PATH` resolve to the same values the old inline expressions did.
   - Notes: the core four-stage design (`profiler.py`/`provisioning.py`/`preflight.py`/`readiness.py`) needed no changes - all four modules matched the ADR's described signatures and decision logic exactly. The `codex_cli.py` and `stdio.py`/`core_ops.py` sites predate ADR-0008 and were never named in its own file-scope list; they're real gaps against its "single source of truth" claim in practice, not broken promises of the ADR text itself. The readiness test parametrization is additive only - `readiness.py` never reads `inventory.arch`, so no new logic path was exercised, only literal coverage of the stated scope.
+
+- Timestamp: 2026-08-06 16:20
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0010 (setup flag dispatch and repository surface cleanup).
+  - Scope: see `docs/adr/0010-setup-flag-repo-surface-cleanup.md` for full detail.
+  - Validation: ADR-0010 records the acceptance run: `pytest backend/tests` -> 419 passed, 0 skipped; all six `scripts/validate_backend.py` commands passed; `awf-setup --provision --verify` printed both reports on this host.
+  - Notes: corrective documentation entry added after the implementation entry was found missing.
 
 - Timestamp: 2026-08-06 16:10
   - Host class(es): Linux/WSL2, AMD64, NVIDIA GeForce RTX 3060
@@ -159,6 +201,13 @@
   - Summary: The user set a real, operator-supplied HuggingFace read token (`awf secret set huggingface-token`, resolved through the real secrets store, never seen in this conversation) so the `*-cuda` STT revision pin could actually be verified instead of left as `main`. Doing so surfaced a real error in the prior entry: `Systran/faster-whisper-large-v3-turbo` does not exist - a real, authenticated HF API search for it returned zero results. The real repo is `deepdml/faster-whisper-large-v3-turbo-ct2` (confirmed via the authenticated API: real MIT-licensed CTranslate2 file set, sha `4df90f75321148c3a29a9e2351b7ddf8f5b115a8`). Both `config/voice/stt/{windows-x64-cuda,linux-x64-cuda}.yaml` now pin this real revision instead of the moving `main` branch.
   - Validation: 305 backend tests pass (unchanged count - these two manifests were already covered by the "all 48 shipped manifests parse cleanly" test, which still passes against the corrected content).
   - Notes: a second real, viable alternative was found and rejected in favor of the one shipped: `mobiuslabsgmbh/faster-whisper-large-v3-turbo` (sha `0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf`, far more downloads but thinner repo metadata) - noted in the manifest's own `notes` field as a legitimate substitute if `deepdml`'s repo is ever deprecated, not silently discarded.
+
+- Timestamp: 2026-08-04 06:29
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0007 (one voice manifest per function, with model selection keyed to the hardware profile).
+  - Scope: see `docs/adr/0007-cohesive-voice-config-paths.md` for full detail.
+  - Validation: ADR-0007 records the implemented manifest shape and acceptance criteria; neighboring changelog entries record the voice manifest implementation and follow-up model-pin correction.
+  - Notes: corrective documentation entry added after the implementation entry was found missing.
 
 - Timestamp: 2026-08-04 06:28
   - Summary: Closed the sixth caveat - all 48 hardware-profile-pinned-artifact manifests (12 profile IDs x 4 functions) now exist under `config/voice/`, and the voice pipeline actually reads them. Two real spec/reality mismatches were found and pinned to reality, not the spec's literal wording: STT's cpu/gpu-class table entry says "sherpa-onnx ONNX export," but the real, installed adapter uses faster-whisper's HuggingFace-hosted model instead; VAD's entry says "sherpa-onnx-packaged," but the real installed copy came from the `silero-vad` PyPI package. Both manifests pin what is actually running, with the mismatch stated in the manifest's own `notes` field, not silently "corrected" to match the spec or silently left wrong.

@@ -11,7 +11,7 @@ forever just because nothing above this function caught the error.
 
 import json
 import sqlite3
-from typing import Callable
+from collections.abc import Callable
 
 from awf.clock import utc_now_rfc3339
 from awf.events.writer import write_event
@@ -38,9 +38,7 @@ def run_step(
     fn: StepFn,
     input_payload: dict,
 ) -> dict:
-    row = conn.execute(
-        "SELECT status, output_json FROM steps WHERE step_id = ?", (step_id,)
-    ).fetchone()
+    row = conn.execute("SELECT status, output_json FROM steps WHERE step_id = ?", (step_id,)).fetchone()
     if row["status"] == "SUCCEEDED":
         return json.loads(row["output_json"])
 
@@ -50,8 +48,12 @@ def run_step(
     )
     conn.commit()
     write_event(
-        conn, run_id=run_id, step_id=step_id, new_status="RUNNING",
-        actor="engine", reason_code="step_started",
+        conn,
+        run_id=run_id,
+        step_id=step_id,
+        new_status="RUNNING",
+        actor="engine",
+        reason_code="step_started",
     )
 
     try:
@@ -64,8 +66,12 @@ def run_step(
         )
         conn.commit()
         write_event(
-            conn, run_id=run_id, step_id=step_id, new_status="FAILED",
-            actor="engine", reason_code=failure_class.lower(),
+            conn,
+            run_id=run_id,
+            step_id=step_id,
+            new_status="FAILED",
+            actor="engine",
+            reason_code=failure_class.lower(),
             payload_json=json.dumps({"error": str(exc)}),
         )
         raise
@@ -76,8 +82,13 @@ def run_step(
     )
     conn.commit()
     write_event(
-        conn, run_id=run_id, step_id=step_id, new_status="SUCCEEDED",
-        actor="engine", reason_code="step_completed", payload_json=json.dumps(output),
+        conn,
+        run_id=run_id,
+        step_id=step_id,
+        new_status="SUCCEEDED",
+        actor="engine",
+        reason_code="step_completed",
+        payload_json=json.dumps(output),
     )
     return output
 

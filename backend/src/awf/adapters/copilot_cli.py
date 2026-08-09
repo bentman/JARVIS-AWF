@@ -54,9 +54,7 @@ def _final_assistant_message(events: list[dict]) -> str | None:
 def invoke(invocation: AgentInvocation) -> AgentResult:
     for key in FORBIDDEN_CONSTRAINT_KEYS:
         if invocation.constraints.get(key):
-            raise CopilotAdapterError(
-                "--allow-all/--yolo MUST NOT be used by AWF's default profile"
-            )
+            raise CopilotAdapterError("--allow-all/--yolo MUST NOT be used by AWF's default profile")
     allowed_tools = invocation.constraints.get("allowed_tools", DEFAULT_ALLOWED_TOOLS)
     timeout_seconds = invocation.constraints.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
 

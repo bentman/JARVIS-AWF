@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed. Not implemented.
+Implemented.
+
+Acceptance run: `scripts/validate_backend.py lint` passed; `scripts/validate_backend.py runtime` -> 17 passed, 1 skipped; `scripts/validate_backend.py ci` -> 509 passed, 18 deselected. Focused prompt/persona coverage is included in the backend test suite.
 
 Two tasks. Task A adds the Persona registry kind. Task B adds the prompt
 envelope. Task B depends on Task A.

@@ -11,7 +11,7 @@ by the `map` and `loop` node executors.
 """
 
 import sqlite3
-from typing import Callable
+from collections.abc import Callable
 
 from awf.engine.executor import run_step
 
@@ -29,9 +29,7 @@ def make_subworkflow_node_executor(run_child: RunChildFn):
         def fn(_payload: dict) -> dict:
             child_run_id, result = run_child(conn, node["workflowRef"], node.get("input", {}))
             if result.get("status") != "SUCCEEDED":
-                raise SubworkflowError(
-                    f"child run {child_run_id} ({node['workflowRef']}) did not succeed: {result}"
-                )
+                raise SubworkflowError(f"child run {child_run_id} ({node['workflowRef']}) did not succeed: {result}")
             return {"child_run_id": child_run_id, "child_status": result["status"]}
 
         return run_step(conn, step_id=step_id, run_id=run_id, fn=fn, input_payload={})

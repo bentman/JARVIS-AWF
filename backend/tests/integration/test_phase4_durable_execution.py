@@ -38,7 +38,10 @@ def test_run_step_skips_already_succeeded_step(tmp_path):
     create_step(conn, step_id="s1", run_id="run-1", node_id="n1")
 
     calls = []
-    fn = lambda payload: (calls.append("ran"), {"n": len(calls)})[1]
+
+    def fn(_payload: dict) -> dict:
+        calls.append("ran")
+        return {"n": len(calls)}
 
     first = run_step(conn, step_id="s1", run_id="run-1", fn=fn, input_payload={})
     second = run_step(conn, step_id="s1", run_id="run-1", fn=fn, input_payload={})
@@ -73,8 +76,7 @@ def test_mid_run_crash_and_resume_no_duplicate_side_effects(tmp_path, repo_root)
     conn = get_connection(db_path)
     run_row = conn.execute("SELECT status FROM runs WHERE run_id = 'run-crash-1'").fetchone()
     step_status = {
-        row["step_id"]: row["status"]
-        for row in conn.execute("SELECT step_id, status FROM steps").fetchall()
+        row["step_id"]: row["status"] for row in conn.execute("SELECT step_id, status FROM steps").fetchall()
     }
     conn.close()
 
@@ -93,8 +95,7 @@ def test_mid_run_crash_and_resume_no_duplicate_side_effects(tmp_path, repo_root)
     conn = get_connection(db_path)
     run_row = conn.execute("SELECT status FROM runs WHERE run_id = 'run-crash-1'").fetchone()
     step_status = {
-        row["step_id"]: row["status"]
-        for row in conn.execute("SELECT step_id, status FROM steps").fetchall()
+        row["step_id"]: row["status"] for row in conn.execute("SELECT step_id, status FROM steps").fetchall()
     }
     conn.close()
 

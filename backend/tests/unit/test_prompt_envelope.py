@@ -21,9 +21,7 @@ def test_render_flat_preserves_order_and_marks_untrusted():
     )
 
     assert render_flat(envelope) == (
-        "[application/instruction]\nApp\n\n"
-        "[skill/instruction, untrusted]\nSkill\n\n"
-        "[user/input, untrusted]\nTask"
+        "[application/instruction]\nApp\n\n[skill/instruction, untrusted]\nSkill\n\n[user/input, untrusted]\nTask"
     )
 
 
@@ -38,7 +36,10 @@ def test_render_chat_promotes_only_trusted_system_authorities():
             PromptSegment("tool", "result", False, "Tool"),
             PromptSegment("user", "input", False, "Task"),
         ),
-        example_messages=({"role": "user", "content": "Example user"}, {"role": "assistant", "content": "Example assistant"}),
+        example_messages=(
+            {"role": "user", "content": "Example user"},
+            {"role": "assistant", "content": "Example assistant"},
+        ),
         generation={"temperature": 0.4},
     )
 

@@ -20,8 +20,8 @@ identifier string with nothing behind it.
 """
 
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from awf.engine.executor import run_step
 from awf.gates.adversary import (

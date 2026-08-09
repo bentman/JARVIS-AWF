@@ -69,9 +69,7 @@ def test_activity_node_with_repo_root_authorizes_through_the_published_record(co
 
     executor(conn, "run-1", "step-1", {"id": "probe", "type": "activity", "function": "hardware_probe"})
 
-    decision_event = conn.execute(
-        "SELECT * FROM events WHERE actor = 'awf' AND new_status = 'allow'"
-    ).fetchone()
+    decision_event = conn.execute("SELECT * FROM events WHERE actor = 'awf' AND new_status = 'allow'").fetchone()
     assert decision_event is not None
     assert '"capability_ref": "hardware_probe@1.0.0"' in decision_event["payload_json"]
     assert '"risk_class": "R0"' in decision_event["payload_json"]

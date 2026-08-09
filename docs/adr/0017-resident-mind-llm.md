@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed. Not implemented.
+Implemented.
+
+Acceptance run: `scripts/validate_backend.py lint` passed; `scripts/validate_backend.py runtime` -> 17 passed, 1 skipped; `scripts/validate_backend.py ci` -> 509 passed, 18 deselected. `awf-setup --verify` reports the installed Ruff dev-tooling floor and `pip_check: OK`.
 
 ## Context
 
@@ -78,14 +80,18 @@ unchanged.
 selectable when its directory holds at least one `.gguf`. AWF never acquires a
 model.
 
-**Acquisition covers the CPU llama.cpp release only.** One archive per host,
-on request, into `runtimes/llama.cpp/<profile-id>/`.
+**Acquisition covers declared llama.cpp runtime artifacts.** Official CPU and
+Vulkan release archives are acquired on request into
+`runtimes/llama.cpp/<profile-id>/`. Windows x64 CUDA uses the upstream
+llama.cpp CUDA 12.4 release archive. Linux CUDA, Snapdragon Hexagon/QNN, and
+Adreno OpenCL entries may be declared as `archive: manual`, meaning the
+operator must place a compatible build under that same runtime directory.
 
 **`derive_llm_readiness` resolves the full accelerator ladder.** CUDA, QNN,
-and Adreno OpenCL are each decided from inventory facts and preflight tokens
-that already exist, and each additionally requires a declared artifact and an
-extracted binary. Only the four `*-cpu` artifacts are declared, so every host
-resolves `cpu` today with a reason naming what was missing.
+Vulkan, and Adreno OpenCL are each decided from inventory facts and preflight
+tokens, and each additionally requires a declared artifact and an extracted
+binary. The server config declares every canonical profile ID; manual artifacts
+are usable as soon as the operator-provided runtime directory exists.
 
 **Each turn is isolated.** Whatever a profile's launch block says, the sidecar
 starts with no reusable prompt cache, one slot, and continuous batching off.
@@ -598,7 +604,9 @@ backend/src/awf/
   under `runtimes/llama.cpp/<profile-id>/`, and a second run reports
   `PRESENT` without downloading.
 - On a host whose profile ID has no declared artifact, `awf llm acquire`
-  refuses with a message naming the profile ID.
+  refuses with a message naming the profile ID; on a host whose artifact is
+  declared `manual`, it refuses with the runtime directory the operator must
+  populate.
 - With a GGUF under `models/llm/<name>/`, `awf llm models` lists it and
   `awf llm select llama-server --model <name>` writes a `resident-mind`
   profile that `resolve_registry_object` resolves from
@@ -615,10 +623,10 @@ backend/src/awf/
 - `awf llm select openai-compatible` against a non-loopback base URL without
   `--allow-remote` is refused naming the host; with the flag the written
   profile carries `local_only: false`.
-- On this NVIDIA host with only CPU artifacts declared,
-  `derive_llm_readiness` returns `cpu` with
-  `"Degraded-accelerator-unavailable: no gpu.cuda artifact declared for
-  linux-x64-cuda"`.
+- On a NVIDIA host with a declared CUDA artifact but no local model selected,
+  `derive_llm_readiness` reports the CUDA device and
+  `Degraded-no-local-model-artifact`; with the model and binary present it
+  returns `gpu.cuda`.
 - The `hardware_profile_resolved` payload carries five readiness entries.
 - `pytest backend/tests` matches or exceeds the pre-change pass count with the
   same or fewer skips.

@@ -136,7 +136,7 @@ def render_copilot(servers: list[McpServer], resolved_secrets: dict[str, str]) -
     return RenderedMcpConfig(
         relative_path=path,
         contents=contents,
-        extra_args=(f"--additional-mcp-config", f"@{path}"),
+        extra_args=("--additional-mcp-config", f"@{path}"),
         env_overlay=_env_overlay_for(servers, resolved_secrets),
     )
 
@@ -198,9 +198,7 @@ def render_antigravity(servers: list[McpServer], resolved_secrets: dict[str, str
         mcp_servers[server.name] = entry
 
     mcp_config_contents = json.dumps({"mcpServers": mcp_servers}, indent=2)
-    settings_contents = json.dumps(
-        {"permissions": {"allow": list(ANTIGRAVITY_MCP_PERMISSION_ALLOW)}}, indent=2
-    )
+    settings_contents = json.dumps({"permissions": {"allow": list(ANTIGRAVITY_MCP_PERMISSION_ALLOW)}}, indent=2)
 
     return RenderedMcpConfig(
         relative_path=None,

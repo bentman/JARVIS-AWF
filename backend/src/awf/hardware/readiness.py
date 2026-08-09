@@ -41,9 +41,7 @@ def _ct2_cuda_count(tokens: list[str]) -> int:
 
 
 def derive_stt_readiness(inventory: "HardwareInventory", tokens: list[str]) -> Readiness:
-    cuda_capable = (
-        inventory.gpu_vendor == "nvidia" and inventory.cuda_available and _ct2_cuda_count(tokens) > 0
-    )
+    cuda_capable = inventory.gpu_vendor == "nvidia" and inventory.cuda_available and _ct2_cuda_count(tokens) > 0
     device = "cuda" if cuda_capable else "cpu"
     ready = "import:faster_whisper" in tokens
     if not ready:
@@ -59,11 +57,15 @@ def derive_tts_readiness(inventory: "HardwareInventory", tokens: list[str]) -> R
         return Readiness(device="cpu", ready=False, reason="kokoro_onnx not importable")
 
     if inventory.gpu_vendor == "nvidia" and inventory.cuda_available and f"ep:{_CUDA_PROVIDER}" in tokens:
-        return Readiness(device="cuda", ready=True, reason="gpu_vendor=nvidia, cuda_available, CUDAExecutionProvider available")
+        return Readiness(
+            device="cuda", ready=True, reason="gpu_vendor=nvidia, cuda_available, CUDAExecutionProvider available"
+        )
     if inventory.os_name == "windows" and inventory.gpu_available and f"ep:{_DML_PROVIDER}" in tokens:
         return Readiness(device="directml", ready=True, reason="windows, gpu_available, DmlExecutionProvider available")
     if inventory.npu_vendor == "qualcomm" and f"ep:{_QNN_PROVIDER}" in tokens and "dll:QnnHtp" in tokens:
-        return Readiness(device="qnn", ready=True, reason="npu_vendor=qualcomm, QNNExecutionProvider available, QnnHtp present")
+        return Readiness(
+            device="qnn", ready=True, reason="npu_vendor=qualcomm, QNNExecutionProvider available, QnnHtp present"
+        )
     return Readiness(device="cpu", ready=True, reason="no verified accelerator execution provider for ONNX Runtime")
 
 
@@ -134,11 +136,14 @@ def derive_llm_readiness(
 
     adreno_hw = inventory.gpu_vendor == "qualcomm" and inventory.gpu_available
     adreno_tok = "opencl:adreno" in tokens
+    vulkan_hw = inventory.gpu_available
+    vulkan_tok = "vulkan:available" in tokens
 
     rungs = [
         ("gpu.cuda", cuda_hw, cuda_tok, "gpu_vendor=nvidia, cuda_available, ep:CUDAExecutionProvider"),
         ("npu.qnn", qnn_hw, qnn_tok, "npu_vendor=qualcomm, npu_available, ep:QNNExecutionProvider, dll:QnnHtp"),
         ("gpu.opencl.adreno", adreno_hw, adreno_tok, "gpu_vendor=qualcomm, gpu_available, opencl:adreno"),
+        ("gpu.vulkan", vulkan_hw, vulkan_tok, "gpu_available, vulkan:available"),
         ("cpu", True, True, "cpu floor"),
     ]
 

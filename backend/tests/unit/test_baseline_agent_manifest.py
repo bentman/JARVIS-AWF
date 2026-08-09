@@ -44,9 +44,7 @@ def test_parse_rejects_invalid_role():
 
 
 def test_parse_accepts_valid_role_and_capabilities():
-    manifest = parse_agent_manifest(
-        minimal_raw(role="verifier", capabilities=["read_file@1.0.0", "git_push@1.0.0"])
-    )
+    manifest = parse_agent_manifest(minimal_raw(role="verifier", capabilities=["read_file@1.0.0", "git_push@1.0.0"]))
     assert manifest.role == "verifier"
     assert manifest.capabilities == ("read_file@1.0.0", "git_push@1.0.0")
 

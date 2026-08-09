@@ -1,5 +1,4 @@
 import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -87,9 +86,11 @@ def test_no_commit_when_adapter_does_not_complete(repo_and_worktree, conn, monke
         return AgentResult(status=AgentStatus.FAILED, output={}, termination_reason="tool_error")
 
     import awf.engine.agent_step as agent_step_module
+
     commit_calls = []
     monkeypatch.setattr(
-        agent_step_module, "commit_all_changes",
+        agent_step_module,
+        "commit_all_changes",
         lambda *a, **k: commit_calls.append((a, k)),
     )
 
@@ -116,7 +117,8 @@ def test_no_commit_when_adapter_does_not_complete(repo_and_worktree, conn, monke
 def _capability(risk_class: str, approval: str) -> CapabilityRecord:
     return CapabilityRecord(
         identity=Identity(type="cli-adapter-action", provider="claude-code", name="demo_action", version="1.0.0"),
-        schema_input="", schema_output="",
+        schema_input="",
+        schema_output="",
         effects=Effects(operation="update", reversible=True, idempotent=False, external_side_effect=True),
         risk_class=risk_class,
         approval=approval,

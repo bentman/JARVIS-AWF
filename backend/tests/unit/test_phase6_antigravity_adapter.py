@@ -35,11 +35,15 @@ def test_invoke_builds_sandboxed_accept_edits_command_bound_to_workspace(monkeyp
 
     assert captured["command"] == [
         "agy",
-        "--print", "do the thing",
-        "--mode", "accept-edits",
+        "--print",
+        "do the thing",
+        "--mode",
+        "accept-edits",
         "--sandbox",
-        "--output-format", "json",
-        "--add-dir", "/tmp/does-not-matter",
+        "--output-format",
+        "json",
+        "--add-dir",
+        "/tmp/does-not-matter",
         "--new-project",
     ]
     assert result.status == AgentStatus.COMPLETED

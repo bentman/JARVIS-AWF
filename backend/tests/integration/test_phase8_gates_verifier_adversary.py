@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.run import create_run

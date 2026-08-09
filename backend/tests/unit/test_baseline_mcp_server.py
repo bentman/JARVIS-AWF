@@ -63,8 +63,7 @@ def test_parse_http_server_with_header_secrets():
 def test_load_real_file(tmp_path):
     path = tmp_path / "fetch.yaml"
     path.write_text(
-        "name: fetch\nversion: 1.0.0\ntype: stdio\ncommand: npx\n"
-        "args: ['-y', '@modelcontextprotocol/server-fetch']\n"
+        "name: fetch\nversion: 1.0.0\ntype: stdio\ncommand: npx\nargs: ['-y', '@modelcontextprotocol/server-fetch']\n"
     )
     server = load_mcp_server(path)
     assert server.ref == "fetch@1.0.0"

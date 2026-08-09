@@ -3,9 +3,9 @@ from types import SimpleNamespace
 import pytest
 from cryptography.fernet import Fernet
 
+from awf.cognition.envelope import PromptEnvelope, PromptSegment
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
-from awf.cognition.envelope import PromptEnvelope, PromptSegment
 from awf.gateway.client import GatewayError, complete, complete_envelope
 from awf.registry.model_profile import (
     ModelProfileValidationError,

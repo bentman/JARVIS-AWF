@@ -29,8 +29,14 @@ def test_invoke_builds_explicit_allow_tool_command_no_yolo(monkeypatch):
     result = invoke(make_invocation())
 
     assert captured["command"] == [
-        "copilot", "-p", "do the thing", "--output-format", "json", "--no-color",
-        "--allow-tool", "write",
+        "copilot",
+        "-p",
+        "do the thing",
+        "--output-format",
+        "json",
+        "--no-color",
+        "--allow-tool",
+        "write",
     ]
     assert "--yolo" not in captured["command"]
     assert "--allow-all" not in captured["command"]

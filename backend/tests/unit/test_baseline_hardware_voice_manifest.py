@@ -159,7 +159,9 @@ def test_sync_leaves_existing_models_untouched_when_acquisition_fails(tmp_path, 
     stale_tts.parent.mkdir(parents=True)
     stale_tts.write_bytes(b"old")
 
-    monkeypatch.setattr(models, "_acquire_file", lambda file, target: (_ for _ in ()).throw(RuntimeError("download failed")))
+    monkeypatch.setattr(
+        models, "_acquire_file", lambda file, target: (_ for _ in ()).throw(RuntimeError("download failed"))
+    )
 
     with pytest.raises(RuntimeError, match="download failed"):
         models.sync_models(tmp_path, "cpu")
@@ -170,8 +172,12 @@ def test_sync_leaves_existing_models_untouched_when_acquisition_fails(tmp_path, 
 @pytest.mark.live
 def test_verify_models_against_the_real_shipped_manifests(repo_root, models_present):
     if not models_present(
-        "wake/hey_jarvis_v0.1.onnx", "wake/melspectrogram.onnx", "wake/embedding_model.onnx",
-        "vad/silero_vad.onnx", "tts/kokoro-v1.0.onnx", "tts/voices-v1.0.bin",
+        "wake/hey_jarvis_v0.1.onnx",
+        "wake/melspectrogram.onnx",
+        "wake/embedding_model.onnx",
+        "vad/silero_vad.onnx",
+        "tts/kokoro-v1.0.onnx",
+        "tts/voices-v1.0.bin",
     ):
         pytest.skip("voice models not present under models/ on this host")
 

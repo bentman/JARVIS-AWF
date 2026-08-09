@@ -11,9 +11,5 @@ from awf.gates.schema import FAILING_SEVERITIES, Finding, Verdict
 def build_verdict(findings: list[Finding], *, tier: str) -> Verdict:
     failing = [f for f in findings if f.severity in FAILING_SEVERITIES]
     passed = not failing
-    reason = (
-        "no high/critical findings"
-        if passed
-        else "; ".join(f"{f.category}:{f.summary}" for f in failing)
-    )
+    reason = "no high/critical findings" if passed else "; ".join(f"{f.category}:{f.summary}" for f in failing)
     return Verdict(passed=passed, tier=tier, findings=tuple(findings), reason=reason)

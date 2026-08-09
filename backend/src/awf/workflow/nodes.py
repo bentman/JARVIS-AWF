@@ -41,6 +41,4 @@ def validate_node(node: dict) -> None:
 
     for field in REQUIRED_FIELDS_BY_TYPE.get(node_type, ()):
         if field not in node:
-            raise NodeValidationError(
-                f"node '{node_id}' (type={node_type}): missing required field '{field}'"
-            )
+            raise NodeValidationError(f"node '{node_id}' (type={node_type}): missing required field '{field}'")

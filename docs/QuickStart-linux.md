@@ -48,7 +48,7 @@ Python 3.13 or 3.14 work as well. Use `backend/.venv/bin/python` for every comma
 backend/.venv/bin/python -m pip install -e ".[dev]"
 ```
 
-This installs the core, the four console scripts (`awf`, `awf-setup`, `awf-secret`, `awf-speech`), and the test dependencies. The ONNX Runtime build is not part of the base set — the next step selects it.
+This installs the core, the four console scripts (`awf`, `awf-setup`, `awf-secret`, `awf-speech`), and the dev tooling needed by validation, including pytest and Ruff. The ONNX Runtime build is not part of the base set — the next step selects it.
 
 ### 3. Provision the hardware-appropriate ONNX Runtime
 
@@ -71,7 +71,7 @@ Install it, then confirm what resolution produced:
 backend/.venv/bin/awf-setup --install --verify
 ```
 
-`--verify` reports the installed ONNX Runtime distribution and version, its available execution providers, and `pip check`. On any host with a non-CPU extra, `pip check` reports that `kokoro-onnx`, `openwakeword`, and `faster-whisper` require `onnxruntime` — expected, since those packages name the base distribution and have no way to express that an accelerator build satisfies it. `--verify` distinguishes that from a real failure.
+`--verify` reports the installed ONNX Runtime distribution and version, its available execution providers, the installed Ruff version, and `pip check`. On any host with a non-CPU extra, `pip check` reports that `kokoro-onnx`, `openwakeword`, and `faster-whisper` require `onnxruntime` — expected, since those packages name the base distribution and have no way to express that an accelerator build satisfies it. `--verify` distinguishes that from a real failure.
 
 ### 4. Bootstrap local state
 
@@ -94,10 +94,11 @@ backend/.venv/bin/awf-speech models verify
 
 ```bash
 backend/.venv/bin/python scripts/validate_backend.py profile
+backend/.venv/bin/python scripts/validate_backend.py lint
 backend/.venv/bin/python scripts/validate_backend.py ci
 ```
 
-`profile` writes a timestamped report to `reports/diagnostics/` naming the resolved hardware profile, the preflight tokens, and the per-function readiness results. `ci` runs everything except the tests marked `live` and writes its own validation report.
+`profile` writes a timestamped report to `reports/diagnostics/` naming the resolved hardware profile, the preflight tokens, and the per-function readiness results. `lint` runs Ruff format/check in read-only mode. `ci` runs `lint` first, then everything except the tests marked `live`, and writes its own validation report.
 
 ### 7. Frontends
 
@@ -112,6 +113,7 @@ npm --prefix frontend run dev
 
 ```bash
 backend/.venv/bin/python scripts/validate_backend.py profile
+backend/.venv/bin/python scripts/validate_backend.py lint
 backend/.venv/bin/python scripts/validate_backend.py unit
 backend/.venv/bin/python scripts/validate_backend.py integration
 backend/.venv/bin/python scripts/validate_backend.py runtime
@@ -121,7 +123,7 @@ backend/.venv/bin/python scripts/validate_backend.py ci
 
 Exit codes: `0` pass, `1` fail, `2` skipped, `3` environment unsatisfied. `runtime` runs only the tests marked `live`, which need real hardware and the acquired models; it returns `2` when the host cannot satisfy them.
 
-`profile` writes to `reports/diagnostics/`; every test command writes one timestamped report to `reports/validation/`. Test commands stream each test's name, progress, and result, then end with pass/fail/skip/warning counts.
+`profile` writes to `reports/diagnostics/`; every validation command writes one timestamped report to `reports/validation/`. Test commands stream each test's name, progress, and result, then end with pass/fail/skip/warning counts.
 
 ## Running AWF
 

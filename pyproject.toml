@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "onnx>=1.22"]
+dev = ["pytest>=8", "onnx>=1.22", "ruff>=0.15.22"]
 hw-ort-cpu = ["onnxruntime>=1.28"]
 hw-ort-cuda = ["onnxruntime-gpu>=1.28"]
 hw-ort-directml = ["onnxruntime-directml>=1.28; sys_platform=='win32'"]
@@ -36,6 +36,21 @@ awf-speech = "awf.speech.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["backend/src"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["backend/src", "backend/tests", "scripts"]
+exclude = ["cache", "data", "models", "runtimes", "reports", "frontend/node_modules"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]

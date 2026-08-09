@@ -122,9 +122,7 @@ def test_tts_not_ready_when_kokoro_onnx_missing():
 def _write_onnx_with_inputs(path: Path, names: list[str]) -> None:
     inputs = [helper.make_tensor_value_info(name, TensorProto.FLOAT, [1]) for name in names]
     node = helper.make_node("Identity", [names[0]], ["y"])
-    graph = helper.make_graph(
-        [node], "test", inputs, [helper.make_tensor_value_info("y", TensorProto.FLOAT, [1])]
-    )
+    graph = helper.make_graph([node], "test", inputs, [helper.make_tensor_value_info("y", TensorProto.FLOAT, [1])])
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
     onnx.save(model, str(path))
 

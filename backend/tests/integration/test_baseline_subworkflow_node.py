@@ -25,7 +25,9 @@ def test_subworkflow_runs_the_child_and_completes_on_success(conn):
 
     executor = make_subworkflow_node_executor(run_child)
     output = executor(
-        conn, "run-1", "step-1",
+        conn,
+        "run-1",
+        "step-1",
         {"id": "run-child", "type": "subworkflow", "workflowRef": "child@1.0.0", "input": {"x": 1}},
     )
 

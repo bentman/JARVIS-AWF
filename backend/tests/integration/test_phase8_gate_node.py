@@ -72,11 +72,15 @@ def test_default_tier_gate_produces_verdict_and_finding_artifacts(tmp_path):
         return {"ok": True}
 
     gate_executor = make_trifecta_gate_executor(
-        check_fn=lambda: True, check_summary="demo check", artifacts_root=artifacts_root,
+        check_fn=lambda: True,
+        check_summary="demo check",
+        artifacts_root=artifacts_root,
     )
 
     result = run_workflow_definition(
-        conn, run_id="run-1", workflow=workflow,
+        conn,
+        run_id="run-1",
+        workflow=workflow,
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
@@ -119,12 +123,16 @@ def test_gate_with_review_profile_adds_a_real_llm_review_finding_via_the_gateway
         }
     )
     gate_executor = make_trifecta_gate_executor(
-        check_fn=lambda: True, check_summary="demo check", artifacts_root=artifacts_root,
+        check_fn=lambda: True,
+        check_summary="demo check",
+        artifacts_root=artifacts_root,
         review_profile=review_profile,
     )
 
     result = run_workflow_definition(
-        conn, run_id="run-1", workflow=workflow,
+        conn,
+        run_id="run-1",
+        workflow=workflow,
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
@@ -169,12 +177,17 @@ def test_gate_with_worktree_path_shows_the_llm_reviewer_the_real_diff_not_just_t
         }
     )
     gate_executor = make_trifecta_gate_executor(
-        check_fn=lambda: True, check_summary="calc_add_returns_sum", artifacts_root=artifacts_root,
-        review_profile=review_profile, worktree_path=repo_root,
+        check_fn=lambda: True,
+        check_summary="calc_add_returns_sum",
+        artifacts_root=artifacts_root,
+        review_profile=review_profile,
+        worktree_path=repo_root,
     )
 
     run_workflow_definition(
-        conn, run_id="run-1", workflow=workflow,
+        conn,
+        run_id="run-1",
+        workflow=workflow,
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
@@ -186,9 +199,7 @@ def test_gate_with_worktree_path_shows_the_llm_reviewer_the_real_diff_not_just_t
 
 
 def test_high_risk_gate_with_adversary_review_profile_adds_a_real_llm_adversary_finding(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        "awf.gates.adversary.complete", lambda *a, **k: "FAIL: unchecked input allows a path traversal"
-    )
+    monkeypatch.setattr("awf.gates.adversary.complete", lambda *a, **k: "FAIL: unchecked input allows a path traversal")
 
     conn = make_conn(tmp_path)
     workflow = make_workflow()
@@ -209,12 +220,17 @@ def test_high_risk_gate_with_adversary_review_profile_adds_a_real_llm_adversary_
         }
     )
     gate_executor = make_trifecta_gate_executor(
-        check_fn=lambda: True, check_summary="demo check", artifacts_root=artifacts_root,
-        tier="high-risk", adversary_review_profile=adversary_review_profile,
+        check_fn=lambda: True,
+        check_summary="demo check",
+        artifacts_root=artifacts_root,
+        tier="high-risk",
+        adversary_review_profile=adversary_review_profile,
     )
 
     result = run_workflow_definition(
-        conn, run_id="run-1", workflow=workflow,
+        conn,
+        run_id="run-1",
+        workflow=workflow,
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
@@ -241,19 +257,21 @@ def test_gate_fails_then_repairs_then_passes_produces_two_verdicts(tmp_path):
         return {"ok": True}
 
     gate_executor = make_trifecta_gate_executor(
-        check_fn=lambda: next(check_results), check_summary="demo check", artifacts_root=artifacts_root,
+        check_fn=lambda: next(check_results),
+        check_summary="demo check",
+        artifacts_root=artifacts_root,
     )
 
     result = run_workflow_definition(
-        conn, run_id="run-1", workflow=workflow,
+        conn,
+        run_id="run-1",
+        workflow=workflow,
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
     assert result["status"] == "SUCCEEDED"
     assert result["repairs_used"] == 1
-    verdict_rows = conn.execute(
-        "SELECT * FROM artifacts WHERE artifact_type = 'verdict' ORDER BY rowid"
-    ).fetchall()
+    verdict_rows = conn.execute("SELECT * FROM artifacts WHERE artifact_type = 'verdict' ORDER BY rowid").fetchall()
     assert len(verdict_rows) == 2
     first_verdict = read_artifact_json(conn, artifacts_root, verdict_rows[0]["artifact_id"])
     second_verdict = read_artifact_json(conn, artifacts_root, verdict_rows[1]["artifact_id"])
@@ -278,7 +296,9 @@ def test_high_risk_tier_safety_gate_bypass_fails_immediately_without_consuming_b
     )
 
     result = run_workflow_definition(
-        conn, run_id="run-1", workflow=workflow,
+        conn,
+        run_id="run-1",
+        workflow=workflow,
         node_executors={"agent": agent_executor, "gate": gate_executor},
     )
 
@@ -290,9 +310,7 @@ def test_high_risk_tier_safety_gate_bypass_fails_immediately_without_consuming_b
     verdict_content = read_artifact_json(conn, artifacts_root, result["verdict_artifact_id"])
     assert verdict_content["passed"] is False
 
-    bypass_findings = [
-        f for f in verdict_content["findings"] if f["category"] == "safety_gate_bypass"
-    ]
+    bypass_findings = [f for f in verdict_content["findings"] if f["category"] == "safety_gate_bypass"]
     assert len(bypass_findings) == 1
     assert bypass_findings[0]["severity"] == "critical"
     assert bypass_findings[0]["role"] == "adversary"

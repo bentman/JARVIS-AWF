@@ -12,9 +12,8 @@ from pathlib import Path
 
 from awf.paths import CONFIG_REGISTRY_RELATIVE as CONFIG_ROOT
 from awf.paths import DATA_REGISTRY_RELATIVE as DATA_ROOT
-from awf.registry.kinds import by_key
+from awf.registry.kinds import by_key, version_names
 from awf.registry.kinds import object_path as _object_path
-from awf.registry.kinds import version_names
 
 
 class RegistryObjectNotFoundError(FileNotFoundError):
@@ -52,14 +51,10 @@ def resolve_registry_object(
         if config_dir.is_dir() and any(config_dir.iterdir()):
             path = _object_path(config_dir, registry_kind, version)
             if not path.exists():
-                raise RegistryObjectNotFoundError(
-                    f"{kind}/{name}@{version} not found in {CONFIG_ROOT}"
-                )
+                raise RegistryObjectNotFoundError(f"{kind}/{name}@{version} not found in {CONFIG_ROOT}")
             return _verify(conn, path, kind, name, version, registry_kind), "config"
 
-    raise RegistryObjectNotFoundError(
-        f"no registry object for {kind}/{name} under {DATA_ROOT} or {CONFIG_ROOT}"
-    )
+    raise RegistryObjectNotFoundError(f"no registry object for {kind}/{name} under {DATA_ROOT} or {CONFIG_ROOT}")
 
 
 def _verify(conn, path: Path, kind: str, name: str, version: str, registry_kind) -> Path:
@@ -77,7 +72,6 @@ def _verify(conn, path: Path, kind: str, name: str, version: str, registry_kind)
     actual_digest = index.compute_digest(path, registry_kind)
     if actual_digest != row["digest"]:
         raise RegistryIntegrityError(
-            f"{kind}/{name}@{version}: digest mismatch - indexed {row['digest']}, "
-            f"actual {actual_digest}, path {path}"
+            f"{kind}/{name}@{version}: digest mismatch - indexed {row['digest']}, actual {actual_digest}, path {path}"
         )
     return path

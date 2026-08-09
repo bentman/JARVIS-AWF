@@ -19,6 +19,7 @@ Six commands, each returning a code from one shared contract:
 | runtime       | python -m pytest -v -m live backend/tests         | reports/validation/<ts>-runtime.txt     |
 | regression    | the always-safe minimal set (backend/tests/unit)  | reports/validation/<ts>-regression.txt |
 | ci            | python -m pytest -v -m "not live" backend/tests   | reports/validation/<ts>-ci.txt          |
+| lint          | ruff format --check + ruff check                  | reports/validation/<ts>-lint.txt        |
 
 `runtime` scans the whole suite filtered by the `live` marker rather than
 only `backend/tests/runtime/`: some modules keep one `live`-marked test
@@ -66,11 +67,11 @@ _PROVISIONING_PROFILE_SUFFIX = {
 
 
 def _timestamp() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
+    return datetime.datetime.now(datetime.UTC).strftime("%Y%m%d%H%M%S")
 
 
 def _utc_now_rfc3339() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _trim_report_files(reports_dir: Path = REPORTS_DIR, max_files: int = REPORT_FILE_LIMIT) -> int:
@@ -144,6 +145,25 @@ def _run_pytest(args: list[str]) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(_pytest_command(args), returncode, "".join(output), "")
 
 
+def _run_streamed(command: list[str]) -> subprocess.CompletedProcess:
+    """Stream command output while retaining its exact terminal transcript."""
+    process = subprocess.Popen(
+        command,
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    assert process.stdout is not None
+    output: list[str] = []
+    for line in process.stdout:
+        print(line, end="")
+        output.append(line)
+    returncode = process.wait()
+    return subprocess.CompletedProcess(command, returncode, "".join(output), "")
+
+
 def _resolve_provisioning_host_class() -> tuple[str, str, str]:
     """Return the host class from the same inventory decision as awf-setup."""
     from awf.hardware.profiler import collect_inventory
@@ -180,9 +200,7 @@ def _build_test_report(
     pytest_output: str,
 ) -> str:
     counts = _parse_pytest_summary_counts(pytest_output)
-    command = " ".join(
-        ["python", "-u", "-m", "pytest", "-o", f"cache_dir={PYTEST_CACHE_DIR}", "-v", *pytest_args]
-    )
+    command = " ".join(["python", "-u", "-m", "pytest", "-o", f"cache_dir={PYTEST_CACHE_DIR}", "-v", *pytest_args])
     return (
         f"started_at: {started_at}\n"
         f"command: {command_name}\n"
@@ -223,7 +241,50 @@ def _run_test_command(command_name: str, pytest_args: list[str]) -> int:
     validation_dir.mkdir(parents=True, exist_ok=True)
     out_path = validation_dir / f"{_timestamp()}-{command_name}.txt"
     out_path.write_text(report)
-    print(f"final_summary: {_SUMMARY_BY_CODE[validator_return_code]} {_format_counts(_parse_pytest_summary_counts(pytest_output))}")
+    print(
+        f"final_summary: {_SUMMARY_BY_CODE[validator_return_code]} {_format_counts(_parse_pytest_summary_counts(pytest_output))}"
+    )
+    print(f"wrote {out_path}")
+    return validator_return_code
+
+
+def _run_lint_command() -> int:
+    started_at = _utc_now_rfc3339()
+    host_class_id = _resolve_host_class_id()
+    commands = [
+        [sys.executable, "-m", "ruff", "format", "--check", "backend/src", "backend/tests", "scripts"],
+        [sys.executable, "-m", "ruff", "check", "backend/src", "backend/tests", "scripts"],
+    ]
+    outputs: list[str] = []
+    validator_return_code = EXIT_PASS
+    for command in commands:
+        command_text = " ".join(command)
+        outputs.append(f"$ {command_text}\n")
+        print(f"$ {command_text}")
+        result = _run_streamed(command)
+        outputs.append(result.stdout)
+        outputs.append(f"return_code: {result.returncode}\n")
+        if result.returncode != 0:
+            validator_return_code = EXIT_FAIL
+            break
+
+    report = (
+        f"started_at: {started_at}\n"
+        "command: lint\n"
+        f"host_class_id: {host_class_id}\n"
+        "lint_output:\n"
+        f"{''.join(outputs)}"
+        f"final_summary: {_SUMMARY_BY_CODE[validator_return_code]} "
+        "passed=0 failed=0 skipped=0 deselected=0 errors=0 warnings=0\n"
+    )
+    validation_dir = REPORTS_DIR / "validation"
+    validation_dir.mkdir(parents=True, exist_ok=True)
+    out_path = validation_dir / f"{_timestamp()}-lint.txt"
+    out_path.write_text(report)
+    print(
+        f"final_summary: {_SUMMARY_BY_CODE[validator_return_code]} "
+        "passed=0 failed=0 skipped=0 deselected=0 errors=0 warnings=0"
+    )
     print(f"wrote {out_path}")
     return validator_return_code
 
@@ -281,7 +342,14 @@ def cmd_runtime(_args: argparse.Namespace) -> int:
     return _run_test_command("runtime", ["-m", "live", "backend/tests"])
 
 
+def cmd_lint(_args: argparse.Namespace) -> int:
+    return _run_lint_command()
+
+
 def cmd_ci(_args: argparse.Namespace) -> int:
+    lint_result = _run_lint_command()
+    if lint_result != EXIT_PASS:
+        return lint_result
     return _run_test_command("ci", ["-m", "not live", "backend/tests"])
 
 
@@ -293,6 +361,7 @@ COMMANDS = {
     "profile": cmd_profile,
     "unit": cmd_unit,
     "integration": cmd_integration,
+    "lint": cmd_lint,
     "runtime": cmd_runtime,
     "regression": cmd_regression,
     "ci": cmd_ci,

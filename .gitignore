@@ -8,7 +8,11 @@
 /.env.*
 # tracked example
 !/.env.example
-.claude/*
+
+# local agent/client state
+/.agents/
+/.claude/
+/.codex/
 
 # ------------------------------------------------------------
 # Python

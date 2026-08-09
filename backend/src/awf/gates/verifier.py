@@ -10,10 +10,10 @@ either or both.
 """
 
 import sqlite3
-from typing import Callable
+from collections.abc import Callable
 
-from awf.gateway.client import complete
 from awf.gates.schema import Finding
+from awf.gateway.client import complete
 from awf.registry.model_profile import ModelProfile
 
 REVIEW_SYSTEM_PROMPT = (

@@ -75,9 +75,7 @@ def test_node_lookup_raises_for_unknown_id():
 
 
 def test_load_real_example_workflow(repo_root):
-    real_workflow = (
-        repo_root / "config" / "app_registry" / "workflows" / "produce-gate-repair-demo" / "1.0.0.yaml"
-    )
+    real_workflow = repo_root / "config" / "app_registry" / "workflows" / "produce-gate-repair-demo" / "1.0.0.yaml"
     workflow = load_workflow(real_workflow)
     assert workflow.ref == "produce-gate-repair-demo@1.0.0"
     assert [n["id"] for n in workflow.nodes] == ["produce", "check", "repair"]

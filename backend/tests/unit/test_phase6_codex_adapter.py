@@ -41,9 +41,13 @@ def test_invoke_builds_workspace_write_on_request_command(monkeypatch):
     result = invoke(make_invocation())
 
     assert captured["command"] == [
-        "codex", "exec", "do the thing",
-        "-s", "workspace-write",
-        "-c", "approval_policy=on-request",
+        "codex",
+        "exec",
+        "do the thing",
+        "-s",
+        "workspace-write",
+        "-c",
+        "approval_policy=on-request",
         "--json",
     ]
     assert result.status == AgentStatus.COMPLETED
@@ -139,9 +143,13 @@ def test_invoke_sources_sandbox_defaults_from_the_committed_profile(monkeypatch,
 
     assert result.status == AgentStatus.COMPLETED
     assert captured["command"] == [
-        "codex", "exec", "do the thing",
-        "-s", "read-only",
-        "-c", "approval_policy=never",
+        "codex",
+        "exec",
+        "do the thing",
+        "-s",
+        "read-only",
+        "-c",
+        "approval_policy=never",
         "--json",
     ]
 
@@ -167,8 +175,12 @@ def test_invoke_allows_danger_full_access_with_explicit_escalation(monkeypatch):
     result = invoke(make_invocation(sandbox_mode="danger-full-access", container_escalation=True))
     assert result.status == AgentStatus.COMPLETED
     assert captured["command"] == [
-        "codex", "exec", "do the thing",
-        "-s", "danger-full-access",
-        "-c", "approval_policy=on-request",
+        "codex",
+        "exec",
+        "do the thing",
+        "-s",
+        "danger-full-access",
+        "-c",
+        "approval_policy=on-request",
         "--json",
     ]

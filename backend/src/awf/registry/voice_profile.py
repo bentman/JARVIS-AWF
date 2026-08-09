@@ -102,13 +102,17 @@ def parse_voice_profile(raw: dict) -> VoiceProfile:
     )
 
     privacy = Privacy(local_only=bool(_require(privacy_raw, "local_only", "privacy")))
-    limits = Limits(
-        max_seconds_per_utterance=int(_require(limits_raw, "max_seconds_per_utterance", "limits"))
-    )
+    limits = Limits(max_seconds_per_utterance=int(_require(limits_raw, "max_seconds_per_utterance", "limits")))
 
     return VoiceProfile(
-        name=name, version=version, persona_ref=persona_ref, persona=None, candidates=candidates,
-        fallback=fallback, privacy=privacy, limits=limits,
+        name=name,
+        version=version,
+        persona_ref=persona_ref,
+        persona=None,
+        candidates=candidates,
+        fallback=fallback,
+        privacy=privacy,
+        limits=limits,
     )
 
 
@@ -158,7 +162,5 @@ def resolve_default_voice_id(repo_root: Path) -> str:
     profile = load_voice_profile(repo_root, path)
     candidates = profile.enabled_candidates_by_priority()
     if not candidates:
-        raise VoiceProfileValidationError(
-            f"voice profile '{DEFAULT_VOICE_PROFILE_REF}' has no enabled candidates"
-        )
+        raise VoiceProfileValidationError(f"voice profile '{DEFAULT_VOICE_PROFILE_REF}' has no enabled candidates")
     return candidates[0].voice_id

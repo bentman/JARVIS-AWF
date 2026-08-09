@@ -78,15 +78,17 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
         raise CodexAdapterError(
             "danger-full-access sandbox_mode MUST NOT be used outside an explicit container/VM escalation"
         )
-    approval_policy = invocation.constraints.get(
-        "approval_policy", profile.get("approval_policy", "on-request")
-    )
+    approval_policy = invocation.constraints.get("approval_policy", profile.get("approval_policy", "on-request"))
     timeout_seconds = invocation.constraints.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
 
     command = [
-        "codex", "exec", invocation.objective,
-        "-s", sandbox_mode,
-        "-c", f"approval_policy={approval_policy}",
+        "codex",
+        "exec",
+        invocation.objective,
+        "-s",
+        sandbox_mode,
+        "-c",
+        f"approval_policy={approval_policy}",
         "--json",
     ]
     model_override = invocation.constraints.get("model_override")

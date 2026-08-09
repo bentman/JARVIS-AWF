@@ -18,7 +18,7 @@ class LlmServerError(ValueError):
 class Artifact:
     profile_id: str
     url: str
-    archive: str  # "tar_gz" | "zip"
+    archive: str  # "tar_gz" | "zip" | "manual"
     binary: str
     accelerator: str
     launch: dict
@@ -99,14 +99,14 @@ def load_servers(repo_root: Path) -> tuple[str, dict[str, LlmServer]]:
             url = str(require(art_raw, "url", art_ctx, error=LlmServerError))
             archive = require_enum(
                 require(art_raw, "archive", art_ctx, error=LlmServerError),
-                ("tar_gz", "zip"),
+                ("tar_gz", "zip", "manual"),
                 art_ctx,
                 error=LlmServerError,
             )
             binary = str(require(art_raw, "binary", art_ctx, error=LlmServerError))
             accelerator = require_enum(
                 require(art_raw, "accelerator", art_ctx, error=LlmServerError),
-                ("cpu", "gpu.cuda", "npu.qnn", "gpu.opencl.adreno"),
+                ("cpu", "gpu.cuda", "gpu.vulkan", "npu.qnn", "gpu.opencl.adreno"),
                 art_ctx,
                 error=LlmServerError,
             )

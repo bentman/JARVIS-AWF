@@ -4,7 +4,12 @@ from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.registry.index import compute_digest, index_row, latest_version, reindex, set_trust_status
 from awf.registry.kinds import CAPABILITIES
-from awf.registry.resolve import RegistryBlockedError, RegistryIntegrityError, RegistryObjectNotFoundError, resolve_registry_object
+from awf.registry.resolve import (
+    RegistryBlockedError,
+    RegistryIntegrityError,
+    RegistryObjectNotFoundError,
+    resolve_registry_object,
+)
 
 
 def make_repo(tmp_path):
@@ -34,7 +39,14 @@ def test_reindex_covers_both_roots_and_all_kinds(tmp_path):
 
     assert counts["capabilities"] == {"config": 1, "data": 1}
     assert set(counts.keys()) == {
-        "workflows", "agents", "capabilities", "mcp", "skills", "voice-profiles", "model-profiles", "personas",
+        "workflows",
+        "agents",
+        "capabilities",
+        "mcp",
+        "skills",
+        "voice-profiles",
+        "model-profiles",
+        "personas",
     }
     assert index_row(conn, "capabilities", "demo", "1.0.0") is not None
     assert index_row(conn, "capabilities", "other", "1.0.0") is not None
@@ -92,12 +104,12 @@ def test_marking_trusted_restores_resolution(tmp_path):
     set_trust_status(conn, "capabilities", "demo", "1.0.0", "blocked")
     set_trust_status(conn, "capabilities", "demo", "1.0.0", "local")
 
-    path, source = resolve_registry_object(repo_root, "capabilities", "demo", "1.0.0", conn=conn)
+    _path, source = resolve_registry_object(repo_root, "capabilities", "demo", "1.0.0", conn=conn)
     assert source == "data"
 
 
 def test_gitkeep_only_data_directory_falls_through_to_config(tmp_path):
-    repo_root, conn = make_repo(tmp_path)
+    repo_root, _conn = make_repo(tmp_path)
     (repo_root / "data" / "registry" / "capabilities" / "demo").mkdir(parents=True)
     (repo_root / "data" / "registry" / "capabilities" / "demo" / ".gitkeep").touch()
     config_path = _write_capability(repo_root / "config" / "app_registry", "demo", "1.0.0")

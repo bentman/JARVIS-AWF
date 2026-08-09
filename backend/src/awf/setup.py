@@ -10,7 +10,8 @@ for this host and the reason, without installing anything; `--install` runs
 the `pip install -e .[<extra>,dev]` command `--provision` prints; `--verify`
 reports what resolution actually produced - the installed ONNX Runtime
 distribution name and version, its available execution providers, and
-`pip check`. With no flag, `awf-setup` does the original bootstrap.
+`pip check`; it also verifies the dev-tooling floor needed by the validation
+harness, including Ruff. With no flag, `awf-setup` does the original bootstrap.
 """
 
 import argparse
@@ -101,9 +102,7 @@ def cmd_install(repo_root: Path) -> int:
     for loser in _ORT_DISTRIBUTIONS:
         if loser == target_distribution:
             continue
-        subprocess.run(
-            [sys.executable, "-m", "pip", "uninstall", "-y", loser], cwd=repo_root, capture_output=True
-        )
+        subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", loser], cwd=repo_root, capture_output=True)
 
     force_result = subprocess.run(
         [sys.executable, "-m", "pip", "install", "--force-reinstall", "--no-deps", target],
@@ -123,6 +122,15 @@ def _installed_ort_distribution() -> tuple[str | None, str | None]:
     return None, None
 
 
+def _installed_distribution_version(name: str) -> str | None:
+    import importlib.metadata
+
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
 # kokoro-onnx/openwakeword/faster-whisper each hard-pin the literal
 # distribution name `onnxruntime`, which pip has no way to know
 # `onnxruntime-gpu`/`onnxruntime-directml` also satisfy (there is no PyPI
@@ -132,10 +140,12 @@ def _installed_ort_distribution() -> tuple[str | None, str | None]:
 _KNOWN_ORT_NAME_CONFLICT = "requires onnxruntime, which is not installed"
 
 
-def cmd_verify(_repo_root: Path) -> int:
+def cmd_verify(repo_root: Path) -> int:
     distribution_name, version = _installed_ort_distribution()
+    ruff_version = _installed_distribution_version("ruff")
     print(f"distribution: {distribution_name}")
     print(f"version: {version}")
+    print(f"ruff_version: {ruff_version}")
 
     try:
         import onnxruntime as ort
@@ -146,11 +156,19 @@ def cmd_verify(_repo_root: Path) -> int:
         print(f"onnxruntime not importable: {exc}")
     print(f"available_providers: {providers}")
 
-    pip_check = subprocess.run([sys.executable, "-m", "pip", "check"], capture_output=True, text=True)
+    pip_check_env = os.environ.copy()
+    pip_check_env["PIP_CACHE_DIR"] = str(repo_root / "cache" / "pip")
+    pip_check = subprocess.run(
+        [sys.executable, "-m", "pip", "check"],
+        cwd=repo_root,
+        env=pip_check_env,
+        capture_output=True,
+        text=True,
+    )
     check_lines = [line for line in pip_check.stdout.splitlines() if line.strip()]
     unexpected_lines = [line for line in check_lines if _KNOWN_ORT_NAME_CONFLICT not in line]
 
-    if not check_lines:
+    if pip_check.returncode == 0:
         print("pip_check: OK")
     elif not unexpected_lines:
         print("pip_check: reports the onnxruntime distribution-name conflict below (expected, not a defect):")
@@ -160,8 +178,8 @@ def cmd_verify(_repo_root: Path) -> int:
         print(pip_check.stdout)
         print(pip_check.stderr)
 
-    healthy = distribution_name is not None and providers is not None
-    if healthy and not unexpected_lines:
+    healthy = distribution_name is not None and providers is not None and ruff_version is not None
+    if healthy and (pip_check.returncode == 0 or not unexpected_lines):
         return 0
     return 1
 

@@ -93,7 +93,6 @@ def cmd_serve(args: argparse.Namespace, repo_root: Path, conn) -> int:
     return 0
 
 
-
 def cmd_llm_servers(args: argparse.Namespace, repo_root: Path, conn) -> int:
     _print(ops.op_llm_servers(repo_root))
     return 0

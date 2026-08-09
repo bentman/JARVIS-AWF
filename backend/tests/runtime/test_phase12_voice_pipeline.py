@@ -158,9 +158,7 @@ def test_round_trip_carries_core_fn_response_verbatim_into_tts_input(
     seen_text = {}
     synthesize_args = {}
 
-    monkeypatch.setattr(
-        "awf.speech.pipeline.detect_wake_word", lambda *a, **k: {"detected": True, "score": 0.99}
-    )
+    monkeypatch.setattr("awf.speech.pipeline.detect_wake_word", lambda *a, **k: {"detected": True, "score": 0.99})
     monkeypatch.setattr("awf.speech.pipeline.speech_segments", lambda *a, **k: [(0.0, 1.0)])
     monkeypatch.setattr(
         "awf.speech.pipeline.transcribe",

@@ -55,7 +55,6 @@ from awf.hardware.readiness import (
     derive_vad_readiness,
     derive_wake_readiness,
 )
-
 from awf.paths import REPO_ROOT
 from awf.registry.hardware_voice_manifest import artifact_paths
 
@@ -181,9 +180,7 @@ def _detect_os() -> str:
 def _detect_arch() -> str:
     arch = _normalize_arch(platform.machine())
     if arch == "unknown":
-        raise HardwareProfilerError(
-            f"unsupported architecture for the canonical profile enum: {platform.machine()}"
-        )
+        raise HardwareProfilerError(f"unsupported architecture for the canonical profile enum: {platform.machine()}")
     return arch
 
 
@@ -198,13 +195,10 @@ def _detect_device_class(os_name: str) -> str:
 
     if os_name == "windows":
         output = _powershell(
-            "(Get-CimInstance Win32_SystemEnclosure | "
-            "Select-Object -ExpandProperty ChassisTypes) -join ','"
+            "(Get-CimInstance Win32_SystemEnclosure | Select-Object -ExpandProperty ChassisTypes) -join ','"
         )
         chassis_types = {
-            int(part.strip())
-            for part in output.replace("[", "").replace("]", "").split(",")
-            if part.strip().isdigit()
+            int(part.strip()) for part in output.replace("[", "").replace("]", "").split(",") if part.strip().isdigit()
         }
         if chassis_types & _LAPTOP_CHASSIS_TYPES:
             return "laptop"
@@ -351,8 +345,7 @@ def _gpu_from_cli(command: list[str], vendor_hint: str, source: str) -> dict | N
 
 def _gpu_from_windows_cim() -> dict | None:
     output = _powershell(
-        "Get-CimInstance Win32_VideoController | "
-        "Select-Object Name,AdapterRAM | ConvertTo-Json -Compress"
+        "Get-CimInstance Win32_VideoController | Select-Object Name,AdapterRAM | ConvertTo-Json -Compress"
     )
     if not output:
         return None
@@ -527,7 +520,6 @@ def reset_inventory_cache() -> None:
     _INVENTORY_CACHE = None
 
 
-
 def resolve_hardware_profile_id(repo_root: Path) -> tuple[str, dict]:
     """Resolve the host to exactly one canonical profile ID, as a summary of
     four per-function `hardware.readiness` results.
@@ -585,7 +577,6 @@ def resolve_hardware_profile_id(repo_root: Path) -> tuple[str, dict]:
             server = servers[default_id]
             model_p = None
 
-
         readiness["llm"] = derive_llm_readiness(
             inventory, tokens, server=server, profile_id=profile_id, model_path=model_p, repo_root=repo_root
         )
@@ -595,7 +586,6 @@ def resolve_hardware_profile_id(repo_root: Path) -> tuple[str, dict]:
         readiness["llm"] = Readiness(device="cpu", ready=False, reason=f"llm readiness resolution failed: {exc}")
 
     return profile_id, {"inventory": inventory, "tokens": tokens, "readiness": readiness}
-
 
 
 def _ensure_system_run(conn: sqlite3.Connection) -> None:

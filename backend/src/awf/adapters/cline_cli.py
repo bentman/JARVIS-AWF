@@ -76,17 +76,17 @@ def _is_success_finish_reason(finish_reason: str) -> bool:
 def invoke(invocation: AgentInvocation) -> AgentResult:
     for key in FORBIDDEN_CONSTRAINT_KEYS:
         if invocation.constraints.get(key):
-            raise ClineAdapterError(
-                "--yolo/--dangerously-skip-permissions MUST NOT be used by AWF's default profile"
-            )
+            raise ClineAdapterError("--yolo/--dangerously-skip-permissions MUST NOT be used by AWF's default profile")
     timeout_seconds = invocation.constraints.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
 
     command = [
         "cline",
         invocation.objective,
         "--json",
-        "--auto-approve", "true",
-        "--cwd", str(invocation.workspace_root),
+        "--auto-approve",
+        "true",
+        "--cwd",
+        str(invocation.workspace_root),
     ]
     model_override = invocation.constraints.get("model_override")
     if model_override:

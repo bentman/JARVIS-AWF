@@ -63,6 +63,10 @@ METHOD_NAMES = (
     "awf/session.append",
     "awf/session.show",
     "awf/session.summarize",
+    "awf/voice.sessionStart",
+    "awf/voice.event",
+    "awf/voice.sessionClose",
+    "awf/voice.submitText",
     "awf/episodic.search",
     "awf/episodic.timeline",
     "awf/secret.set",
@@ -204,6 +208,36 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
         return ops.op_session_show(conn, session_id=params["sessionId"])
     if method == "awf/session.summarize":
         return ops.op_session_summarize(conn, session_id=params["sessionId"], summary=params.get("summary"))
+    if method == "awf/voice.sessionStart":
+        return ops.op_voice_session_start(
+            conn,
+            title=params.get("title"),
+            wake_enabled=bool(params.get("wakeEnabled", False)),
+        )
+    if method == "awf/voice.event":
+        return ops.op_voice_session_event(
+            conn,
+            voice_session_id=params["voiceSessionId"],
+            frame_type=params["frameType"],
+            payload=params.get("payload", {}),
+            turn_id=params.get("turnId"),
+        )
+    if method == "awf/voice.sessionClose":
+        return ops.op_voice_session_close(
+            conn,
+            voice_session_id=params["voiceSessionId"],
+            reason=params.get("reason"),
+        )
+    if method == "awf/voice.submitText":
+        return ops.op_voice_submit_text(
+            repo_root,
+            conn,
+            voice_session_id=params["voiceSessionId"],
+            text=params["text"],
+            workflow_ref=params.get("workflowRef"),
+            voice_profile_ref=params.get("voiceProfileRef"),
+            turn_id=params.get("turnId"),
+        )
     if method == "awf/episodic.search":
         return ops.op_episodic_search(conn, query=params["query"], run_id=params.get("runId"))
     if method == "awf/episodic.timeline":

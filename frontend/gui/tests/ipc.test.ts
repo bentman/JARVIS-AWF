@@ -33,6 +33,10 @@ function makeFakeClient() {
     memoryPublish: vi.fn().mockResolvedValue({ status: "published" }),
     memoryReject: vi.fn().mockResolvedValue({ status: "rejected" }),
     memoryBlock: vi.fn().mockResolvedValue({ trust_status: "blocked" }),
+    voiceSessionStart: vi.fn().mockResolvedValue({ voice_session_id: "vs-1", state: "idle" }),
+    voiceEvent: vi.fn().mockResolvedValue({ voice_session_id: "vs-1", state: "listening" }),
+    voiceSessionClose: vi.fn().mockResolvedValue({ voice_session_id: "vs-1", state: "closed" }),
+    voiceSubmitText: vi.fn().mockResolvedValue({ voice_session_id: "vs-1", response_text: "ok" }),
   } as any;
 }
 

@@ -39,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
     round_trip.add_argument("--voice-id", default=None)
     round_trip.add_argument("--response-audio-out", required=True)
 
+    synthesize_cmd = sub.add_parser("synthesize")
+    synthesize_cmd.add_argument("text")
+    synthesize_cmd.add_argument("--voice-id", default=None)
+    synthesize_cmd.add_argument("--response-audio-out", required=True)
+
     models = sub.add_parser("models")
     models_sub = models.add_subparsers(dest="models_command", required=True)
     models_sub.add_parser("sync")
@@ -120,11 +125,29 @@ def _run_models(args: argparse.Namespace, repo_root: Path) -> int:
     return 0 if ok else 1
 
 
+def _run_synthesize(args: argparse.Namespace, repo_root: Path) -> int:
+    from awf.speech.tts_kokoro import synthesize, write_wav
+
+    tts_paths = artifact_paths(repo_root, "tts")
+    voice_id = args.voice_id or resolve_default_voice_id(repo_root)
+    samples, sample_rate = synthesize(
+        args.text,
+        voice_id,
+        model_path=tts_paths["kokoro-v1.0.onnx"],
+        voices_path=tts_paths["voices-v1.0.bin"],
+    )
+    write_wav(samples, sample_rate, Path(args.response_audio_out))
+    print(json.dumps({"response_text": args.text, "voice_id": voice_id, "response_audio_path": args.response_audio_out}))
+    return 0
+
+
 def run(argv: list[str], repo_root: Path) -> int:
     args = build_parser().parse_args(argv)
 
     if args.command == "round-trip":
         return _run_round_trip(args, repo_root)
+    if args.command == "synthesize":
+        return _run_synthesize(args, repo_root)
     if args.command == "models":
         return _run_models(args, repo_root)
     raise AssertionError(f"unhandled command: {args.command}")

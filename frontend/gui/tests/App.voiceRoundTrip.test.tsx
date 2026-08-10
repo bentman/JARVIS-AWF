@@ -3,73 +3,78 @@ import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../src/renderer/App.js";
 
-describe("App voice round trip (text-first invariant)", () => {
-  it("renders both the recognized command and the response as visible transcript text", async () => {
-    const onVoiceRoundTrip = vi.fn().mockResolvedValue({
-      command_text: "Hello world.",
-      response_text: "Acknowledged: Hello world.",
-    });
+function liveVoiceProps() {
+  return {
+    onVoiceSessionStart: vi.fn().mockResolvedValue({ voice_session_id: "vs-1", memory_session_id: "vs-1", state: "idle" }),
+    onVoicePushToTalkStart: vi.fn().mockResolvedValue({
+      voice_session_id: "vs-1",
+      memory_session_id: "vs-1",
+      state: "listening",
+    }),
+    onVoicePushToTalkStop: vi.fn().mockResolvedValue({
+      voice_session_id: "vs-1",
+      memory_session_id: "vs-1",
+      state: "transcribing",
+    }),
+    onVoiceInterrupt: vi.fn().mockResolvedValue({
+      voice_session_id: "vs-1",
+      memory_session_id: "vs-1",
+      state: "listening",
+    }),
+    onVoiceSubmitText: vi.fn().mockResolvedValue({
+      voice_session_id: "vs-1",
+      state: "speaking",
+      recognized_text: "Hello world.",
+      response_text: "Workflow voice-demo@1.0.0 finished with status SUCCEEDED.",
+      voice: { voice_profile_ref: "narrator@1.0.0", voice_id: "bf_isabella" },
+    }),
+  };
+}
 
-    render(
-      <App onApprove={vi.fn()} onReject={vi.fn()} onVoiceRoundTrip={onVoiceRoundTrip} />,
+describe("App live voice session (text-first invariant)", () => {
+  it("renders recognized voice text and response text in the visible transcript", async () => {
+    const props = liveVoiceProps();
+    render(<App onApprove={vi.fn()} onReject={vi.fn()} {...props} />);
+
+    fireEvent.click(screen.getByText("Start voice session"));
+    expect(await screen.findByText(/Voice session: vs-1/)).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText("workflow@1.0.0"), {
+      target: { value: "voice-demo@1.0.0" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Final recognized text" }), {
+      target: { value: "Hello world." },
+    });
+    fireEvent.click(screen.getByText("Submit voice text"));
+
+    expect(props.onVoiceSubmitText).toHaveBeenCalledWith(
+      "vs-1",
+      "Hello world.",
+      "voice-demo@1.0.0",
+      "narrator@1.0.0",
+      expect.stringMatching(/^turn-/),
     );
-
-    fireEvent.change(screen.getByPlaceholderText("/path/to/hey_jarvis.wav"), {
-      target: { value: "/fixtures/hey_jarvis.wav" },
-    });
-    fireEvent.change(screen.getByPlaceholderText("/path/to/command.wav"), {
-      target: { value: "/fixtures/hello_world.wav" },
-    });
-    fireEvent.click(screen.getByText("Activate"));
-
-    expect(onVoiceRoundTrip).toHaveBeenCalledWith(
-      "/fixtures/hey_jarvis.wav", "/fixtures/hello_world.wav", "bf_isabella",
-    );
-
     expect(await screen.findByText(/Operator \(voice\):/)).toBeTruthy();
-    expect(screen.getByText(/Acknowledged: Hello world\./)).toBeTruthy();
+    expect(screen.getByText(/Workflow voice-demo@1\.0\.0 finished/)).toBeTruthy();
   });
 
-  it("passes the operator-selected voice, not always the same hardcoded one", async () => {
-    const onVoiceRoundTrip = vi.fn().mockResolvedValue({
-      command_text: "Hello world.",
-      response_text: "Acknowledged.",
-    });
+  it("shows a clear error when no default workflow is supplied", async () => {
+    const props = liveVoiceProps();
+    render(<App onApprove={vi.fn()} onReject={vi.fn()} {...props} />);
 
-    render(<App onApprove={vi.fn()} onReject={vi.fn()} onVoiceRoundTrip={onVoiceRoundTrip} />);
-
-    fireEvent.change(screen.getByPlaceholderText("/path/to/hey_jarvis.wav"), {
-      target: { value: "/fixtures/hey_jarvis.wav" },
+    fireEvent.click(screen.getByText("Start voice session"));
+    expect(await screen.findByText(/Voice session: vs-1/)).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: "Final recognized text" }), {
+      target: { value: "Hello world." },
     });
-    fireEvent.change(screen.getByPlaceholderText("/path/to/command.wav"), {
-      target: { value: "/fixtures/hello_world.wav" },
-    });
-    fireEvent.change(screen.getByLabelText("Response voice"), { target: { value: "am_michael" } });
-    fireEvent.click(screen.getByText("Activate"));
+    fireEvent.click(screen.getByText("Submit voice text"));
 
-    expect(onVoiceRoundTrip).toHaveBeenCalledWith(
-      "/fixtures/hey_jarvis.wav", "/fixtures/hello_world.wav", "am_michael",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Set a default workflow/);
+    expect(props.onVoiceSubmitText).not.toHaveBeenCalled();
   });
 
-  it("shows an error message inline when the round trip rejects (e.g. wake word did not fire)", async () => {
-    const onVoiceRoundTrip = vi.fn().mockRejectedValue(new Error("wake word did not fire on x.wav"));
-
-    render(<App onApprove={vi.fn()} onReject={vi.fn()} onVoiceRoundTrip={onVoiceRoundTrip} />);
-
-    fireEvent.change(screen.getByPlaceholderText("/path/to/hey_jarvis.wav"), {
-      target: { value: "/fixtures/not_wake_word.wav" },
-    });
-    fireEvent.change(screen.getByPlaceholderText("/path/to/command.wav"), {
-      target: { value: "/fixtures/hello_world.wav" },
-    });
-    fireEvent.click(screen.getByText("Activate"));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(/wake word did not fire/);
-  });
-
-  it("does not render the voice activation controls when no handler is supplied", () => {
+  it("does not render live voice controls when session handlers are absent", () => {
     render(<App onApprove={vi.fn()} onReject={vi.fn()} />);
-    expect(screen.queryByRole("group", { name: "Voice activation" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Voice session" })).toBeNull();
   });
 });

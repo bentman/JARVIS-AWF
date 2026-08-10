@@ -76,6 +76,9 @@ describe("ProtocolClient", () => {
   it("builds correct params for approval and artifact methods", () => {
     const { transport, client } = setup();
 
+    void client.approvalApprove("ap-1", { channel: "voice", riskClass: "R2" });
+    expect(transport.lastRequest().params).toEqual({ approvalId: "ap-1", channel: "voice", riskClass: "R2" });
+
     void client.approvalReject("ap-1", "not safe");
     expect(transport.lastRequest().params).toEqual({ approvalId: "ap-1", reason: "not safe" });
 
@@ -169,5 +172,42 @@ describe("ProtocolClient", () => {
 
     void client.episodicTimeline("run-1");
     expect(transport.lastRequest().params).toEqual({ runId: "run-1" });
+  });
+
+  it("builds correct params for voice session methods", () => {
+    const { transport, client } = setup();
+
+    void client.voiceSessionStart("voice", true);
+    expect(transport.lastRequest().method).toBe("awf/voice.sessionStart");
+    expect(transport.lastRequest().params).toEqual({ title: "voice", wakeEnabled: true });
+
+    void client.voiceEvent("vs-1", "stt.final", { text: "hello" }, "turn-1");
+    expect(transport.lastRequest().method).toBe("awf/voice.event");
+    expect(transport.lastRequest().params).toEqual({
+      voiceSessionId: "vs-1",
+      frameType: "stt.final",
+      payload: { text: "hello" },
+      turnId: "turn-1",
+    });
+
+    void client.voiceSubmitText({
+      voiceSessionId: "vs-1",
+      text: "hello",
+      workflowRef: "demo@1.0.0",
+      voiceProfileRef: "narrator@1.0.0",
+      turnId: "turn-1",
+    });
+    expect(transport.lastRequest().method).toBe("awf/voice.submitText");
+    expect(transport.lastRequest().params).toEqual({
+      voiceSessionId: "vs-1",
+      text: "hello",
+      workflowRef: "demo@1.0.0",
+      voiceProfileRef: "narrator@1.0.0",
+      turnId: "turn-1",
+    });
+
+    void client.voiceSessionClose("vs-1", "done");
+    expect(transport.lastRequest().method).toBe("awf/voice.sessionClose");
+    expect(transport.lastRequest().params).toEqual({ voiceSessionId: "vs-1", reason: "done" });
   });
 });

@@ -2,6 +2,7 @@ import type { Transport } from "./transport.js";
 import {
   ProtocolError,
   type Approval,
+  type ApprovalApproveOptions,
   type ApprovalDetail,
   type Artifact,
   type ImprovementProposal,
@@ -14,6 +15,9 @@ import {
   type RunStartResult,
   type RunStatus,
   type RunSummary,
+  type VoiceFrameType,
+  type VoiceSessionResult,
+  type VoiceSubmitTextResult,
 } from "./types.js";
 
 /** The single TypeScript protocol client (Section 16.3) - both frontends
@@ -95,8 +99,8 @@ export class ProtocolClient {
     return this.call("awf/approval.detail", { approvalId });
   }
 
-  approvalApprove(approvalId: string): Promise<Approval> {
-    return this.call("awf/approval.approve", { approvalId });
+  approvalApprove(approvalId: string, options: ApprovalApproveOptions = {}): Promise<Approval> {
+    return this.call("awf/approval.approve", { approvalId, channel: options.channel, riskClass: options.riskClass });
   }
 
   approvalReject(approvalId: string, reason: string): Promise<Approval> {
@@ -231,6 +235,33 @@ export class ProtocolClient {
 
   sessionSummarize(sessionId: string, summary?: string): Promise<Record<string, unknown>> {
     return this.call("awf/session.summarize", { sessionId, summary });
+  }
+
+  voiceSessionStart(title?: string, wakeEnabled = false): Promise<VoiceSessionResult> {
+    return this.call("awf/voice.sessionStart", { title, wakeEnabled });
+  }
+
+  voiceEvent(
+    voiceSessionId: string,
+    frameType: VoiceFrameType,
+    payload: Record<string, unknown> = {},
+    turnId?: string,
+  ): Promise<VoiceSessionResult> {
+    return this.call("awf/voice.event", { voiceSessionId, frameType, payload, turnId });
+  }
+
+  voiceSessionClose(voiceSessionId: string, reason?: string): Promise<VoiceSessionResult> {
+    return this.call("awf/voice.sessionClose", { voiceSessionId, reason });
+  }
+
+  voiceSubmitText(options: {
+    voiceSessionId: string;
+    text: string;
+    workflowRef: string;
+    voiceProfileRef?: string;
+    turnId?: string;
+  }): Promise<VoiceSubmitTextResult> {
+    return this.call("awf/voice.submitText", options);
   }
 
   episodicSearch(query: string, runId?: string): Promise<Record<string, unknown>[]> {

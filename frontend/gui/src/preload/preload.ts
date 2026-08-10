@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { CHANNELS } from "../main/ipc.js";
-import { VOICE_CHANNEL } from "../main/voicePipeline.js";
+import { VOICE_CHANNEL, VOICE_SESSION_CHANNELS } from "../main/voicePipeline.js";
 
 /** The only surface the renderer can reach - no direct Node/Electron
  * access, matching contextIsolation. Every call is one of the narrow IPC
@@ -42,4 +42,23 @@ contextBridge.exposeInMainWorld("awf", {
     voiceId: string,
     responseAudioOutPath: string,
   ) => ipcRenderer.invoke(VOICE_CHANNEL, wakeAudioPath, commandAudioPath, voiceId, responseAudioOutPath),
+  voiceSessionStart: (title?: string, wakeEnabled = false) =>
+    ipcRenderer.invoke(VOICE_SESSION_CHANNELS.start, title, wakeEnabled),
+  voiceSessionStop: (voiceSessionId: string, reason?: string) =>
+    ipcRenderer.invoke(VOICE_SESSION_CHANNELS.stop, voiceSessionId, reason),
+  voicePushToTalkStart: (voiceSessionId: string, turnId?: string) =>
+    ipcRenderer.invoke(VOICE_SESSION_CHANNELS.pushToTalkStart, voiceSessionId, turnId),
+  voicePushToTalkStop: (voiceSessionId: string, turnId?: string) =>
+    ipcRenderer.invoke(VOICE_SESSION_CHANNELS.pushToTalkStop, voiceSessionId, turnId),
+  voiceInterrupt: (voiceSessionId: string, turnId?: string) =>
+    ipcRenderer.invoke(VOICE_SESSION_CHANNELS.interrupt, voiceSessionId, turnId),
+  voiceSubmitText: (
+    voiceSessionId: string,
+    text: string,
+    workflowRef: string,
+    voiceProfileRef?: string,
+    turnId?: string,
+  ) => ipcRenderer.invoke(VOICE_SESSION_CHANNELS.submitText, voiceSessionId, text, workflowRef, voiceProfileRef, turnId),
+  voiceSpeakText: (text: string, voiceId: string | undefined, responseAudioOutPath: string) =>
+    ipcRenderer.invoke(VOICE_SESSION_CHANNELS.speakText, text, voiceId, responseAudioOutPath),
 });

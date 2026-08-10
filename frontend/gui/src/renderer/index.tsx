@@ -4,6 +4,7 @@ import { App } from "./App.js";
 import type { ApprovalSummary, ImprovementSummary, RunSummary } from "./Dashboard.js";
 import type { MemorySearchResult } from "./MemoryPanel.js";
 import type { ProposalSummary } from "./ProposalReview.js";
+import type { VoiceSessionResult, VoiceSubmitTextResult } from "./VoiceActivation.js";
 
 interface VoiceRoundTripResult {
   wake_detected: boolean;
@@ -44,6 +45,23 @@ declare global {
         voiceId: string,
         responseAudioOutPath: string,
       ) => Promise<VoiceRoundTripResult>;
+      voiceSessionStart: (title?: string, wakeEnabled?: boolean) => Promise<VoiceSessionResult>;
+      voiceSessionStop: (voiceSessionId: string, reason?: string) => Promise<VoiceSessionResult>;
+      voicePushToTalkStart: (voiceSessionId: string, turnId?: string) => Promise<VoiceSessionResult>;
+      voicePushToTalkStop: (voiceSessionId: string, turnId?: string) => Promise<VoiceSessionResult>;
+      voiceInterrupt: (voiceSessionId: string, turnId?: string) => Promise<VoiceSessionResult>;
+      voiceSubmitText: (
+        voiceSessionId: string,
+        text: string,
+        workflowRef: string,
+        voiceProfileRef?: string,
+        turnId?: string,
+      ) => Promise<VoiceSubmitTextResult>;
+      voiceSpeakText: (
+        text: string,
+        voiceId: string | undefined,
+        responseAudioOutPath: string,
+      ) => Promise<{ response_audio_path: string }>;
     };
   }
 }
@@ -55,8 +73,22 @@ if (container) {
     React.createElement(App, {
       onApprove: (approvalId: string) => void window.awf.approvalApprove(approvalId),
       onReject: (approvalId: string, reason: string) => void window.awf.approvalReject(approvalId, reason),
-      onVoiceRoundTrip: (wakeAudioPath: string, commandAudioPath: string, voiceId: string) =>
-        window.awf.voiceRoundTrip(wakeAudioPath, commandAudioPath, voiceId, "/tmp/awf-gui-response.wav"),
+      onVoiceSessionStart: (title?: string, wakeEnabled?: boolean) =>
+        window.awf.voiceSessionStart(title, wakeEnabled),
+      onVoicePushToTalkStart: (voiceSessionId: string, turnId: string) =>
+        window.awf.voicePushToTalkStart(voiceSessionId, turnId),
+      onVoicePushToTalkStop: (voiceSessionId: string, turnId: string) =>
+        window.awf.voicePushToTalkStop(voiceSessionId, turnId),
+      onVoiceInterrupt: (voiceSessionId: string, turnId: string) => window.awf.voiceInterrupt(voiceSessionId, turnId),
+      onVoiceSubmitText: (
+        voiceSessionId: string,
+        text: string,
+        workflowRef: string,
+        voiceProfileRef: string | undefined,
+        turnId: string,
+      ) => window.awf.voiceSubmitText(voiceSessionId, text, workflowRef, voiceProfileRef, turnId),
+      onVoiceSpeakText: (text: string, voiceId: string | undefined, responseAudioOutPath: string) =>
+        window.awf.voiceSpeakText(text, voiceId, responseAudioOutPath),
       onRunList: () => window.awf.runList(),
       onApprovalList: () => window.awf.approvalList(),
       onImprovementList: () => window.awf.improvementList(),

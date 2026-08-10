@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-09 21:12
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0023 voice conversation sessions with durable voice state events, active-session transcript persistence, default-workflow voice submission, protocol voice methods, GUI push-to-talk controls, and Kokoro response synthesis.
+  - Scope: `backend/src/awf/speech/session.py`, speech CLI/core ops, stdio JSON-RPC, frontend shared protocol, AWF-GUI voice IPC/preload/renderer controls, focused voice tests, and ADR-0023.
+  - Validation: `backend/.venv/bin/python -m pytest backend/tests -q` outside the Codex sandbox -> 566 passed, 7 warnings; `backend/.venv/bin/python -m ruff check .` passed; `npm --prefix frontend run build --workspaces` passed; `npm --prefix frontend test --workspaces` -> shared 11 passed, CLI 38 passed, GUI 34 passed; `backend/.venv/bin/python -m awf.speech.cli models verify` passed with configured TTS/VAD/wake artifacts OK.
+  - Notes: live microphone/speaker proof remains host-sensitive outside-sandbox validation; file-based round-trip remains available as the deterministic debug path.
+
 - Timestamp: 2026-08-09 20:43
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Implemented ADR-0022 system improvement with consent through durable Improvement Proposals, exact diff digests, R2 merge approvals, retained candidate worktrees, and JSON-RPC/CLI/GUI proposal surfaces.

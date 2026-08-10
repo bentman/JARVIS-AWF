@@ -2,7 +2,7 @@ import { ChildProcessTransport, ProtocolClient } from "@awf/protocol-client";
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import { registerIpcHandlers } from "./ipc.js";
-import { registerVoiceIpcHandler } from "./voicePipeline.js";
+import { registerVoiceIpcHandler, registerVoiceSessionIpcHandlers, registerVoiceSpeakIpcHandler } from "./voicePipeline.js";
 
 function createClient(repoRoot: string): ProtocolClient {
   const transport = new ChildProcessTransport({
@@ -25,6 +25,11 @@ function createWindow(client: ProtocolClient, repoRoot: string): void {
 
   registerIpcHandlers(ipcMain, client);
   registerVoiceIpcHandler(ipcMain, {
+    command: process.env.AWF_SPEECH_COMMAND ?? "awf-speech",
+    cwd: repoRoot,
+  });
+  registerVoiceSessionIpcHandlers(ipcMain, client);
+  registerVoiceSpeakIpcHandler(ipcMain, {
     command: process.env.AWF_SPEECH_COMMAND ?? "awf-speech",
     cwd: repoRoot,
   });

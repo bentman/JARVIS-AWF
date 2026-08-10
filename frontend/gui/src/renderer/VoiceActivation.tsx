@@ -1,42 +1,73 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 
-export interface VoiceActivationProps {
-  onRoundTrip: (wakeAudioPath: string, commandAudioPath: string, voiceId: string) => Promise<void>;
+export type VoiceSessionState =
+  | "idle"
+  | "armed"
+  | "listening"
+  | "transcribing"
+  | "submitting"
+  | "speaking"
+  | "recovering"
+  | "closed";
+
+export interface VoiceSessionResult {
+  voice_session_id: string;
+  memory_session_id: string;
+  state: VoiceSessionState;
 }
 
-// The four Voice Profiles shipped at config/app_registry/voice-profiles/
-// (Section 16.5) - the real, registered voice_ids for the Trifecta roles
-// and the narrator default. Not fetched from the registry at runtime (that
-// would need a new IPC surface); these are the same fixed defaults every
-// workflow gets unless an operator publishes an override.
-export const VOICE_OPTIONS = [
-  { voiceProfile: "narrator", voiceId: "bf_isabella" },
-  { voiceProfile: "builder", voiceId: "am_michael" },
-  { voiceProfile: "verifier", voiceId: "bf_emma" },
-  { voiceProfile: "adversary", voiceId: "bm_george" },
-] as const;
+export interface VoiceSubmitTextResult {
+  recognized_text: string;
+  response_text: string;
+  state: VoiceSessionState;
+  voice?: { voice_profile_ref: string; voice_id: string };
+}
 
-/** Push-to-talk-by-file (Section 16.4): the operator supplies a recorded
- * wake-word clip and a recorded command clip. Every recognized utterance
- * and response goes through the same visible Transcript as any other
- * command (the text-first invariant) - voice is an alternate input path,
- * not a separate surface.
- *
- * The voice selector lets the operator actually hear the "two roles, two
- * voices" claim (Section 16.4's acceptance bar) instead of every response
- * always coming back in a single hardcoded voice. */
-export function VoiceActivation({ onRoundTrip }: VoiceActivationProps): React.JSX.Element {
-  const [wakeAudioPath, setWakeAudioPath] = useState("");
-  const [commandAudioPath, setCommandAudioPath] = useState("");
-  const [voiceId, setVoiceId] = useState<string>(VOICE_OPTIONS[0].voiceId);
+export interface VoiceActivationProps {
+  onSessionStart: (title?: string, wakeEnabled?: boolean) => Promise<VoiceSessionResult>;
+  onPushToTalkStart: (voiceSessionId: string, turnId: string) => Promise<VoiceSessionResult>;
+  onPushToTalkStop: (voiceSessionId: string, turnId: string) => Promise<VoiceSessionResult>;
+  onInterrupt: (voiceSessionId: string, turnId: string) => Promise<VoiceSessionResult>;
+  onSubmitText: (
+    voiceSessionId: string,
+    text: string,
+    workflowRef: string,
+    voiceProfileRef: string | undefined,
+    turnId: string,
+  ) => Promise<VoiceSubmitTextResult>;
+}
+
+function nextTurnId(): string {
+  return `turn-${Date.now()}`;
+}
+
+export function VoiceActivation({
+  onSessionStart,
+  onPushToTalkStart,
+  onPushToTalkStop,
+  onInterrupt,
+  onSubmitText,
+}: VoiceActivationProps): React.JSX.Element {
+  const [voiceSessionId, setVoiceSessionId] = useState<string | null>(null);
+  const [turnId, setTurnId] = useState<string>(nextTurnId());
+  const [state, setState] = useState<VoiceSessionState>("idle");
+  const [workflowRef, setWorkflowRef] = useState("");
+  const [recognizedText, setRecognizedText] = useState("");
+  const [voiceProfileRef, setVoiceProfileRef] = useState("narrator@1.0.0");
+  const [partialText, setPartialText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
-  const handleActivate = async () => {
+  const updateFrom = (result: VoiceSessionResult | VoiceSubmitTextResult) => {
+    setState(result.state);
+  };
+
+  const withBusy = async (fn: () => Promise<void>) => {
     setBusy(true);
     setError(null);
     try {
-      await onRoundTrip(wakeAudioPath, commandAudioPath, voiceId);
+      await fn();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -44,38 +75,98 @@ export function VoiceActivation({ onRoundTrip }: VoiceActivationProps): React.JS
     }
   };
 
+  const startSession = () =>
+    withBusy(async () => {
+      const result = await onSessionStart("Voice session", false);
+      setVoiceSessionId(result.voice_session_id);
+      updateFrom(result);
+    });
+
+  const startPushToTalk = () =>
+    withBusy(async () => {
+      if (!voiceSessionId) return;
+      if (navigator.mediaDevices?.getUserMedia) {
+        streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+      const nextTurn = nextTurnId();
+      setTurnId(nextTurn);
+      setPartialText("");
+      updateFrom(await onPushToTalkStart(voiceSessionId, nextTurn));
+    });
+
+  const stopPushToTalk = () =>
+    withBusy(async () => {
+      if (!voiceSessionId) return;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      updateFrom(await onPushToTalkStop(voiceSessionId, turnId));
+      setPartialText(recognizedText);
+    });
+
+  const submitText = () =>
+    withBusy(async () => {
+      if (!voiceSessionId) return;
+      if (!workflowRef) throw new Error("Set a default workflow before submitting voice text.");
+      const result = await onSubmitText(
+        voiceSessionId,
+        recognizedText,
+        workflowRef,
+        voiceProfileRef || undefined,
+        turnId,
+      );
+      updateFrom(result);
+      setPartialText("");
+    });
+
+  const interrupt = () =>
+    withBusy(async () => {
+      if (!voiceSessionId) return;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      updateFrom(await onInterrupt(voiceSessionId, turnId));
+    });
+
   return (
-    <div role="group" aria-label="Voice activation">
+    <div role="group" aria-label="Voice session">
+      <p>Status: {state}</p>
+      {voiceSessionId && <p>Voice session: {voiceSessionId}</p>}
       <label>
-        Wake-word audio file
+        Default workflow
         <input
           type="text"
-          value={wakeAudioPath}
-          onChange={(e) => setWakeAudioPath(e.target.value)}
-          placeholder="/path/to/hey_jarvis.wav"
+          value={workflowRef}
+          onChange={(e) => setWorkflowRef(e.target.value)}
+          placeholder="workflow@1.0.0"
         />
       </label>
       <label>
-        Command audio file
+        Voice profile
         <input
           type="text"
-          value={commandAudioPath}
-          onChange={(e) => setCommandAudioPath(e.target.value)}
-          placeholder="/path/to/command.wav"
+          value={voiceProfileRef}
+          onChange={(e) => setVoiceProfileRef(e.target.value)}
+          placeholder="narrator@1.0.0"
         />
       </label>
       <label>
-        Response voice
-        <select value={voiceId} onChange={(e) => setVoiceId(e.target.value)}>
-          {VOICE_OPTIONS.map((option) => (
-            <option key={option.voiceId} value={option.voiceId}>
-              {option.voiceProfile} ({option.voiceId})
-            </option>
-          ))}
-        </select>
+        Final recognized text
+        <textarea value={recognizedText} onChange={(e) => setRecognizedText(e.target.value)} />
       </label>
-      <button onClick={handleActivate} disabled={busy || !wakeAudioPath || !commandAudioPath}>
-        {busy ? "Listening..." : "Activate"}
+      {partialText && <p aria-label="Partial transcript">Partial: {partialText}</p>}
+      <button onClick={startSession} disabled={busy || state === "closed"}>
+        Start voice session
+      </button>
+      <button onClick={startPushToTalk} disabled={busy || !voiceSessionId || state === "listening"}>
+        Push to talk
+      </button>
+      <button onClick={stopPushToTalk} disabled={busy || !voiceSessionId || state !== "listening"}>
+        Stop talking
+      </button>
+      <button onClick={submitText} disabled={busy || !voiceSessionId || !recognizedText}>
+        Submit voice text
+      </button>
+      <button onClick={interrupt} disabled={busy || !voiceSessionId}>
+        Interrupt
       </button>
       {error && <p role="alert">{error}</p>}
     </div>

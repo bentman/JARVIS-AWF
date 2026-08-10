@@ -4,7 +4,7 @@ import { Dashboard, type ApprovalSummary, type ImprovementSummary, type RunSumma
 import { MemoryPanel, type MemorySearchResult } from "./MemoryPanel.js";
 import { ProposalReview, type ProposalSummary } from "./ProposalReview.js";
 import { Transcript, type TranscriptEntry } from "./Transcript.js";
-import { VoiceActivation } from "./VoiceActivation.js";
+import { VoiceActivation, type VoiceSessionResult, type VoiceSubmitTextResult } from "./VoiceActivation.js";
 import type { RiskClass } from "../voiceApproval.js";
 
 export interface PendingApproval {
@@ -13,20 +13,31 @@ export interface PendingApproval {
   riskClass: RiskClass;
 }
 
-export interface VoiceRoundTripFn {
-  (wakeAudioPath: string, commandAudioPath: string, voiceId: string): Promise<{
-    command_text: string;
-    response_text: string;
-  }>;
+export interface VoiceSessionFns {
+  onVoiceSessionStart?: (title?: string, wakeEnabled?: boolean) => Promise<VoiceSessionResult>;
+  onVoicePushToTalkStart?: (voiceSessionId: string, turnId: string) => Promise<VoiceSessionResult>;
+  onVoicePushToTalkStop?: (voiceSessionId: string, turnId: string) => Promise<VoiceSessionResult>;
+  onVoiceInterrupt?: (voiceSessionId: string, turnId: string) => Promise<VoiceSessionResult>;
+  onVoiceSubmitText?: (
+    voiceSessionId: string,
+    text: string,
+    workflowRef: string,
+    voiceProfileRef: string | undefined,
+    turnId: string,
+  ) => Promise<VoiceSubmitTextResult>;
+  onVoiceSpeakText?: (
+    text: string,
+    voiceId: string | undefined,
+    responseAudioOutPath: string,
+  ) => Promise<{ response_audio_path: string }>;
 }
 
-export interface AppProps {
+export interface AppProps extends VoiceSessionFns {
   initialTranscript?: TranscriptEntry[];
   pendingApproval?: PendingApproval;
   voiceConfirmed?: boolean;
   onApprove: (approvalId: string) => void;
   onReject: (approvalId: string, reason: string) => void;
-  onVoiceRoundTrip?: VoiceRoundTripFn;
   onRunList?: () => Promise<RunSummary[]>;
   onApprovalList?: () => Promise<ApprovalSummary[]>;
   onImprovementList?: () => Promise<ImprovementSummary[]>;
@@ -57,7 +68,12 @@ export function App({
   voiceConfirmed = false,
   onApprove,
   onReject,
-  onVoiceRoundTrip,
+  onVoiceSessionStart,
+  onVoicePushToTalkStart,
+  onVoicePushToTalkStop,
+  onVoiceInterrupt,
+  onVoiceSubmitText,
+  onVoiceSpeakText,
   onRunList,
   onApprovalList,
   onImprovementList,
@@ -98,14 +114,35 @@ export function App({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleRoundTrip = async (wakeAudioPath: string, commandAudioPath: string, voiceId: string) => {
-    if (!onVoiceRoundTrip) return;
-    const result = await onVoiceRoundTrip(wakeAudioPath, commandAudioPath, voiceId);
+  const handleVoiceSubmit = async (
+    voiceSessionId: string,
+    text: string,
+    workflowRef: string,
+    voiceProfileRef: string | undefined,
+    turnId: string,
+  ) => {
+    if (!onVoiceSubmitText) throw new Error("voice submit is not available");
+    const result = await onVoiceSubmitText(voiceSessionId, text, workflowRef, voiceProfileRef, turnId);
     setEntries((prev) => [
       ...prev,
-      { id: nextId.current++, speaker: "Operator (voice)", text: result.command_text },
-      { id: nextId.current++, speaker: "AWF", text: result.response_text },
+      { id: nextId.current++, speaker: "Operator (voice)", text: result.recognized_text },
+      {
+        id: nextId.current++,
+        speaker: result.voice?.voice_profile_ref ?? "AWF",
+        text: result.response_text,
+      },
     ]);
+    if (onVoiceSpeakText) {
+      const spoken = await onVoiceSpeakText(
+        result.response_text,
+        result.voice?.voice_id,
+        "/tmp/awf-gui-live-response.wav",
+      );
+      if (typeof Audio !== "undefined") {
+        void new Audio(spoken.response_audio_path).play().catch(() => undefined);
+      }
+    }
+    return result;
   };
 
   const handleApprove = (approvalId: string) => {
@@ -150,7 +187,19 @@ export function App({
         />
       )}
       <Transcript entries={entries} />
-      {onVoiceRoundTrip && <VoiceActivation onRoundTrip={handleRoundTrip} />}
+      {onVoiceSessionStart &&
+        onVoicePushToTalkStart &&
+        onVoicePushToTalkStop &&
+        onVoiceInterrupt &&
+        onVoiceSubmitText && (
+          <VoiceActivation
+            onSessionStart={onVoiceSessionStart}
+            onPushToTalkStart={onVoicePushToTalkStart}
+            onPushToTalkStop={onVoicePushToTalkStop}
+            onInterrupt={onVoiceInterrupt}
+            onSubmitText={handleVoiceSubmit}
+          />
+        )}
       {effectivePendingApproval && (
         <ApprovalConfirmation
           approvalId={effectivePendingApproval.approvalId}

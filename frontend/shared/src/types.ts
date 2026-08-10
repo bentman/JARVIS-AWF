@@ -42,6 +42,10 @@ export type MethodName =
   | "awf/session.append"
   | "awf/session.show"
   | "awf/session.summarize"
+  | "awf/voice.sessionStart"
+  | "awf/voice.event"
+  | "awf/voice.sessionClose"
+  | "awf/voice.submitText"
   | "awf/episodic.search"
   | "awf/episodic.timeline"
   | "awf/secret.set"
@@ -111,6 +115,13 @@ export interface Approval {
   reason: string | null;
   requested_at: string;
   decided_at: string | null;
+}
+
+export type RiskClass = "R0" | "R1" | "R2" | "R3";
+
+export interface ApprovalApproveOptions {
+  channel?: "manual" | "voice";
+  riskClass?: RiskClass;
 }
 
 export interface MachineActionPreview {
@@ -183,6 +194,55 @@ export interface Proposal {
   rejection_reason: string | null;
   content: string;
   events: Record<string, unknown>[];
+}
+
+export type VoiceSessionState =
+  | "idle"
+  | "armed"
+  | "listening"
+  | "transcribing"
+  | "submitting"
+  | "speaking"
+  | "recovering"
+  | "closed";
+
+export type VoiceFrameType =
+  | "session.started"
+  | "session.idle"
+  | "session.closed"
+  | "wake.detected"
+  | "vad.speech_started"
+  | "vad.speech_stopped"
+  | "stt.partial"
+  | "stt.final"
+  | "core.submitted"
+  | "core.output_text"
+  | "tts.audio_chunk"
+  | "tts.done"
+  | "interruption"
+  | "error";
+
+export interface VoiceSessionResult {
+  voice_session_id: string;
+  memory_session_id: string;
+  state: VoiceSessionState;
+}
+
+export interface VoiceSubmitTextResult {
+  voice_session_id: string;
+  state: VoiceSessionState;
+  recognized_text: string;
+  response_text: string;
+  run: RunStartResult;
+  voice: {
+    voice_profile_ref: string;
+    voice_id: string;
+    engine: string;
+    model: string;
+    speed: number;
+    privacy: { local_only: boolean };
+    limits: { max_seconds_per_utterance: number };
+  };
 }
 
 export interface SemanticMemorySearchHit {

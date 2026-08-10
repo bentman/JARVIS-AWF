@@ -272,10 +272,25 @@ reference.
 
 ### Part F — window chrome
 
-`src/main/main.ts` sets `backgroundColor: "#0a0a0b"` on the `BrowserWindow` so
-the shell does not flash white before the renderer paints, and a
-`minWidth`/`minHeight` of 960×640 so the two-column layout has room. The
-existing `contextIsolation` and preload configuration are unchanged.
+`src/main/main.ts` already constructs its `BrowserWindow` with `width: 1000,
+height: 700` and a `webPreferences` block. Two keys are added alongside those,
+leaving the existing options and the `resolveBackendCommand`/`repoRoot` spawn
+path untouched:
+
+```ts
+const win = new BrowserWindow({
+  width: 1000,
+  height: 700,
+  minWidth: 960,
+  minHeight: 640,
+  backgroundColor: "#0a0a0b",
+  webPreferences: { /* unchanged */ },
+});
+```
+
+`backgroundColor` stops the shell flashing white before the renderer paints.
+The minimums give the two-column layout room before the rail collapses to its
+horizontal tab strip at 900px.
 
 ## Layout delta
 
@@ -284,7 +299,7 @@ frontend/gui/
   package.json                       (unchanged)
   esbuild.config.js                  (unchanged)
   src/
-    main/main.ts                     (backgroundColor, minimum window size)
+    main/main.ts                     (backgroundColor and minimum size added to the existing BrowserWindow options)
     renderer/
       index.html                     (stylesheet link, viewport meta)
       index.tsx                      (import "./styles.css")
@@ -331,7 +346,9 @@ frontend/gui/
    accessible names.
 6. Apply card, list, chip, button, and input classes across the remaining
    components without altering their props, callbacks, or accessible names.
-7. Set `backgroundColor` and minimum window size in `main.ts`.
+7. Add `minWidth`, `minHeight`, and `backgroundColor` to the existing
+   `BrowserWindow` options in `main.ts`, leaving `width`, `height`,
+   `webPreferences`, and the command/repo-root resolution unchanged.
 8. Add `frontend/gui/tests/state.test.ts` covering all four `stateClass`
    branches, and a rail-navigation test asserting that selecting a view
    renders that view's region and not the others.

@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-09 22:14
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Added a GitHub Copilot CLI `preToolUse` hook path that routes Copilot tool calls through the AWF Capability Guard and records tool-level decisions in events.
+  - Scope: Copilot adapter hook generation/cleanup, Copilot Guard hook module, Guard event metadata, agent-step trace context, ADR-0003 note, and focused backend tests.
+  - Validation: focused Copilot/Guard tests -> 35 passed; `backend/.venv/bin/python -m ruff check .` passed; `backend/.venv/bin/python -m pytest backend/tests -q` -> 574 passed, 1 skipped, 7 warnings; `npm --prefix frontend run build --workspaces` passed; `npm --prefix frontend test --workspaces` -> shared 12 passed, CLI 41 passed, GUI 39 passed.
+  - Notes: Skill invocation, container escalation for quarantined executable objects, and event streaming remain future execution/transport surfaces.
+
 - Timestamp: 2026-08-09 21:54
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Corrected ADR-0023 implementation wording to match the shipped push-to-talk/final-text voice path and completed ADR-0024 GUI registry action wiring through the shared protocol.

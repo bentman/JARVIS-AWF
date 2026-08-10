@@ -70,8 +70,12 @@ def authorize(
     actor: str,
     step_id: str | None = None,
     role: str | None = None,
+    payload_extra: dict | None = None,
 ) -> Decision:
     decision, reason_code = evaluate(capability, agent_allowlist, role)
+    payload = {"capability_ref": capability.ref, "risk_class": capability.risk_class, "role": role}
+    if payload_extra:
+        payload.update(payload_extra)
     write_event(
         conn,
         run_id=run_id,
@@ -79,6 +83,6 @@ def authorize(
         new_status=decision.value,
         actor=actor,
         reason_code=reason_code,
-        payload_json=json.dumps({"capability_ref": capability.ref, "risk_class": capability.risk_class, "role": role}),
+        payload_json=json.dumps(payload, sort_keys=True),
     )
     return decision

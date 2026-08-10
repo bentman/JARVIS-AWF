@@ -127,9 +127,9 @@ Tool calls happen inside the adapter, so the Capability Guard does not see
 them. The manifest's `mcp` list is the allowlist instead - deterministic,
 enforced in control code, testable, the same shape as the `capabilities`
 allowlist (ADR-0002) - plus the trust gate and the `events` record above.
-This is accepted. If per-tool authorization is needed later, GitHub
-Copilot CLI's `preToolUse` hook (Section 10.2, still unbuilt) is the seam
-- for that one adapter, not a general solution.
+This is accepted for adapters without a tool hook. GitHub Copilot CLI's
+`preToolUse` hook is wired to the Capability Guard for Copilot tool calls;
+that does not create a general per-tool authorization path for every adapter.
 
 ## Scope for implementation
 

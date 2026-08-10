@@ -496,6 +496,27 @@ def run_agent_step(
             invocation=effective_invocation,
         )
 
+        if repo_root is not None:
+            trace_context = dict(modeled_invocation.trace_context)
+            trace_context["awf_guard"] = {
+                "repo_root": str(repo_root),
+                "run_id": run_id,
+                "step_id": step_id,
+                "actor": actor,
+                "agent_allowlist": agent_allowlist if agent_allowlist is not None else [capability.ref] if capability else [],
+                "role": role,
+            }
+            modeled_invocation = AgentInvocation(
+                objective=modeled_invocation.objective,
+                inputs=modeled_invocation.inputs,
+                workspace_root=modeled_invocation.workspace_root,
+                capabilities=modeled_invocation.capabilities,
+                skills=modeled_invocation.skills,
+                constraints=modeled_invocation.constraints,
+                completion_contract=modeled_invocation.completion_contract,
+                trace_context=trace_context,
+            )
+
         result = adapter_fn(modeled_invocation)
         if result.status != AgentStatus.COMPLETED:
             raise AgentStepError(

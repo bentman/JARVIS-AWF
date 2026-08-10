@@ -17,6 +17,25 @@ def make_invocation(**constraints) -> AgentInvocation:
     )
 
 
+def make_guarded_invocation(workspace_root: Path, repo_root: Path) -> AgentInvocation:
+    return AgentInvocation(
+        objective="do the thing",
+        inputs={},
+        workspace_root=workspace_root,
+        constraints={},
+        trace_context={
+            "awf_guard": {
+                "repo_root": str(repo_root),
+                "run_id": "run-1",
+                "step_id": "step-1",
+                "actor": "copilot",
+                "agent_allowlist": ["fs_write@1.0.0"],
+                "role": "builder",
+            }
+        },
+    )
+
+
 def test_invoke_builds_explicit_allow_tool_command_no_yolo(monkeypatch):
     captured = {}
 
@@ -41,6 +60,37 @@ def test_invoke_builds_explicit_allow_tool_command_no_yolo(monkeypatch):
     assert "--yolo" not in captured["command"]
     assert "--allow-all" not in captured["command"]
     assert result.status == AgentStatus.COMPLETED
+
+
+def test_invoke_writes_copilot_pre_tool_use_hook_when_guard_context_exists(monkeypatch, tmp_path, repo_root):
+    captured = {}
+
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
+        workspace_root = Path(cwd)
+        captured["env"] = env
+        assert (workspace_root / ".github/hooks/awf-copilot-guard.json").is_file()
+        assert (workspace_root / ".github/hooks/scripts/awf-pre-tool-use.sh").is_file()
+        assert (workspace_root / ".github/hooks/scripts/awf-pre-tool-use.ps1").is_file()
+        return SimpleNamespace(returncode=0, stdout='{"type":"done"}', stderr="")
+
+    monkeypatch.setattr("awf.adapters.copilot_cli.subprocess.run", fake_run)
+
+    result = invoke(make_guarded_invocation(tmp_path, repo_root))
+
+    assert result.status == AgentStatus.COMPLETED
+    assert captured["env"]["AWF_RUN_ID"] == "run-1"
+    assert json.loads(captured["env"]["AWF_AGENT_ALLOWLIST"]) == ["fs_write@1.0.0"]
+    assert not (tmp_path / ".github/hooks/awf-copilot-guard.json").exists()
+    assert not (tmp_path / ".github/hooks/scripts/awf-pre-tool-use.sh").exists()
+
+
+def test_invoke_refuses_to_overwrite_existing_copilot_hook(tmp_path, repo_root):
+    hook_path = tmp_path / ".github/hooks/awf-copilot-guard.json"
+    hook_path.parent.mkdir(parents=True)
+    hook_path.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(CopilotAdapterError, match="refusing to overwrite"):
+        invoke(make_guarded_invocation(tmp_path, repo_root))
 
 
 def test_invoke_appends_model_override(monkeypatch):

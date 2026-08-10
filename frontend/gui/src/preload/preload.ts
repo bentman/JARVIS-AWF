@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld("awf", {
     ipcRenderer.invoke(CHANNELS.registryRetire, kind, name, version),
   registryTrust: (kind: string, name: string, version: string, status: string) =>
     ipcRenderer.invoke(CHANNELS.registryTrust, kind, name, version, status),
+  registryList: (kind: string) => ipcRenderer.invoke(CHANNELS.registryList, kind),
+  registryGet: (kind: string, name: string, version: string) =>
+    ipcRenderer.invoke(CHANNELS.registryGet, kind, name, version),
+  artifactList: (runId: string) => ipcRenderer.invoke(CHANNELS.artifactList, runId),
+  artifactRead: (artifactId: string) => ipcRenderer.invoke(CHANNELS.artifactRead, artifactId),
   runStatus: (runId: string) => ipcRenderer.invoke(CHANNELS.runStatus, runId),
   runList: () => ipcRenderer.invoke(CHANNELS.runList),
   approvalList: () => ipcRenderer.invoke(CHANNELS.approvalList),

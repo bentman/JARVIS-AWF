@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 export interface RunSummary {
   run_id: string;
@@ -70,9 +70,18 @@ export interface ControlSummary {
   };
   readiness: {
     profile_id: string | null;
+    inventory: Record<string, unknown> | null;
+    tokens: string[];
     readiness: Record<string, { device: string; ready: boolean; reason: string }>;
     error?: string;
   };
+}
+
+export interface LlmModelsReport {
+  local_models?: Record<string, unknown>[];
+  ollama_models?: Record<string, unknown>[];
+  ollama_models_error?: string;
+  error?: string;
 }
 
 export interface ControlRunDetail {
@@ -96,6 +105,8 @@ export interface DashboardProps {
   selectedRunDetail?: ControlRunDetail | null;
   onRefresh: () => void;
   onRunDetail?: (runId: string) => void;
+  onArtifactRead?: (artifactId: string) => Promise<ArtifactSummary & { content: string }>;
+  onLlmModels?: () => Promise<LlmModelsReport>;
   refreshing: boolean;
 }
 
@@ -111,12 +122,27 @@ export function Dashboard({
   selectedRunDetail,
   onRefresh,
   onRunDetail,
+  onArtifactRead,
+  onLlmModels,
   refreshing,
 }: DashboardProps): React.JSX.Element {
   const registryCounts = controlSummary?.registry_counts ?? {};
   const readiness = controlSummary?.readiness;
   const llmStatus = controlSummary?.llm.status;
   const llmServers = controlSummary?.llm.servers;
+  const [openArtifact, setOpenArtifact] = useState<{ id: string; content: string } | null>(null);
+  const [models, setModels] = useState<LlmModelsReport | null>(null);
+
+  const viewArtifact = async (artifactId: string) => {
+    if (!onArtifactRead) return;
+    const artifact = await onArtifactRead(artifactId);
+    setOpenArtifact({ id: artifactId, content: artifact.content });
+  };
+
+  const loadModels = async () => {
+    if (!onLlmModels) return;
+    setModels(await onLlmModels());
+  };
 
   return (
     <div role="region" aria-label="Dashboard">
@@ -137,6 +163,8 @@ export function Dashboard({
                 </li>
               ))}
             </ul>
+            {readiness.tokens.length > 0 && <div>Tokens: {readiness.tokens.join(", ")}</div>}
+            {readiness.inventory && <pre>{JSON.stringify(readiness.inventory, null, 2)}</pre>}
           </>
         ) : (
           <p>No readiness data.</p>
@@ -151,9 +179,44 @@ export function Dashboard({
             {llmStatus.profile_id && <div>Runtime profile: {llmStatus.profile_id}</div>}
             {llmStatus.error && <div>LLM error: {llmStatus.error}</div>}
             {llmServers?.default_server && <div>Default server: {llmServers.default_server}</div>}
+            {llmServers?.current_selection && (
+              <div>Current selection: {JSON.stringify(llmServers.current_selection)}</div>
+            )}
           </>
         ) : (
           <p>No LLM status.</p>
+        )}
+        {onLlmModels && (
+          <div>
+            <button type="button" onClick={() => void loadModels()}>
+              Load models
+            </button>
+            {models && (
+              <>
+                {models.local_models && models.local_models.length > 0 && (
+                  <div>
+                    <h3>Local models</h3>
+                    <ul>
+                      {models.local_models.map((model, index) => (
+                        <li key={index}>{JSON.stringify(model)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {models.ollama_models && models.ollama_models.length > 0 && (
+                  <div>
+                    <h3>Ollama models</h3>
+                    <ul>
+                      {models.ollama_models.map((model, index) => (
+                        <li key={index}>{JSON.stringify(model)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {models.error && <div>Models error: {models.error}</div>}
+              </>
+            )}
+          </div>
         )}
       </section>
       <section aria-label="Registry">
@@ -192,8 +255,6 @@ export function Dashboard({
             <div>
               {selectedRunDetail.run.workflow_ref} - {selectedRunDetail.run.status}
             </div>
-            <div>Artifacts: {selectedRunDetail.artifacts.length}</div>
-            <div>Verdicts: {selectedRunDetail.verdicts.length}</div>
             <ul>
               {selectedRunDetail.run.steps.map((step) => (
                 <li key={step.step_id}>
@@ -201,6 +262,54 @@ export function Dashboard({
                 </li>
               ))}
             </ul>
+            {selectedRunDetail.artifacts.length > 0 && (
+              <div>
+                <h3>Artifacts</h3>
+                <ul>
+                  {selectedRunDetail.artifacts.map((artifact) => (
+                    <li key={artifact.artifact_id}>
+                      {artifact.relative_path} ({artifact.artifact_type})
+                      {onArtifactRead && (
+                        <button type="button" onClick={() => void viewArtifact(artifact.artifact_id)}>
+                          View
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {selectedRunDetail.verdicts.length > 0 && (
+              <div>
+                <h3>Verdicts</h3>
+                <ul>
+                  {selectedRunDetail.verdicts.map((verdict) => (
+                    <li key={verdict.artifact_id}>
+                      {verdict.relative_path} ({verdict.artifact_type})
+                      {onArtifactRead && (
+                        <button type="button" onClick={() => void viewArtifact(verdict.artifact_id)}>
+                          View
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {Object.keys(selectedRunDetail.timeline).length > 0 && (
+              <div>
+                <h3>Timeline</h3>
+                <pre>{JSON.stringify(selectedRunDetail.timeline, null, 2)}</pre>
+              </div>
+            )}
+            {openArtifact && (
+              <div>
+                <button type="button" onClick={() => setOpenArtifact(null)}>
+                  Close
+                </button>
+                <pre aria-label="Artifact content">{openArtifact.content}</pre>
+              </div>
+            )}
           </>
         ) : (
           <p>No run selected.</p>
@@ -232,9 +341,27 @@ export function Dashboard({
             {improvements.map((proposal) => (
               <li key={proposal.improvement_id}>
                 {proposal.summary} - {proposal.status} ({proposal.improvement_id})
-                <div>Diff: {proposal.diff_digest}</div>
-                <div>Patch artifact: {proposal.patch_artifact_id}</div>
-                {proposal.verdict_artifact_id && <div>Verdict: {proposal.verdict_artifact_id}</div>}
+                <div>
+                  Diff: {proposal.diff_digest}
+                  {onArtifactRead && (
+                    <button type="button" onClick={() => void viewArtifact(proposal.patch_artifact_id)}>
+                      View diff
+                    </button>
+                  )}
+                </div>
+                {proposal.verdict_artifact_id && (
+                  <div>
+                    Verdict: {proposal.verdict_artifact_id}
+                    {onArtifactRead && (
+                      <button
+                        type="button"
+                        onClick={() => void viewArtifact(proposal.verdict_artifact_id as string)}
+                      >
+                        View verdict
+                      </button>
+                    )}
+                  </div>
+                )}
                 {proposal.approval && <div>Approval: {proposal.approval.approval_id} - {proposal.approval.status}</div>}
               </li>
             ))}

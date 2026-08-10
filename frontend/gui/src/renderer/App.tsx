@@ -3,14 +3,16 @@ import { ApprovalConfirmation } from "./ApprovalConfirmation.js";
 import {
   Dashboard,
   type ApprovalSummary,
+  type ArtifactSummary,
   type ControlRunDetail,
   type ControlSummary,
   type ImprovementSummary,
+  type LlmModelsReport,
   type RunSummary,
 } from "./Dashboard.js";
 import { MemoryPanel, type MemorySearchResult } from "./MemoryPanel.js";
 import { ProposalReview, type ProposalSummary } from "./ProposalReview.js";
-import { RegistryActions } from "./RegistryActions.js";
+import { RegistryActions, type RegistryEntry } from "./RegistryActions.js";
 import { Transcript, type TranscriptEntry } from "./Transcript.js";
 import { VoiceActivation, type VoiceSessionResult, type VoiceSubmitTextResult } from "./VoiceActivation.js";
 import type { RiskClass } from "../voiceApproval.js";
@@ -56,6 +58,10 @@ export interface AppProps extends VoiceSessionFns {
   onRegistryReindex?: () => Promise<unknown>;
   onRegistryRetire?: (kind: string, name: string, version: string) => Promise<unknown>;
   onRegistryTrust?: (kind: string, name: string, version: string, status: string) => Promise<unknown>;
+  onRegistryList?: (kind: string) => Promise<RegistryEntry[]>;
+  onRegistryGet?: (kind: string, name: string, version: string) => Promise<Record<string, unknown>>;
+  onArtifactRead?: (artifactId: string) => Promise<ArtifactSummary & { content: string }>;
+  onLlmModels?: () => Promise<LlmModelsReport>;
   onProposalGet?: (proposalId: string) => Promise<ProposalSummary>;
   onProposalPublish?: (proposalId: string, digest: string) => Promise<unknown>;
   onProposalReject?: (proposalId: string, reason?: string) => Promise<unknown>;
@@ -99,6 +105,10 @@ export function App({
   onRegistryReindex,
   onRegistryRetire,
   onRegistryTrust,
+  onRegistryList,
+  onRegistryGet,
+  onArtifactRead,
+  onLlmModels,
   onProposalGet,
   onProposalPublish,
   onProposalReject,
@@ -208,6 +218,8 @@ export function App({
           selectedRunDetail={selectedRunDetail}
           onRefresh={() => void refresh()}
           onRunDetail={onControlRunDetail ? (runId: string) => void handleRunDetail(runId) : undefined}
+          onArtifactRead={onArtifactRead}
+          onLlmModels={onLlmModels}
           refreshing={refreshing}
         />
       )}
@@ -233,6 +245,8 @@ export function App({
           onRegistryReindex={onRegistryReindex}
           onRegistryRetire={onRegistryRetire}
           onRegistryTrust={onRegistryTrust}
+          onRegistryList={onRegistryList}
+          onRegistryGet={onRegistryGet}
         />
       )}
       <Transcript entries={entries} />

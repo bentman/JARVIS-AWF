@@ -18,6 +18,10 @@ export const CHANNELS = {
   registryReindex: "awf:registryReindex",
   registryRetire: "awf:registryRetire",
   registryTrust: "awf:registryTrust",
+  registryList: "awf:registryList",
+  registryGet: "awf:registryGet",
+  artifactList: "awf:artifactList",
+  artifactRead: "awf:artifactRead",
   runStatus: "awf:runStatus",
   runList: "awf:runList",
   approvalList: "awf:approvalList",
@@ -64,6 +68,12 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, client: ProtocolClient
   ipcMain.handle(CHANNELS.registryTrust, (_event, kind, name, version, status) =>
     client.registryTrust(kind as string, name as string, version as string, status as string),
   );
+  ipcMain.handle(CHANNELS.registryList, (_event, kind) => client.registryList(kind as string));
+  ipcMain.handle(CHANNELS.registryGet, (_event, kind, name, version) =>
+    client.registryGet(kind as string, name as string, version as string),
+  );
+  ipcMain.handle(CHANNELS.artifactList, (_event, runId) => client.artifactList(runId as string));
+  ipcMain.handle(CHANNELS.artifactRead, (_event, artifactId) => client.artifactRead(artifactId as string));
   ipcMain.handle(CHANNELS.runStatus, (_event, runId) => client.runStatus(runId as string));
   ipcMain.handle(CHANNELS.runList, () => client.runList());
   ipcMain.handle(CHANNELS.approvalList, () => client.approvalList());

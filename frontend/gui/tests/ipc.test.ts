@@ -24,6 +24,10 @@ function makeFakeClient() {
     registryReindex: vi.fn().mockResolvedValue({ indexed: true }),
     registryRetire: vi.fn().mockResolvedValue({ retired: true }),
     registryTrust: vi.fn().mockResolvedValue({ trust_status: "trusted" }),
+    registryList: vi.fn().mockResolvedValue([]),
+    registryGet: vi.fn().mockResolvedValue({ kind: "workflows" }),
+    artifactList: vi.fn().mockResolvedValue([]),
+    artifactRead: vi.fn().mockResolvedValue({ artifact_id: "artifact-1", content: "diff content" }),
     runStatus: vi.fn().mockResolvedValue({ run_id: "run-1" }),
     runList: vi.fn().mockResolvedValue([]),
     approvalList: vi.fn().mockResolvedValue([]),
@@ -90,6 +94,18 @@ describe("registerIpcHandlers", () => {
 
     await handlers.get(CHANNELS.registryTrust)?.({}, "workflows", "demo", "1.0.0", "trusted");
     expect(client.registryTrust).toHaveBeenCalledWith("workflows", "demo", "1.0.0", "trusted");
+
+    await handlers.get(CHANNELS.registryList)?.({}, "workflows");
+    expect(client.registryList).toHaveBeenCalledWith("workflows");
+
+    await handlers.get(CHANNELS.registryGet)?.({}, "workflows", "demo", "1.0.0");
+    expect(client.registryGet).toHaveBeenCalledWith("workflows", "demo", "1.0.0");
+
+    await handlers.get(CHANNELS.artifactList)?.({}, "run-1");
+    expect(client.artifactList).toHaveBeenCalledWith("run-1");
+
+    await handlers.get(CHANNELS.artifactRead)?.({}, "artifact-1");
+    expect(client.artifactRead).toHaveBeenCalledWith("artifact-1");
 
     await handlers.get(CHANNELS.runStatus)?.({}, "run-1");
     expect(client.runStatus).toHaveBeenCalledWith("run-1");

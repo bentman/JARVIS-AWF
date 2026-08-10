@@ -1,9 +1,18 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.js";
-import type { ApprovalSummary, ControlRunDetail, ControlSummary, ImprovementSummary, RunSummary } from "./Dashboard.js";
+import type {
+  ApprovalSummary,
+  ArtifactSummary,
+  ControlRunDetail,
+  ControlSummary,
+  ImprovementSummary,
+  LlmModelsReport,
+  RunSummary,
+} from "./Dashboard.js";
 import type { MemorySearchResult } from "./MemoryPanel.js";
 import type { ProposalSummary } from "./ProposalReview.js";
+import type { RegistryEntry } from "./RegistryActions.js";
 import type { VoiceSessionResult, VoiceSubmitTextResult } from "./VoiceActivation.js";
 
 interface VoiceRoundTripResult {
@@ -24,13 +33,17 @@ declare global {
       controlRunDetail: (runId: string) => Promise<ControlRunDetail>;
       systemReadiness: () => Promise<unknown>;
       llmServers: () => Promise<unknown>;
-      llmModels: () => Promise<unknown>;
+      llmModels: () => Promise<LlmModelsReport>;
       llmServeStatus: () => Promise<unknown>;
       registryValidate: (path: string, kind?: string) => Promise<unknown>;
       registryPublish: (path: string, kind: string) => Promise<unknown>;
       registryReindex: () => Promise<unknown>;
       registryRetire: (kind: string, name: string, version: string) => Promise<unknown>;
       registryTrust: (kind: string, name: string, version: string, status: string) => Promise<unknown>;
+      registryList: (kind: string) => Promise<RegistryEntry[]>;
+      registryGet: (kind: string, name: string, version: string) => Promise<Record<string, unknown>>;
+      artifactList: (runId: string) => Promise<ArtifactSummary[]>;
+      artifactRead: (artifactId: string) => Promise<ArtifactSummary & { content: string }>;
       runList: () => Promise<RunSummary[]>;
       approvalList: () => Promise<ApprovalSummary[]>;
       approvalDetail: (approvalId: string) => Promise<unknown>;
@@ -112,6 +125,10 @@ if (container) {
         window.awf.registryRetire(kind, name, version),
       onRegistryTrust: (kind: string, name: string, version: string, status: string) =>
         window.awf.registryTrust(kind, name, version, status),
+      onRegistryList: (kind: string) => window.awf.registryList(kind),
+      onRegistryGet: (kind: string, name: string, version: string) => window.awf.registryGet(kind, name, version),
+      onArtifactRead: (artifactId: string) => window.awf.artifactRead(artifactId),
+      onLlmModels: () => window.awf.llmModels(),
       onProposalGet: (proposalId: string) => window.awf.proposalGet(proposalId),
       onProposalPublish: (proposalId: string, digest: string) => window.awf.proposalPublish(proposalId, digest),
       onProposalReject: (proposalId: string, reason?: string) => window.awf.proposalReject(proposalId, reason),

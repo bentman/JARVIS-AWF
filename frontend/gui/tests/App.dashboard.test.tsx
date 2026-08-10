@@ -89,7 +89,7 @@ describe("App dashboard wiring (runList/approvalList IPC channels)", () => {
       recent_verdicts: [],
       registry_counts: { skills: 1 },
       llm: { status: { state: "running" }, servers: { default_server: "llama-server" } },
-      readiness: { profile_id: "linux-x64-cpu", readiness: {} },
+      readiness: { profile_id: "linux-x64-cpu", inventory: null, tokens: [], readiness: {} },
     });
 
     render(<App onApprove={vi.fn()} onReject={vi.fn()} onControlSummary={onControlSummary} />);
@@ -107,7 +107,7 @@ describe("App dashboard wiring (runList/approvalList IPC channels)", () => {
       recent_verdicts: [],
       registry_counts: {},
       llm: {},
-      readiness: { profile_id: "linux-x64-cpu", readiness: {} },
+      readiness: { profile_id: "linux-x64-cpu", inventory: null, tokens: [], readiness: {} },
     });
     const onControlRunDetail = vi.fn().mockResolvedValue({
       run: {

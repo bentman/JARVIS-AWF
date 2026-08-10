@@ -256,15 +256,15 @@ export function App({
 
   return (
     <div className="shell">
-      <aside className="rail">
-        <div className="mono">AWF</div>
+      <header className="topbar">
+        <div className="brand mono">AWF</div>
         <nav aria-label="Views">
-          <ul className="rail-nav list">
+          <ul className="nav-list list">
             {views.map((v) => (
               <li key={v.name}>
                 <button
                   type="button"
-                  className="btn rail-item"
+                  className="btn nav-item"
                   aria-current={v.name === activeView ? "page" : undefined}
                   onClick={() => setView(v.name)}
                 >
@@ -275,11 +275,6 @@ export function App({
             ))}
           </ul>
         </nav>
-        <button type="button" className="btn btn-secondary" onClick={() => void refresh()} disabled={refreshing}>
-          {refreshing ? "Refreshing..." : "Refresh"}
-        </button>
-      </aside>
-      <div className="main-col">
         <div className="status-bar" role="status" aria-label="Status">
           <span className="mono">{controlSummary?.readiness.profile_id ?? "no profile"}</span>
           <span className={`chip ${stateClass(readinessOverall)}`}>{readinessOverall}</span>
@@ -288,7 +283,11 @@ export function App({
             {approvals.length} pending approval{approvals.length === 1 ? "" : "s"}
           </span>
         </div>
-        <main className="main">
+        <button type="button" className="btn btn-secondary" onClick={() => void refresh()} disabled={refreshing}>
+          {refreshing ? "Refreshing..." : "Refresh"}
+        </button>
+      </header>
+      <main className="main">
           {activeView === "overview" && <Overview controlSummary={controlSummary} onLlmModels={onLlmModels} />}
           {activeView === "runs" && (
             <RunsView
@@ -352,8 +351,7 @@ export function App({
                 <Transcript entries={entries} />
               </>
             )}
-        </main>
-      </div>
+      </main>
       {effectivePendingApproval && (
         <ApprovalConfirmation
           approvalId={effectivePendingApproval.approvalId}

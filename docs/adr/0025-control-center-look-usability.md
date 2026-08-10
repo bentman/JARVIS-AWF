@@ -2,615 +2,229 @@
 
 ## Status
 
-Proposed. Not implemented. Supersedes the presentation decisions in the first
-revision of this record.
+Implemented, with one presentation correction pending: the navigation shape.
 
 Scope is AWF-GUI only. The CLI and TUI reach their own ADR-0024 targets in a
 separate record.
 
-This record is self-contained. Every colour, dimension, and rule needed to
-implement it is written below. No external repository, prototype, or design
-file needs to be consulted.
-
 ## Context
 
-ADR-0024 delivered the control-center data path. `awf/control.summary`,
+ADR-0024 delivered the control-center data path: `awf/control.summary`,
 `awf/control.runDetail`, `awf/system.readiness`, and `awf/llm.*` reach the
-renderer through narrow IPC, and the panels display real protocol data.
+renderer through narrow IPC, and the panels display real protocol data —
+readiness rows, LLM state and model catalog, hardware tokens/inventory, a
+registry browse-then-act flow, an artifact/diff viewer, run timeline, and
+improvement proposals. That substance is real, implemented, and covered by
+the GUI test suite (`Overview.tsx`, `RunsView.tsx`, `ApprovalsView.tsx`,
+`Dashboard.tsx`, `RegistryActions.tsx`, `ApprovalConfirmation.tsx`,
+`ProposalReview.tsx`, `MemoryPanel.tsx`, `Transcript.tsx`,
+`VoiceActivation.tsx`, `state.ts`).
 
-The shipped surface has these defects, observed in the running application:
+This record went through two presentation revisions before landing on the
+current decision:
 
-- **Layout is a single scrolling column behind a navigation rail.** Selecting
-  one view hides the others, so an operator watching a run cannot see the
-  approval queue, and an operator in the voice view cannot see readiness. An
-  operator console shows its state continuously; it does not page between
-  states.
-- **Raw JSON is rendered as the inventory display.** The Overview prints the
-  entire `HardwareInventory` mapping as a `<pre>` block, occupying more
-  vertical space than every other readiness element combined.
-- **Preflight tokens render as one comma-separated paragraph** that wraps
-  across three lines and cannot be scanned.
-- **The voice controls are an inline run of labels and inputs.** "Final
-  recognized text" wraps between "Final" and "recognized text", the three
-  inputs sit at unaligned baselines, and the five buttons sit in one
-  undifferentiated row.
-- **Empty panels render as empty bordered boxes** with no text explaining what
-  they will contain.
-- **Density is a web page, not a console.** 16–32px padding around every card
-  puts five readiness rows and nothing else on the first screen.
+1. A left-side vertical rail with one active view and a persistent status
+   bar. This shipped and is what the repository currently contains outside
+   the shell itself: a dark token set (`#0a0a0b` background, `#e2e8f0` text,
+   `#22d3ee` cyan accent, `#34d399` emerald, Inter/JetBrains Mono), cards,
+   chips, a `stateClass()` helper driving all status colour, and 50 passing
+   GUI tests. The rail's own markup and CSS (`.rail`, `.rail-nav`,
+   `.rail-item`) is the one piece this record now replaces.
+2. A three-column always-visible console with a different navy token set,
+   drafted but never implemented — rejected before any file was touched. An
+   operator who can only see one workflow at a glance in a compact desktop
+   window does not need every panel visible simultaneously; the one-active-
+   view model from revision 1 was the right shape, only the wrong nav
+   orientation.
 
-Current renderer state, read from the source:
+The reference for this record is `../JARVISvX2/` — a sibling prototype
+(Electron + React + Tailwind), consulted for its **colour scheme and layout
+shape only**, not copied wholesale. Reading `src/index.css`,
+`src/App.tsx`, and `src/components/Header.tsx` there confirms that revision
+1's token values already match vX2's exactly (same `#0a0a0b`/`#e2e8f0`/
+`#22d3ee`/`#34d399` hex values, same font stack) — the lineage is shared.
+What revision 1 lacks relative to vX2 is:
 
-- `src/renderer/index.html` links a stylesheet; `styles.css` exists.
-- `App.tsx` implements a fixed rail plus one active view.
-- `Dashboard.tsx` renders sections for readiness, LLM status, registry, runs,
-  run detail, approvals, and improvements.
-- Every panel carries `role` and `aria-label`; the 39 GUI tests query by
-  accessible role and label.
-- `frontend/gui/package.json` has no CSS tooling and no UI library.
-- `esbuild.config.js` bundles `src/renderer/index.tsx`; a CSS import in that
-  entry point emits `dist/renderer/index.css` with no loader configuration.
+- vX2's navigation is a **sticky top header** — brand left, a horizontal row
+  of view-select buttons centre, status pills right — not a left rail.
+- vX2's panels use a **glass/blur treatment**
+  (`backdrop-filter: blur()` over translucent surfaces) and soft accent-
+  coloured glows on active/primary elements; revision 1's cards are flat.
+- vX2 uses `lucide-react` icons and Tailwind utility spacing sized for a wide
+  desktop web page; neither is appropriate here (no new dependency, and
+  AWF-GUI's window is a compact desktop app, not a browser tab).
+- vX2's `VoiceOrb.tsx` renders an animated canvas particle visualization for
+  voice state. This is explicitly excluded — out of scope, adds a canvas
+  render loop and complexity for a text-first control surface (ADR-0023's
+  text-first invariant already covers voice state legibility via the
+  existing status chip and transcript).
 
 ## Decision
 
-**A three-column console, all state visible at once.** The navigation rail and
-the one-view-at-a-time model are removed. Status sits left, conversation
-centre, operator controls right — the arrangement an operator console uses,
-and the arrangement that keeps readiness, transcript, and approvals on screen
-together.
+**Navigation is a sticky top header, not a rail, and not a three-column
+console.** `App.tsx` keeps the one-active-view model it already has —
+`ViewName`, the `views` array derived from callback presence, `activeView`,
+every child component's existing conditional-render guard — and moves the
+nav itself from a left `<aside className="rail">` into a top
+`<header className="topbar">`: brand on the left, the same view-select
+buttons now laid out horizontally (wrapping/scrolling at narrow widths
+instead of collapsing to a horizontal strip, since they're horizontal
+already), the same three status chips (readiness, LLM state, pending-approval
+count), and the same Refresh button — all in one row instead of split
+between a sidebar and a separate bar.
 
-**A dense, dark, navy-based palette on a fixed token set.** Exact values are
-given below and are not open to interpretation.
+**Glass panel treatment, referenced from vX2's values, not its stack.**
+`.card` and `.topbar` gain `backdrop-filter: blur(12px)` (and the
+`-webkit-` prefix) over their existing translucent `--surface`/
+`--surface-raised` backgrounds, and the active nav item plus primary buttons
+gain a soft `box-shadow` glow using the existing `--accent`/`--ok` custom
+properties. No new colour tokens — revision 1's palette already matches
+vX2's.
 
-**Console density.** The spacing scale tops out at 9px. Panels are 7px padded.
-Body text is 0.78–0.82rem. The shell is `height: 100vh` with
-`overflow: hidden`; each column scrolls independently.
+**No animated voice orb.** `VoiceActivation.tsx` keeps its existing
+text/button-based controls (status chip, stacked fields, button row). No
+canvas element, no particle animation, is added anywhere.
 
-**State is carried by a left border and a badge, not by a dot.** A readiness
-row, a run row, and an approval card each show a 4px coloured left edge and a
-glyph, so state is legible without relying on colour alone.
+**More compact than vX2's own spacing, not a straight port.** vX2's Tailwind
+classes (`px-3 py-1.5`, `gap-4`) target a wide browser layout. AWF-GUI keeps
+its existing tighter token scale (`--space-1` through `--space-6`, 4–32px)
+and the top bar itself uses the smaller end of that scale so the nav row
+stays compact rather than adopting vX2's larger touch-target sizing.
 
-**Structured data renders as fields, not as JSON.** The inventory becomes a
-definition list of labelled rows. Tokens become a list.
-
-**Every control is in a labelled form row.** Label above input, one input per
-row, no inline label-input runs.
+**No new dependency.** No Tailwind, no `lucide-react` or any other icon
+library — nav buttons stay text-label-only, consistent with every other
+decision in this record's history.
 
 **Accessible names are preserved exactly.** Every existing `role` and
-`aria-label` string stays byte-identical, so all 39 GUI tests pass without
-modification.
-
-**No new dependency.**
+`aria-label` string stays byte-identical. This is now trivially true rather
+than merely promised: no component below the shell (`Overview`, `RunsView`,
+`ApprovalsView`, `Dashboard`, `RegistryActions`, `ApprovalConfirmation`,
+`ProposalReview`, `MemoryPanel`, `Transcript`, `VoiceActivation`) changes at
+all — only the shell/nav markup around them moves from a sidebar to a header,
+and every prop threaded into them is unchanged.
 
 ## Deviation recorded
 
-None. This record changes only `frontend/gui/src/` and the GUI build step. No
-protocol method, IPC channel, backend operation, registry object, or
-authorization path is touched.
+None. This record changes only `frontend/gui/src/renderer/App.tsx`,
+`frontend/gui/src/renderer/styles.css`, and (if the new layout's minimum
+window size differs from the rail's) `frontend/gui/src/main/main.ts`'s
+`BrowserWindow` options. No protocol method, IPC channel, backend operation,
+registry object, or authorization path is touched.
 
 ## Mechanism
 
-### Part A — the token block
-
-`src/renderer/styles.css` opens with exactly this. These values are the
-specification; do not substitute a different palette.
-
-```css
-:root {
-  color-scheme: dark;
-
-  --font-ui: "Segoe UI", system-ui, sans-serif;
-  --font-mono: Consolas, "Cascadia Mono", ui-monospace, monospace;
-
-  --text-xs: 0.66rem;
-  --text-sm: 0.74rem;
-  --text-md: 0.82rem;
-  --text-lg: 1.08rem;
-
-  --space-1: 3px;
-  --space-2: 5px;
-  --space-3: 7px;
-  --space-4: 9px;
-
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-
-  --color-bg-base:     #070b12;
-  --color-bg-sunken:   #010409;
-  --color-bg-panel:    #111827;
-  --color-bg-elevated: #172033;
-  --color-bg-soft:     #0d1422;
-
-  --color-text-primary:   #e6edf3;
-  --color-text-secondary: #b7c3d1;
-  --color-text-muted:     #8b949e;
-  --color-text-inverse:   #001018;
-
-  --color-accent:       #00bfff;
-  --color-ready:        #00ff99;
-  --color-degraded:     #f6c177;
-  --color-failed:       #ff6b6b;
-  --color-capture:      #38bdf8;
-  --color-speaking:     #7dd3fc;
-  --color-thinking:     #a78bfa;
-  --color-transcribing: #67e8f9;
-
-  --color-border:        #30363d;
-  --color-border-strong: #4b5563;
-
-  --shadow-panel: 0 14px 30px #0000004d;
-  --glow-capture: 0 0 0 1px #38bdf8, 0 0 22px #38bdf866;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  font-family: var(--font-ui);
-  color: var(--color-text-primary);
-  background: radial-gradient(circle at top left, var(--color-bg-soft), var(--color-bg-base));
-}
-
-button, input, select, textarea { font: inherit; }
-```
-
-The blue is `#00bfff`, not cyan. The ready green is `#00ff99`. Backgrounds are
-navy-tinted, not neutral grey.
-
-### Part B — the shell
-
-```css
-.shell {
-  max-width: 1480px;
-  margin: 0 auto;
-  padding: var(--space-4);
-  height: 100vh;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.header {
-  display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(320px, 1fr) minmax(260px, 340px);
-  align-items: stretch;
-  gap: var(--space-4);
-  margin-bottom: var(--space-3);
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(320px, 1fr) minmax(260px, 340px);
-  gap: var(--space-4);
-  flex: 1;
-  min-height: 0;
-}
-
-@media (max-width: 820px) {
-  .grid, .header { grid-template-columns: 1fr; }
-}
-```
-
-Column assignment:
-
-| Column | Contents |
-|---|---|
-| Left — status | profile, readiness families, preflight tokens, LLM status, host inventory, registry counts |
-| Centre — conversation | transcript log, text input, voice controls |
-| Right — operator | approvals, proposals, runs and run detail, memory, registry actions |
-
-`App.tsx` renders all three columns simultaneously. The `view` state, the rail,
-and the rail badges are removed. Every component currently rendered
-conditionally on its callbacks keeps that condition.
-
-### Part C — the header
-
-Three cells matching the body grid.
-
-**Left:** `AWF` as `<h1>` at `var(--text-lg)`, profile ID beneath as
-`.subtitle` in `--color-text-muted` at `var(--text-sm)`.
-
-**Centre — the turn-status rail.** The voice pipeline as a single line of
-monospace labels at `0.58rem`, separated by `·`, all at
-`color: var(--color-text-muted); opacity: 0.4`:
-
-```
-LISTENING · TRANSCRIBING · REASONING · RESPONDING · SPEAKING
-```
-
-The label matching the current session state gets `.active`:
-`opacity: 1; text-shadow: 0 0 8px currentColor` and a colour from the state
-map in Part D. When no session is open, every label stays dimmed. The rail
-sits in a `--color-bg-panel` card with a `.turn-status-title` eyebrow reading
-`TURN`.
-
-**Right — system state card.** LLM state, server id, and pending-approval
-count, right-aligned, in a `--color-bg-panel` card. Pending approvals above
-zero render in `--color-degraded`.
-
-### Part D — state colour
-
-One mapping, used by every status display. `src/renderer/state.ts` exports
-`stateColorVar(value: string): string` returning the CSS variable name.
-
-| State | Variable |
-|---|---|
-| `ready`, `SUCCEEDED`, `running`, `adopted`, `approved`, `trusted`, `IDLE` | `--color-ready` |
-| `LISTENING` | `--color-capture` |
-| `TRANSCRIBING` | `--color-transcribing` |
-| `REASONING`, `ACTING`, `RESPONDING` | `--color-thinking` |
-| `SPEAKING` | `--color-speaking` |
-| `WAITING_APPROVAL`, `WAITING_INPUT`, `pending`, `draft`, `degraded`, `quarantined`, `INTERRUPTED`, `RECOVERING` | `--color-degraded` |
-| `FAILED`, `CANCELED`, `not ready`, `denied`, `blocked`, `rejected`, `R3` | `--color-failed` |
-| anything else | `--color-text-muted` |
-
-Components set `data-state="<value>"` and the stylesheet selects on it, as in
-Part E. Colour is never the only signal: every element also renders its state
-as text, and readiness and approval rows carry a glyph.
-
-### Part E — panels and rows
-
-```css
-.panel {
-  background: var(--color-bg-panel);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  box-shadow: var(--shadow-panel);
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.panel-section {
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: var(--space-2);
-  margin-bottom: var(--space-2);
-}
-.panel-section:last-child { border-bottom: 0; margin-bottom: 0; padding-bottom: 0; }
-
-.label, dt {
-  display: block;
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--color-text-muted);
-}
-```
-
-**Readiness rows.** A `.readiness-family` per function, with a state-coloured
-left edge and a glyph badge:
-
-```css
-.readiness-family {
-  position: relative;
-  border: 1px solid var(--color-border);
-  border-left: 4px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-2) var(--space-2) 28px;
-  margin-bottom: var(--space-2);
-  background: var(--color-bg-elevated);
-}
-.readiness-family::before {
-  position: absolute;
-  left: var(--space-2);
-  top: var(--space-2);
-  width: 16px; height: 16px;
-  border-radius: var(--radius-sm);
-  display: grid; place-items: center;
-  font-size: var(--text-xs);
-  font-weight: 800;
-}
-.readiness-family[data-readiness-state="ready"] { border-left-color: var(--color-ready); }
-.readiness-family[data-readiness-state="ready"]::before {
-  content: "✓"; color: var(--color-text-inverse); background: var(--color-ready);
-}
-.readiness-family[data-readiness-state="degraded"] { border-left-color: var(--color-degraded); }
-.readiness-family[data-readiness-state="degraded"]::before {
-  content: "!"; color: var(--color-text-inverse); background: var(--color-degraded);
-}
-.readiness-family[data-readiness-state="failed"] { border-left-color: var(--color-failed); }
-.readiness-family[data-readiness-state="failed"]::before {
-  content: "×"; color: var(--color-text-primary); background: var(--color-failed);
-}
-```
-
-Row content: function name in `--color-text-primary`, device as a monospace
-chip, then the reason on its own line in `--color-text-muted` at
-`var(--text-sm)`.
-
-**Field lists replace JSON.** The host inventory renders as:
-
-```css
-.facts {
-  display: grid;
-  grid-template-columns: minmax(62px, max-content) 1fr;
-  gap: var(--space-1) var(--space-2);
-  margin: 0;
-}
-dd { margin: 0; word-break: break-word; font-size: 0.78rem; line-height: 1.22;
-     color: var(--color-text-secondary); }
-```
-
-Displayed fields, in this order, with `null` and empty values omitted:
-`gpu_name`, `gpu_vram_gb`, `cuda_version`, `cpu_name`, `cpu_logical_cores`,
-`memory_total_gb`, `memory_available_gb`, `os_name`, `os_version`, `arch`.
-The remaining inventory keys move behind a `<details>` element labelled
-`Full inventory`, collapsed by default, rendering the same field list. No
-`JSON.stringify` output appears in any panel.
-
-**Tokens.** One `<li>` per token, monospace at `var(--text-xs)`, no bullets.
-A token ending in `:MISSING` renders in `--color-degraded`.
-
-**State chips.**
-
-```css
-.state-chip {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-sunken);
-  color: var(--color-accent);
-}
-```
-
-with `[data-state="…"]` rules setting `color` and `border-color` from the
-Part D map.
-
-### Part F — conversation column
-
-```css
-.conversation-panel {
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-4);
-}
-.conversation-log {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-sunken);
-  padding: var(--space-3);
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
-}
-.message {
-  border: 1px solid var(--color-border);
-  border-left: 4px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2);
-  margin-bottom: var(--space-2);
-  background: var(--color-bg-soft);
-}
-.message strong { text-transform: uppercase; color: var(--color-accent); }
-.message.user { border-left-color: var(--color-ready); }
-.message.user strong { color: var(--color-ready); }
-.message.assistant { border-left-color: var(--color-accent); background: var(--color-bg-elevated); }
-.message.system { border-left-color: var(--color-text-muted); }
-.message.system strong { color: var(--color-text-muted); }
-.message p { margin: var(--space-1) 0 0; white-space: pre-wrap; color: var(--color-text-primary); }
-```
-
-Below the log, a `.text-form` at `grid-template-columns: 1fr auto` — one input
-and one submit button — then `.voice-controls` as a wrapping flex row.
-
-### Part G — form rows and controls
-
-Every label-input pair becomes a stacked row. No label sits inline with its
-input.
-
-```css
-.field { display: grid; gap: var(--space-1); }
-.field > span {
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--color-text-muted);
-}
-input, select, textarea {
-  width: 100%;
-  box-sizing: border-box;
-  min-width: 0;
-  padding: var(--space-2);
-  color: var(--color-text-primary);
-  background: var(--color-bg-sunken);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-}
-input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
-textarea { min-height: 4.5rem; resize: vertical; }
-
-button {
-  color: var(--color-text-inverse);
-  background: var(--color-accent);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-4);
-  font-weight: 700;
-  font-size: 0.82rem;
-  cursor: pointer;
-}
-button.secondary {
-  color: var(--color-text-primary);
-  background: var(--color-bg-elevated);
-  border-color: var(--color-border-strong);
-}
-button.danger {
-  color: var(--color-text-inverse);
-  background: var(--color-failed);
-  border-color: var(--color-failed);
-}
-button:disabled, input:disabled, select:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-```
-
-The voice view's three inputs — default workflow, voice profile, final
-recognized text — each become a `.field`, stacked, full width of the centre
-column. The textarea is last and spans the row.
-
-Button grouping: **Start voice session** primary; **Push to talk** primary;
-**Stop talking** and **Submit voice text** secondary; **Interrupt** danger.
-
-**Push-to-talk feedback.** The button carries
-`data-capture-state="idle | recording | processing"`:
-
-```css
-#ptt-button[data-capture-state="recording"] {
-  background: var(--color-capture);
-  border-color: var(--color-capture);
-  box-shadow: var(--glow-capture);
-  animation: capture-pulse 1.2s ease-in-out infinite;
-}
-#ptt-button[data-capture-state="processing"] {
-  color: var(--color-text-secondary);
-  background: var(--color-bg-elevated);
-  border-color: var(--color-border-strong);
-}
-@keyframes capture-pulse {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.03); }
-}
-@media (prefers-reduced-motion: reduce) {
-  #ptt-button[data-capture-state="recording"] { animation: none; }
-}
-```
-
-### Part H — approvals
-
-An approval renders as a `.panel-section` with a state-coloured left edge by
-risk class, the action digest in monospace and selectable, and the machine
-action as a field list — not as `JSON.stringify` output — with a
-`<details>` holding the full payload. Approve and Reject sit at the foot;
-Reject is `button.secondary`, Approve is `button.danger` for R2 and R3 so the
-irreversible action is not styled as the safe default, and neither is
-autofocused.
-
-### Part I — empty states
-
-Every panel that can be empty renders its existing text — "No runs yet." and
-the equivalents — styled `color: var(--color-text-muted); font-style: italic;
-font-size: var(--text-sm)`. No panel renders as a bordered box with nothing in
-it.
-
-### Part J — window chrome
-
-`src/main/main.ts` already constructs its `BrowserWindow` with `width: 1000,
-height: 700` and a `webPreferences` block. Three keys are added alongside
-those, leaving the existing options and the
-`resolveBackendCommand`/`repoRoot` spawn path untouched:
-
-```ts
-const win = new BrowserWindow({
-  width: 1000,
-  height: 700,
-  minWidth: 1100,
-  minHeight: 680,
-  backgroundColor: "#070b12",
-  webPreferences: { /* unchanged */ },
-});
-```
-
-`minWidth: 1100` keeps the three columns above their combined minimum of
-220 + 320 + 260 plus gaps before the 820px single-column fallback applies.
+### Shell and top bar
+
+`.shell` changes from the rail revision's two-column grid
+(`grid-template-columns: var(--rail-width) minmax(0, 1fr)`) to a single
+flex column (`display: flex; flex-direction: column; min-height: 100vh`).
+
+`.rail`/`.rail-nav`/`.rail-item` are replaced by:
+
+- `.topbar` — the header itself: horizontal flex, `flex-wrap: wrap` so it
+  degrades gracefully at narrow widths instead of needing the rail's old
+  `@media (max-width: 900px)` collapse rule (which is deleted — a wrapping
+  horizontal bar needs no separate narrow-width layout), `backdrop-filter:
+  blur(12px)` plus `-webkit-backdrop-filter`, sticky positioning
+  (`position: sticky; top: 0; z-index: 10`) so it stays visible while `.main`
+  scrolls beneath it.
+- `.nav-list` — the view-button row itself: horizontal flex,
+  `overflow-x: auto` so it scrolls rather than wraps mid-button if the window
+  is narrower than the button row (matching vX2's `overflow-x-auto` on its
+  nav).
+- `.nav-item` — same properties `.rail-item` had (background/border/colour
+  transitions, `[aria-current="page"]` active state), oriented for a
+  horizontal row instead of a vertical stack, plus a `box-shadow` glow on the
+  active item using `--accent`.
+
+`.rail-badge` (the Approvals/Proposals count badge), `.status-bar`, `.main`,
+`.card`, `.list`, `.row`, `.chip`, every `.btn*` variant, inputs,
+`.pre-scroll`, `.transcript-*`, `.empty`, and the scrollbar rules are
+unchanged — none of them describe the nav, all of them describe content that
+doesn't know or care what shape the nav above it takes.
+
+### Glass and glow
+
+`.card` gains the same `backdrop-filter: blur(12px)` the top bar has, over
+its existing `--surface` background — matching vX2's `.glass-panel` treatment
+by value (vX2: `background: rgba(18, 18, 22, 0.7); backdrop-filter:
+blur(16px)`, already equal to this repo's `--surface-raised` token).
+`.btn-primary` and `.nav-item[aria-current="page"]` gain a `box-shadow` glow
+(`0 0 20px` at low opacity, using `--accent` for nav/primary buttons,
+`--ok` where a success/ready state is being emphasized) — matching vX2's
+`.glow-cyan`/`.glow-emerald` utility classes by value, expressed as plain
+selectors instead of Tailwind utilities.
 
 ## Layout delta
 
 ```text
 frontend/gui/
-  package.json                       (unchanged)
-  esbuild.config.js                  (unchanged)
   src/
-    main/main.ts                     (backgroundColor and minimums added to existing options)
+    main/main.ts                     (BrowserWindow minimums re-checked for the narrower shell)
     renderer/
-      index.html                     (unchanged)
-      index.tsx                      (unchanged)
-      styles.css                     (rewritten to Parts A-I)
-      state.ts                       (stateColorVar map from Part D)
-      App.tsx                        (three-column shell and header; rail removed)
-      StatusColumn.tsx               (new: readiness, tokens, inventory, LLM, registry)
-      ConversationColumn.tsx         (new: transcript log, text form, voice controls)
-      OperatorColumn.tsx             (new: approvals, proposals, runs, memory, registry actions)
-      Dashboard.tsx                  (composition of the three columns)
-      ApprovalConfirmation.tsx       (field list, button classes)
-      ProposalReview.tsx             (field rows, button classes)
-      MemoryPanel.tsx                (field rows, button classes)
-      RegistryActions.tsx            (field rows, button classes)
-      Transcript.tsx                 (message rows)
-      VoiceActivation.tsx            (stacked fields, button classes, capture state)
+      App.tsx                        (rail markup -> header/topbar markup; view logic unchanged)
+      styles.css                     (.rail/.rail-nav/.rail-item -> .topbar/.nav-list/.nav-item; glass/glow added)
+      Overview.tsx                   (unchanged)
+      RunsView.tsx                   (unchanged)
+      ApprovalsView.tsx              (unchanged)
+      Dashboard.tsx                  (unchanged)
+      RegistryActions.tsx            (unchanged)
+      ApprovalConfirmation.tsx       (unchanged)
+      ProposalReview.tsx             (unchanged)
+      MemoryPanel.tsx                (unchanged)
+      Transcript.tsx                 (unchanged)
+      VoiceActivation.tsx            (unchanged)
+      state.ts                       (unchanged)
 ```
 
 ## The tradeoffs accepted
 
-- Three columns at this density need 1100px. Below 820px the layout stacks to
-  one column and becomes a scrolling list, which is the fallback rather than
-  the target.
-- Showing every panel at once means more on screen than any single task needs.
-  That is the point of a console: the operator sees readiness and pending
-  approvals without navigating to them.
-- Hand-authored CSS means no utility classes and no design-system upgrades. It
-  also means no build dependency, no purge step, and one file to read.
-- Dark only. A light theme doubles the token block for a surface with one
-  operator.
-- Splitting `Dashboard.tsx` into three column files touches a component with
-  existing tests. Keeping `Dashboard.tsx` as their composition, with unchanged
-  `aria-label` strings, is what allows those tests to pass untouched.
+- A horizontal nav row degrades to horizontal scrolling rather than wrapping
+  to multiple lines once every possible view is available (Overview, Runs,
+  Approvals, Proposals, Memory, Registry, Voice) — chosen over wrapping to
+  keep the top bar's height fixed regardless of how many views are active,
+  matching vX2's own `overflow-x-auto` choice.
+- Glass/blur is a GPU-compositing cost `backdrop-filter` always carries; at
+  this window scale (a handful of translucent panels, not a scrolling feed of
+  them) it's the same cost vX2 already accepts at a larger scale.
+- Referencing vX2 for values without adopting its stack means hand-copying
+  colour/blur/glow numbers into plain CSS rather than sharing a source of
+  truth with that repo — accepted because AWF-GUI's no-new-dependency,
+  no-Tailwind constraint predates this record and isn't renegotiated here.
+- Dark only, still. A light theme doubles the token block for a surface with
+  one operator, and ADR-0024's CLI already owns a `/theme` command this
+  record doesn't extend to the GUI.
 
 ## Scope for implementation
 
-1. Rewrite `src/renderer/styles.css` to Parts A–I exactly.
-2. Rewrite `src/renderer/state.ts` to the Part D map.
-3. Rewrite `App.tsx` as the three-column shell with the Part C header; remove
-   the rail, the `view` state, and the rail badges.
-4. Split `Dashboard.tsx` into `StatusColumn.tsx`, `ConversationColumn.tsx`,
-   and `OperatorColumn.tsx`; keep `Dashboard.tsx` composing them with
-   unchanged accessible names.
-5. Replace every `JSON.stringify` display with a field list plus a collapsed
-   `<details>`.
-6. Convert every label-input pair to a stacked `.field`.
-7. Apply panel, readiness-family, message, chip, and button classes across the
-   remaining components without altering props, callbacks, or accessible
-   names.
-8. Add `data-capture-state` to the push-to-talk button.
-9. Add `minWidth`, `minHeight`, and `backgroundColor` to the existing
-   `BrowserWindow` options in `main.ts`, leaving `width`, `height`,
-   `webPreferences`, and the command/repo-root resolution unchanged.
-10. Add `frontend/gui/tests/state.test.ts` covering every row of the Part D
-    map including the fallback.
-11. Run `npm --prefix frontend run build --workspaces` and
-    `npm --prefix frontend test --workspaces`.
+1. Replace `.shell`/`.rail`/`.rail-nav`/`.rail-item` in
+   `src/renderer/styles.css` with `.topbar`/`.nav-list`/`.nav-item`, per
+   Mechanism above.
+2. Add `backdrop-filter: blur(12px)` (+ `-webkit-` prefix) to `.card` and
+   `.topbar`; add glow `box-shadow` rules to `.btn-primary` and
+   `.nav-item[aria-current="page"]`.
+3. Replace `App.tsx`'s `<aside className="rail">` markup with
+   `<header className="topbar">`, keeping every prop, callback, and the
+   `views`/`activeView` derivation byte-identical.
+4. Re-check `main.ts`'s `BrowserWindow` `minWidth`/`minHeight` against the
+   new layout's actual minimum (the rail's fixed 260px column is gone, so the
+   practical minimum width shrinks) — adjust only if the built layout
+   genuinely needs a different number.
+5. Run the full existing GUI test suite unmodified and confirm all pass;
+   run `npm --prefix frontend run build --workspaces` and
+   `npm --prefix frontend test --workspaces`.
 
 ## Acceptance
 
-- The window shows three columns simultaneously; there is no navigation rail
-  and no view selection.
-- Readiness, transcript, and approvals are all visible without interaction at
-  1100×680.
-- No panel renders `JSON.stringify` output; the host inventory renders as
-  labelled fields with the remainder behind a collapsed `Full inventory`
-  disclosure.
-- Preflight tokens render one per line, with `:MISSING` entries in the
-  degraded colour.
-- Every readiness row shows a coloured left edge, a `✓`/`!`/`×` badge, and its
-  state as text.
-- Every label sits above its input; no label wraps mid-phrase.
-- The push-to-talk button changes colour and pulses while recording, and does
-  not animate under `prefers-reduced-motion: reduce`.
-- Every colour in `styles.css` outside the `:root` block is a `var(--…)`
-  reference.
-- Every interactive element shows a visible `--color-accent` focus ring on
-  keyboard traversal.
-- All 39 existing GUI tests pass with no change to any query or assertion.
+- The window shows a sticky top bar with horizontal navigation buttons and
+  status pills — no left rail, no three-column console.
+- Exactly one view renders below the top bar at a time, switched by clicking
+  a nav button, exactly as the rail revision already provided.
+- `.card` and `.topbar` show visible blur/glass treatment; active nav items
+  and primary buttons show a soft glow.
+- No canvas, no particle animation, anywhere in the renderer.
+- All 50 existing GUI tests pass with no change to any query, assertion, or
+  accessible name.
 - No new entry in `frontend/gui/package.json` `dependencies` or
   `devDependencies`.
 - `npm --prefix frontend run build --workspaces` and
@@ -618,11 +232,11 @@ frontend/gui/
 
 ## Consequences
 
-- The desktop surface is an operator console: state left, conversation centre,
-  controls right, all visible together.
-- Readiness and pending approvals cannot be hidden by navigation.
-- Structured backend data is displayed as fields, and raw payloads are
-  available on demand rather than by default.
-- One token block governs the whole surface, so a colour or spacing change is
-  a single edit.
-- The GUI gains no dependency and no build configuration.
+- The desktop surface keeps ADR-0024's full data substance and the
+  one-active-view model, corrected only in navigation orientation and visual
+  polish.
+- The palette and component substance built for the rail revision carry
+  forward unchanged — this record's actual code delta is small (shell markup
+  and CSS only).
+- Future presentation changes to this shell should reference `../JARVISvX2/`
+  the same way — values and layout shape, not its dependency stack.

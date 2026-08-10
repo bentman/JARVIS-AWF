@@ -62,7 +62,7 @@ def test_llm_review_fail_response_yields_high_severity_finding(monkeypatch):
 def test_llm_review_routes_through_the_model_gateway(monkeypatch):
     captured = {}
 
-    def fake_complete(profile, messages, *, conn=None, secret_key=None):
+    def fake_complete(profile, messages, **_kwargs):
         captured["profile"] = profile
         captured["messages"] = messages
         return "PASS: fine"
@@ -115,7 +115,7 @@ def test_llm_adversary_review_fail_response_yields_high_severity_finding(monkeyp
 def test_llm_adversary_review_routes_through_the_model_gateway(monkeypatch):
     captured = {}
 
-    def fake_complete(profile, messages, *, conn=None, secret_key=None):
+    def fake_complete(profile, messages, **_kwargs):
         captured["profile"] = profile
         captured["messages"] = messages
         return "PASS: fine"

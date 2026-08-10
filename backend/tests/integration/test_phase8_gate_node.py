@@ -152,7 +152,7 @@ def test_gate_with_worktree_path_shows_the_llm_reviewer_the_real_diff_not_just_t
 
     captured = {}
 
-    def fake_complete(profile, messages, *, conn=None, secret_key=None):
+    def fake_complete(profile, messages, **_kwargs):
         captured["candidate_summary"] = messages[-1]["content"]
         return "PASS: fine"
 

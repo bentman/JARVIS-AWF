@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-09 22:39
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Added Guard authorization for Model Gateway completion candidates, hardware-profile model defaults for resident-mind selection, and corrected ADR-0017 implementation drift.
+  - Scope: Model Gateway, verifier/adversary LLM review callers, `llm_complete` Capability Record, LLM server config/schema/selector, focused backend tests, and ADR-0017.
+  - Validation: focused Gateway/selector/Guard/gate tests -> 74 passed; `backend/.venv/bin/python -m ruff check .` passed; `backend/.venv/bin/python -m pytest backend/tests -q` -> 578 passed, 1 skipped, 7 warnings; `npm --prefix frontend run build --workspaces` passed; `npm --prefix frontend test --workspaces` -> shared 12 passed, CLI 41 passed, GUI 39 passed; `git diff --check` passed.
+  - Notes: Voice streaming, Skill invocation, container escalation, and event streaming remain future surfaces.
+
 - Timestamp: 2026-08-09 22:14
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Added a GitHub Copilot CLI `preToolUse` hook path that routes Copilot tool calls through the AWF Capability Guard and records tool-level decisions in events.

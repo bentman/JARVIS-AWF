@@ -40,12 +40,22 @@ def run_llm_review(
     candidate_summary: str,
     conn: sqlite3.Connection | None = None,
     secret_key: bytes | None = None,
+    run_id: str | None = None,
+    step_id: str | None = None,
 ) -> Finding:
     messages = [
         {"role": "system", "content": REVIEW_SYSTEM_PROMPT},
         {"role": "user", "content": candidate_summary},
     ]
-    response = complete(profile, messages, conn=conn, secret_key=secret_key).strip()
+    response = complete(
+        profile,
+        messages,
+        conn=conn,
+        secret_key=secret_key,
+        run_id=run_id,
+        step_id=step_id,
+        actor="verifier",
+    ).strip()
     passed = response.upper().startswith("PASS")
     model = profile.candidates[0].litellm_model if profile.candidates else None
     return Finding(

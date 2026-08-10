@@ -68,6 +68,8 @@ def make_trifecta_gate_executor(
                         candidate_summary=candidate_content,
                         conn=conn,
                         secret_key=review_secret_key,
+                        run_id=run_id,
+                        step_id=step_id,
                     )
                 )
             terminal_failure = False
@@ -93,6 +95,8 @@ def make_trifecta_gate_executor(
                             candidate_summary=candidate_content,
                             conn=conn,
                             secret_key=adversary_review_secret_key,
+                            run_id=run_id,
+                            step_id=step_id,
                         )
                     )
 

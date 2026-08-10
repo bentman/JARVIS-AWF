@@ -104,3 +104,71 @@ servers:
     assert sel.model == "llama.app/qwen"
 
     conn.close()
+
+
+def test_select_uses_hardware_profile_model_default(monkeypatch, tmp_path):
+    conn_path = tmp_path / "data" / "awf.db"
+    init_db(conn_path)
+    conn = get_connection(conn_path)
+
+    config_dir = tmp_path / "config" / "llm"
+    config_dir.mkdir(parents=True)
+    (config_dir / "servers.yaml").write_text(
+        """
+default_server: llama-server
+servers:
+  llama-server:
+    managed: true
+    base_url: http://127.0.0.1:8080
+    openai_base_path: /v1
+    provider: openai
+    health_paths: [/health]
+    artifacts: {}
+    model_defaults:
+      linux-x64-cuda: cuda-model
+      linux-x64-cpu: cpu-model
+"""
+    )
+    for model_name in ("cuda-model", "cpu-model"):
+        model_dir = tmp_path / "models" / "llm" / model_name
+        model_dir.mkdir(parents=True)
+        (model_dir / f"{model_name}.gguf").write_bytes(b"gguf")
+    monkeypatch.setattr("awf.llm.selector.resolve_hardware_profile_id", lambda _repo_root: ("linux-x64-cuda", {}))
+
+    result = select(tmp_path, conn, server_id="llama-server")
+
+    assert result["model"] == "cuda-model.gguf"
+    conn.close()
+
+
+def test_select_model_default_falls_back_to_cpu_profile(monkeypatch, tmp_path):
+    conn_path = tmp_path / "data" / "awf.db"
+    init_db(conn_path)
+    conn = get_connection(conn_path)
+
+    config_dir = tmp_path / "config" / "llm"
+    config_dir.mkdir(parents=True)
+    (config_dir / "servers.yaml").write_text(
+        """
+default_server: llama-server
+servers:
+  llama-server:
+    managed: true
+    base_url: http://127.0.0.1:8080
+    openai_base_path: /v1
+    provider: openai
+    health_paths: [/health]
+    artifacts: {}
+    model_defaults:
+      linux-x64-cpu: cpu-model
+"""
+    )
+    model_dir = tmp_path / "models" / "llm" / "cpu-model"
+    model_dir.mkdir(parents=True)
+    (model_dir / "cpu-model.gguf").write_bytes(b"gguf")
+    monkeypatch.setattr("awf.llm.selector.resolve_hardware_profile_id", lambda _repo_root: ("linux-x64-cuda", {}))
+
+    result = select(tmp_path, conn, server_id="llama-server")
+
+    assert result["model"] == "cpu-model.gguf"
+    conn.close()

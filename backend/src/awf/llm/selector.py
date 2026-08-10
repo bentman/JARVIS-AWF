@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from awf.cli.core_ops import op_registry_publish
+from awf.hardware.profiler import resolve_hardware_profile_id
 from awf.llm.discovery import local_models, model_by_name
 from awf.llm.servers import LlmServerError, load_servers
 from awf.registry.resolve import resolve_registry_object
@@ -101,6 +102,16 @@ def select(
     if server.managed:
         if model is not None:
             lm = model_by_name(repo_root, model)
+            model_name = lm.primary.name
+        elif server.model_defaults:
+            profile_id, _payload = resolve_hardware_profile_id(repo_root)
+            default_model = server.model_defaults.get(profile_id)
+            if default_model is None:
+                os_name, arch, _suffix = profile_id.rsplit("-", 2)
+                default_model = server.model_defaults.get(f"{os_name}-{arch}-cpu")
+            if default_model is None:
+                default_model = next(iter(server.model_defaults.values()))
+            lm = model_by_name(repo_root, default_model)
             model_name = lm.primary.name
         else:
             avail = local_models(repo_root)

@@ -1,6 +1,6 @@
 """LLM Server backend definitions and configuration loader (ADR-0017)."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -34,7 +34,8 @@ class LlmServer:
     health_paths: tuple[str, ...]
     artifacts: dict[str, Artifact]
     launch: dict
-    api_key_secret_name: str | None
+    model_defaults: dict[str, str] = field(default_factory=dict)
+    api_key_secret_name: str | None = None
 
     @property
     def api_base(self) -> str:
@@ -80,6 +81,14 @@ def load_servers(repo_root: Path) -> tuple[str, dict[str, LlmServer]]:
         server_launch = raw.get("launch") or {}
         if not isinstance(server_launch, dict):
             raise LlmServerError(f"{ctx}: launch must be a mapping")
+        model_defaults = raw.get("model_defaults") or {}
+        if not isinstance(model_defaults, dict):
+            raise LlmServerError(f"{ctx}: model_defaults must be a mapping")
+        for profile_id in model_defaults:
+            if profile_id not in CANONICAL_PROFILES:
+                raise LlmServerError(
+                    f"{ctx}: model_defaults key '{profile_id}' is not a valid canonical profile ID in {CANONICAL_PROFILES}"
+                )
 
         raw_artifacts = raw.get("artifacts") or {}
         if not isinstance(raw_artifacts, dict):
@@ -133,6 +142,7 @@ def load_servers(repo_root: Path) -> tuple[str, dict[str, LlmServer]]:
             health_paths=health_paths,
             artifacts=artifacts,
             launch=server_launch,
+            model_defaults={str(k): str(v) for k, v in model_defaults.items()},
             api_key_secret_name=api_key_secret_name,
         )
 

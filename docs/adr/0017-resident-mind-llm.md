@@ -13,6 +13,9 @@ artifact when present and fall back to the matching CPU artifact when the
 accelerator artifact is unavailable. Loopback OpenAI-compatible endpoints get
 a local placeholder API key in the Model Gateway so LiteLLM/OpenAI client setup
 does not reject local llama.cpp before the request reaches the server.
+Model Gateway candidate calls now route through the Capability Guard when run
+context is supplied, and non-loopback candidates fail closed without run
+context.
 
 ## Context
 
@@ -47,12 +50,12 @@ allowlist (`/models/stt/*` and `!/models/stt/.gitkeep`, and the same for
 `tts`, `vad`, `wake`). `runtimes/` is not gated at all, so an extensionless
 Linux binary placed there today would be committable.
 
-`hardware/readiness.py` exports `Readiness(device, ready, reason)` and four
-functions — `derive_stt_readiness`, `derive_tts_readiness`,
-`derive_vad_readiness`, `derive_wake_readiness` — each granting a device above
-`cpu` only when a hardware fact and a runtime token agree. There is no `llm`
-function. The evidence an LLM accelerator decision needs is already produced
-under the names it would use:
+`hardware/readiness.py` exports `Readiness(device, ready, reason)` and
+readiness functions for speech and LLM. Each grants a device above `cpu` only
+when hardware facts and runtime tokens agree. LLM readiness additionally
+requires a declared llama.cpp runtime artifact, a present binary, and a present
+local model for managed `llama-server`. The evidence an LLM accelerator
+decision needs is produced under these names:
 
 | Source | Field or token |
 |---|---|
@@ -104,8 +107,18 @@ tokens, and each additionally requires a declared artifact and an extracted
 binary. The server config declares every canonical profile ID; manual artifacts
 are usable as soon as the operator-provided runtime directory exists.
 
+**Model selection can use per-host defaults.** `llama-server` may declare
+`model_defaults` keyed by canonical hardware profile. `awf llm select` uses
+the resolved host profile when no explicit `--model` is supplied, then falls
+back to that host class's CPU default, then to the first configured default.
+
 **Each turn is isolated.** Whatever a profile's launch block says, the sidecar
 starts with no reusable prompt cache, one slot, and continuous batching off.
+
+**Model calls are Guard-governed when they leave the local loopback path.**
+`gateway.complete` and `gateway.complete_structured` authorize each candidate
+call with `llm_complete@1.0.0` when run context is supplied. Non-loopback
+remote candidates without run context are refused before `litellm.completion`.
 
 ## Rationale
 
@@ -212,15 +225,18 @@ Schema, exhaustive:
 | `api_key_secret_name` | server | optional; the candidate's `api_key_secret_name` |
 | `artifacts.<profile-id>` | managed server | one entry per canonical profile ID |
 | `artifacts.*.url` | artifact | release archive |
-| `artifacts.*.archive` | artifact | `tar_gz` or `zip` |
+| `artifacts.*.archive` | artifact | `tar_gz`, `zip`, or `manual` |
 | `artifacts.*.binary` | artifact | file name to locate inside the archive |
-| `artifacts.*.accelerator` | artifact | `cpu`, `gpu.cuda`, `npu.qnn`, or `gpu.opencl.adreno` |
+| `artifacts.*.accelerator` | artifact | `cpu`, `gpu.cuda`, `gpu.vulkan`, `npu.qnn`, or `gpu.opencl.adreno` |
 | `artifacts.*.launch` | artifact | optional per-artifact launch overrides, merged over the server's `launch` |
 | `launch` | managed server | base launch keys for every artifact |
+| `model_defaults` | managed server | optional model directory names keyed by canonical profile ID |
 
 An artifact key must be a member of `profiler.CANONICAL_PROFILES`; anything
-else fails to load, naming the key. The four `*-cpu` keys are declared and the
-eight accelerated keys are absent. Declaring one is a YAML edit.
+else fails to load, naming the key. The committed config declares all 12
+canonical profile IDs. Published upstream CPU, Vulkan, and Windows x64 CUDA
+archives are fetchable; Linux CUDA, Windows ARM64 Adreno/OpenCL, and QNN
+entries are `archive: manual` and require operator-staged runtime files.
 
 ### Part B — `awf/llm/servers.py`
 
@@ -231,7 +247,7 @@ class LlmServerError(ValueError): ...
 class Artifact:
     profile_id: str
     url: str
-    archive: str          # "tar_gz" | "zip"
+    archive: str          # "tar_gz" | "zip" | "manual"
     binary: str
     accelerator: str
     launch: dict
@@ -246,6 +262,7 @@ class LlmServer:
     health_paths: tuple[str, ...]
     artifacts: dict[str, Artifact]
     launch: dict
+    model_defaults: dict[str, str]
     api_key_secret_name: str | None
 
     @property
@@ -283,17 +300,19 @@ whether or not it exists.
 `ACQUIRED`:
 
 1. return `PRESENT` when `binary_path(...)` is a file of non-zero size;
-2. download `artifact.url` to `cache/llm/<profile-id>/<basename>`;
-3. extract to a sibling scratch directory — `tarfile` for `tar_gz`,
+2. for `archive: manual`, raise with the runtime directory the operator must
+   populate;
+3. download `artifact.url` to `cache/llm/<profile-id>/<basename>`;
+4. extract to a sibling scratch directory — `tarfile` for `tar_gz`,
    `zipfile` for `zip`;
-4. locate `artifact.binary` by recursive search of the extracted tree; when it
+5. locate `artifact.binary` by recursive search of the extracted tree; when it
    is not found, raise naming the archive and the expected name;
-5. copy every file in the directory that contains it into
+6. copy every file in the directory that contains it into
    `runtimes/llama.cpp/<profile-id>/`, flat. Release archives place the
    binary alongside the shared libraries it loads, so the containing
    directory is the unit that must move together;
-6. set the executable bit on the binary on non-Windows hosts;
-7. remove the scratch directory and return `ACQUIRED`.
+7. set the executable bit on the binary on non-Windows hosts;
+8. remove the scratch directory and return `ACQUIRED`.
 
 The caller supplies the artifact, so `acquire_binary` never decides which host
 it is running on.
@@ -330,8 +349,8 @@ class SidecarStatus:
 probe(server) -> Health
 build_command(binary, model_path, base_url, launch) -> Command
 start(repo_root, server, artifact, model) -> SidecarStatus
-stop() -> SidecarStatus
-status(server) -> SidecarStatus
+stop(repo_root, server) -> SidecarStatus
+status(repo_root, server) -> SidecarStatus
 ```
 
 `probe` issues a GET against each entry of `server.health_paths` in order,
@@ -394,7 +413,8 @@ the returned `Command`, never silent drops, and both are carried into the
 4. poll `probe` every `HEALTH_POLL_SECONDS` until reachable or
    `HEALTH_TIMEOUT_SECONDS` elapses; on timeout, terminate the process and
    return `state="degraded"` with `reason="Degraded-health-timeout"`;
-5. return `state="running"`, `adopted=False`, with the pid.
+5. persist `cache/llm/sidecar.json` with process identity and return
+   `state="running"`, `adopted=False`, with the pid.
 
 `stop` terminates only a process this module started: when the recorded state
 is `adopted`, it clears the adoption and returns `state="stopped"` without
@@ -403,8 +423,9 @@ signalling anything. Otherwise it calls `terminate()`, waits
 reclamation and no process scanning — AWF does not signal processes it did not
 start.
 
-The module holds the started process in a module-level variable, the same
-process-lifetime shape `profiler` uses for its inventory cache.
+The sidecar is detached from the invoking CLI process. Later invocations read
+the state file, verify process identity before signalling where supported, and
+report degraded status rather than signalling an unverified pid.
 
 ### Part E — readiness
 
@@ -431,6 +452,7 @@ runtime token where one applies, a declared artifact for `profile_id` whose
 | `gpu.cuda` | `gpu_vendor == "nvidia"`, `cuda_available` | `ep:CUDAExecutionProvider` | `gpu.cuda` |
 | `npu.qnn` | `npu_vendor == "qualcomm"`, `npu_available` | `ep:QNNExecutionProvider`, `dll:QnnHtp` | `npu.qnn` |
 | `gpu.opencl.adreno` | `gpu_vendor == "qualcomm"`, `gpu_available` | `opencl:adreno` | `gpu.opencl.adreno` |
+| `gpu.vulkan` | `gpu_available` | `vulkan:available` | `gpu.vulkan` |
 | `cpu` | — | — | `cpu` |
 
 Reason strings, in the order they are reached:
@@ -486,6 +508,10 @@ limits: {max_input_tokens_per_call: 8192, max_output_tokens_per_call: 1024, max_
   `server.api_base`).
 - `model` is the primary GGUF's file name for `llama-server`, and the
   operator-supplied `--model` string for `ollama` and `openai-compatible`.
+- When no `--model` is supplied for `llama-server`, `select` consults the
+  resolved hardware profile and `server.model_defaults`; it falls back to the
+  host class's CPU profile default before falling back to the first configured
+  default.
 - `api_key_secret_name` is written only when the server declares one.
 - `local_only` is `True` when `urlparse(server.base_url).hostname` is
   `127.0.0.1`, `::1`, or `localhost`, and `False` otherwise. A `False` result
@@ -498,7 +524,17 @@ The repository ships
 `config/app_registry/model-profiles/example-resident-mind/1.0.0.yaml` as a
 sixth reference example. It is never resolved, matching ADR-0001.
 
-### Part G — activity, events, and CLI
+### Part G — Gateway Guard checks
+
+`config/app_registry/capabilities/llm_complete/1.0.0.yaml` declares an R1
+read capability for model completion. `gateway.complete` and
+`gateway.complete_structured` call `authorize` for every candidate when
+`run_id` is supplied. The event payload records provider, model, API base, and
+whether the endpoint is loopback. Non-loopback candidates are refused without
+run context; loopback and Ollama candidates remain usable in deterministic
+tests and local tooling.
+
+### Part H — activity, events, and CLI
 
 `workflow/activities.py` registers `llm_server_ensure`: resolve the current
 selection, probe, and start the managed sidecar when unreachable. It returns
@@ -566,20 +602,20 @@ backend/src/awf/
 - The `resident-mind` profile is written by a command, so an operator who
   hand-edits the file and then re-runs `awf llm select` loses those edits. The
   file is versioned in the registry and the command reports what it wrote.
-- Three of the ladder's four rungs are exercised only by tests until an
-  accelerated artifact is declared. Those tests drive synthesized inventories,
-  tokens, and artifact maps, which is how the four speech readiness functions
-  are already covered.
+- Accelerated readiness rungs are exercised by tests until the matching host
+  artifact is present. Those tests drive synthesized inventories, tokens, and
+  artifact maps, which is how the speech readiness functions are already
+  covered.
 
 ## Scope for implementation
 
 1. Add `paths.config_llm_dir`, `paths.llm_models_dir`, `paths.runtimes_dir`.
-2. Add `config/llm/servers.yaml` with the three servers and the four CPU
-   artifacts.
+2. Add `config/llm/servers.yaml` with the three servers, all 12 canonical
+   host artifacts, launch values, manual artifact entries, and model defaults.
 3. Add `awf/llm/servers.py`: dataclasses, loader, canonical-profile-ID
    validation of artifact keys, `artifact_for`.
 4. Add `awf/llm/discovery.py`: `local_models`, `model_by_name`,
-   `binary_path`, `acquire_binary` with the seven-step algorithm.
+   `binary_path`, `acquire_binary` with the archive/manual algorithm.
 5. Add `awf/llm/sidecar.py`: `probe`, `build_command` with the flag table,
    turn-isolation overrides and warnings, adopt-or-spawn `start`, health
    polling, `stop` that never signals an adopted endpoint.
@@ -592,7 +628,9 @@ backend/src/awf/
 10. Add the `awf llm` command group and the two event writes.
 11. Reinstate `models/llm/`, add `runtimes/llama.cpp/`, and their `.gitignore`
     rules.
-12. Tests: the manifest parses and an artifact key outside
+12. Add `llm_complete@1.0.0` and Gateway authorization around completion
+    candidate calls.
+13. Tests: the manifest parses and an artifact key outside
     `CANONICAL_PROFILES` fails naming the key; `artifact_for` returns `None`
     for an undeclared host; `build_command` covers every flag-table row,
     appends the three isolation flags last, warns for an unknown key, warns
@@ -602,10 +640,10 @@ backend/src/awf/
     synthesized archive; `start` adopts a reachable endpoint without spawning
     and `stop` leaves it running; `select` refuses a non-loopback host without
     `allow_remote` and writes `local_only: false` with it;
-    `derive_llm_readiness` returns each of the four devices over synthesized
+    `derive_llm_readiness` returns each of the five devices over synthesized
     inputs and returns `cpu` with the artifact-absent reason when hardware and
     tokens agree but no artifact declares that accelerator.
-13. Run all six `scripts/validate_backend.py` commands.
+14. Run all six `scripts/validate_backend.py` commands.
 
 ## Acceptance
 
@@ -614,10 +652,8 @@ backend/src/awf/
 - `awf llm acquire` places a `llama-server` binary and its sibling libraries
   under `runtimes/llama.cpp/<profile-id>/`, and a second run reports
   `PRESENT` without downloading.
-- On a host whose profile ID has no declared artifact, `awf llm acquire`
-  refuses with a message naming the profile ID; on a host whose artifact is
-  declared `manual`, it refuses with the runtime directory the operator must
-  populate.
+- On a host whose artifact is declared `manual`, `awf llm acquire` refuses
+  with the runtime directory the operator must populate.
 - With a GGUF under `models/llm/<name>/`, `awf llm models` lists it and
   `awf llm select llama-server --model <name>` writes a `resident-mind`
   profile that `resolve_registry_object` resolves from
@@ -639,6 +675,8 @@ backend/src/awf/
   `Degraded-no-local-model-artifact`; with the model and binary present it
   returns `gpu.cuda`.
 - The `hardware_profile_resolved` payload carries five readiness entries.
+- Non-loopback Model Gateway candidates require run context and write a Guard
+  decision event before calling LiteLLM.
 - `pytest backend/tests` matches or exceeds the pre-change pass count with the
   same or fewer skips.
 

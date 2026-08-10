@@ -68,6 +68,44 @@ def test_events_subscribe_reports_unsupported(tmp_path):
     assert response["error"]["code"] == -32601
 
 
+def test_control_center_methods_over_jsonrpc(tmp_path, monkeypatch):
+    repo_root, conn = make_repo(tmp_path)
+    create_run(conn, run_id="run-1", workflow_ref="demo@1.0.0")
+    monkeypatch.setattr("awf.cli.core_ops.op_llm_servers", lambda _repo_root: {"servers": {}})
+    monkeypatch.setattr("awf.cli.core_ops.op_llm_serve", lambda _repo_root, _conn, *, action: {"state": "stopped"})
+    monkeypatch.setattr(
+        "awf.cli.core_ops.op_system_readiness",
+        lambda _repo_root: {"profile_id": "linux-x64-cpu", "readiness": {}},
+    )
+
+    summary = send(repo_root, conn, {"jsonrpc": "2.0", "id": 41, "method": "awf/control.summary", "params": {}})
+    detail = send(
+        repo_root,
+        conn,
+        {"jsonrpc": "2.0", "id": 42, "method": "awf/control.runDetail", "params": {"runId": "run-1"}},
+    )
+    readiness = send(repo_root, conn, {"jsonrpc": "2.0", "id": 43, "method": "awf/system.readiness", "params": {}})
+
+    assert summary["result"]["runs"][0]["run_id"] == "run-1"
+    assert detail["result"]["run"]["run_id"] == "run-1"
+    assert readiness["result"]["profile_id"] == "linux-x64-cpu"
+
+
+def test_llm_status_methods_over_jsonrpc(tmp_path, monkeypatch):
+    repo_root, conn = make_repo(tmp_path)
+    monkeypatch.setattr("awf.cli.core_ops.op_llm_servers", lambda _repo_root: {"default_server": "llama-server"})
+    monkeypatch.setattr("awf.cli.core_ops.op_llm_models", lambda _repo_root: {"local_models": []})
+    monkeypatch.setattr("awf.cli.core_ops.op_llm_serve", lambda _repo_root, _conn, *, action: {"state": "stopped"})
+
+    servers = send(repo_root, conn, {"jsonrpc": "2.0", "id": 51, "method": "awf/llm.servers", "params": {}})
+    models = send(repo_root, conn, {"jsonrpc": "2.0", "id": 52, "method": "awf/llm.models", "params": {}})
+    status = send(repo_root, conn, {"jsonrpc": "2.0", "id": 53, "method": "awf/llm.serveStatus", "params": {}})
+
+    assert servers["result"]["default_server"] == "llama-server"
+    assert models["result"]["local_models"] == []
+    assert status["result"]["state"] == "stopped"
+
+
 def test_approval_approve_over_jsonrpc(tmp_path):
     repo_root, conn = make_repo(tmp_path)
     create_run(conn, run_id="run-1", workflow_ref="demo@1.0.0")

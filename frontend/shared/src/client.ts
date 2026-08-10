@@ -5,8 +5,13 @@ import {
   type ApprovalApproveOptions,
   type ApprovalDetail,
   type Artifact,
+  type ControlRunDetail,
+  type ControlSummary,
   type ImprovementProposal,
   type JsonRpcResponse,
+  type LlmModelsReport,
+  type LlmServeStatus,
+  type LlmServersReport,
   type MachineActionPreview,
   type MemorySearchResult,
   type MethodName,
@@ -15,6 +20,7 @@ import {
   type RunStartResult,
   type RunStatus,
   type RunSummary,
+  type SystemReadiness,
   type VoiceFrameType,
   type VoiceSessionResult,
   type VoiceSubmitTextResult,
@@ -278,6 +284,30 @@ export class ProtocolClient {
 
   secretListNames(): Promise<string[]> {
     return this.call("awf/secret.listNames", {});
+  }
+
+  controlSummary(): Promise<ControlSummary> {
+    return this.call("awf/control.summary", {});
+  }
+
+  controlRunDetail(runId: string): Promise<ControlRunDetail> {
+    return this.call("awf/control.runDetail", { runId });
+  }
+
+  systemReadiness(): Promise<SystemReadiness> {
+    return this.call("awf/system.readiness", {});
+  }
+
+  llmServers(): Promise<LlmServersReport> {
+    return this.call("awf/llm.servers", {});
+  }
+
+  llmModels(): Promise<LlmModelsReport> {
+    return this.call("awf/llm.models", {});
+  }
+
+  llmServeStatus(): Promise<LlmServeStatus> {
+    return this.call("awf/llm.serveStatus", {});
   }
 
   close(): void {

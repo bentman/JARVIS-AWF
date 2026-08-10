@@ -34,11 +34,68 @@ export interface ImprovementSummary {
   changed_paths?: Record<string, unknown>[];
 }
 
+export interface ArtifactSummary {
+  artifact_id: string;
+  run_id: string;
+  step_id: string;
+  sha256: string;
+  relative_path: string;
+  media_type: string;
+  artifact_type: string;
+  complete: number;
+  created_at: string;
+}
+
+export interface ControlSummary {
+  runs: RunSummary[];
+  approvals: ApprovalSummary[];
+  improvements: ImprovementSummary[];
+  recent_verdicts: ArtifactSummary[];
+  registry_counts: Record<string, number>;
+  llm: {
+    servers?: {
+      default_server?: string;
+      host_profile_id?: string;
+      current_selection?: Record<string, unknown> | null;
+      error?: string;
+    };
+    status?: {
+      state?: string;
+      server_id?: string | null;
+      profile_id?: string | null;
+      model_path?: string | null;
+      reason?: string | null;
+      error?: string;
+    };
+  };
+  readiness: {
+    profile_id: string | null;
+    readiness: Record<string, { device: string; ready: boolean; reason: string }>;
+    error?: string;
+  };
+}
+
+export interface ControlRunDetail {
+  run: {
+    run_id: string;
+    workflow_ref: string;
+    status: string;
+    steps: { step_id: string; node_id: string; status: string; attempt: number }[];
+  };
+  artifacts: ArtifactSummary[];
+  timeline: Record<string, unknown>;
+  improvements: ImprovementSummary[];
+  verdicts: ArtifactSummary[];
+}
+
 export interface DashboardProps {
   runs: RunSummary[];
   approvals: ApprovalSummary[];
   improvements?: ImprovementSummary[];
+  controlSummary?: ControlSummary;
+  selectedRunDetail?: ControlRunDetail | null;
   onRefresh: () => void;
+  onRunDetail?: (runId: string) => void;
   refreshing: boolean;
 }
 
@@ -50,14 +107,69 @@ export function Dashboard({
   runs,
   approvals,
   improvements = [],
+  controlSummary,
+  selectedRunDetail,
   onRefresh,
+  onRunDetail,
   refreshing,
 }: DashboardProps): React.JSX.Element {
+  const registryCounts = controlSummary?.registry_counts ?? {};
+  const readiness = controlSummary?.readiness;
+  const llmStatus = controlSummary?.llm.status;
+  const llmServers = controlSummary?.llm.servers;
+
   return (
     <div role="region" aria-label="Dashboard">
+      <h1>Control center</h1>
       <button onClick={onRefresh} disabled={refreshing}>
         {refreshing ? "Refreshing..." : "Refresh"}
       </button>
+      <section aria-label="System readiness">
+        <h2>System readiness</h2>
+        {readiness ? (
+          <>
+            <div>Profile: {readiness.profile_id ?? "unknown"}</div>
+            {readiness.error && <div>Readiness error: {readiness.error}</div>}
+            <ul>
+              {Object.entries(readiness.readiness).map(([name, result]) => (
+                <li key={name}>
+                  {name}: {result.device} - {result.ready ? "ready" : "not ready"} ({result.reason})
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p>No readiness data.</p>
+        )}
+      </section>
+      <section aria-label="LLM status">
+        <h2>LLM status</h2>
+        {llmStatus ? (
+          <>
+            <div>State: {llmStatus.state ?? "unknown"}</div>
+            {llmStatus.server_id && <div>Server: {llmStatus.server_id}</div>}
+            {llmStatus.profile_id && <div>Runtime profile: {llmStatus.profile_id}</div>}
+            {llmStatus.error && <div>LLM error: {llmStatus.error}</div>}
+            {llmServers?.default_server && <div>Default server: {llmServers.default_server}</div>}
+          </>
+        ) : (
+          <p>No LLM status.</p>
+        )}
+      </section>
+      <section aria-label="Registry">
+        <h2>Registry</h2>
+        {Object.keys(registryCounts).length === 0 ? (
+          <p>No registry counts.</p>
+        ) : (
+          <ul>
+            {Object.entries(registryCounts).map(([kind, count]) => (
+              <li key={kind}>
+                {kind}: {count}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       <section aria-label="Runs">
         <h2>Runs</h2>
         {runs.length === 0 ? (
@@ -67,9 +179,31 @@ export function Dashboard({
             {runs.map((run) => (
               <li key={run.run_id}>
                 {run.workflow_ref} - {run.status} ({run.run_id})
+                {onRunDetail && <button onClick={() => onRunDetail(run.run_id)}>View details</button>}
               </li>
             ))}
           </ul>
+        )}
+      </section>
+      <section aria-label="Selected run detail">
+        <h2>Selected run detail</h2>
+        {selectedRunDetail ? (
+          <>
+            <div>
+              {selectedRunDetail.run.workflow_ref} - {selectedRunDetail.run.status}
+            </div>
+            <div>Artifacts: {selectedRunDetail.artifacts.length}</div>
+            <div>Verdicts: {selectedRunDetail.verdicts.length}</div>
+            <ul>
+              {selectedRunDetail.run.steps.map((step) => (
+                <li key={step.step_id}>
+                  {step.node_id}: {step.status} (attempt {step.attempt})
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p>No run selected.</p>
         )}
       </section>
       <section aria-label="Pending approvals">

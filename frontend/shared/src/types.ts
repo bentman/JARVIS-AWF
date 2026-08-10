@@ -50,6 +50,12 @@ export type MethodName =
   | "awf/episodic.timeline"
   | "awf/secret.set"
   | "awf/secret.listNames"
+  | "awf/control.summary"
+  | "awf/control.runDetail"
+  | "awf/system.readiness"
+  | "awf/llm.servers"
+  | "awf/llm.models"
+  | "awf/llm.serveStatus"
   | "awf/events.subscribe";
 
 export interface JsonRpcRequest {
@@ -115,6 +121,8 @@ export interface Approval {
   reason: string | null;
   requested_at: string;
   decided_at: string | null;
+  risk_class?: string | null;
+  preview?: MachineActionPreview | null;
 }
 
 export type RiskClass = "R0" | "R1" | "R2" | "R3";
@@ -176,6 +184,70 @@ export interface RegistryEntry {
   kind: string;
   name: string;
   version: string;
+  trust_status?: string | null;
+  digest?: string | null;
+}
+
+export interface ReadinessResult {
+  device: string;
+  ready: boolean;
+  reason: string;
+}
+
+export interface SystemReadiness {
+  profile_id: string | null;
+  inventory: Record<string, unknown> | null;
+  tokens: string[];
+  readiness: Record<string, ReadinessResult>;
+  error?: string;
+}
+
+export interface LlmServersReport {
+  default_server?: string;
+  host_profile_id?: string;
+  current_selection?: Record<string, unknown> | null;
+  servers?: Record<string, Record<string, unknown>>;
+  error?: string;
+}
+
+export interface LlmModelsReport {
+  local_models?: Record<string, unknown>[];
+  ollama_models?: Record<string, unknown>[];
+  ollama_models_error?: string;
+  error?: string;
+}
+
+export interface LlmServeStatus {
+  state?: string;
+  server_id?: string | null;
+  base_url?: string | null;
+  model_path?: string | null;
+  profile_id?: string | null;
+  pid?: number | null;
+  reason?: string | null;
+  error?: string;
+  [key: string]: unknown;
+}
+
+export interface ControlSummary {
+  runs: RunSummary[];
+  approvals: Approval[];
+  improvements: ImprovementProposal[];
+  recent_verdicts: Artifact[];
+  registry_counts: Record<string, number>;
+  llm: {
+    servers: LlmServersReport;
+    status: LlmServeStatus;
+  };
+  readiness: SystemReadiness;
+}
+
+export interface ControlRunDetail {
+  run: RunStatus;
+  artifacts: Artifact[];
+  timeline: Record<string, unknown>;
+  improvements: ImprovementProposal[];
+  verdicts: Artifact[];
 }
 
 export interface Proposal {

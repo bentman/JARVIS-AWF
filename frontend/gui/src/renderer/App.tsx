@@ -1,6 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ApprovalConfirmation } from "./ApprovalConfirmation.js";
-import { Dashboard, type ApprovalSummary, type ImprovementSummary, type RunSummary } from "./Dashboard.js";
+import {
+  Dashboard,
+  type ApprovalSummary,
+  type ControlRunDetail,
+  type ControlSummary,
+  type ImprovementSummary,
+  type RunSummary,
+} from "./Dashboard.js";
 import { MemoryPanel, type MemorySearchResult } from "./MemoryPanel.js";
 import { ProposalReview, type ProposalSummary } from "./ProposalReview.js";
 import { Transcript, type TranscriptEntry } from "./Transcript.js";
@@ -41,6 +48,8 @@ export interface AppProps extends VoiceSessionFns {
   onRunList?: () => Promise<RunSummary[]>;
   onApprovalList?: () => Promise<ApprovalSummary[]>;
   onImprovementList?: () => Promise<ImprovementSummary[]>;
+  onControlSummary?: () => Promise<ControlSummary>;
+  onControlRunDetail?: (runId: string) => Promise<ControlRunDetail>;
   onProposalGet?: (proposalId: string) => Promise<ProposalSummary>;
   onProposalPublish?: (proposalId: string, digest: string) => Promise<unknown>;
   onProposalReject?: (proposalId: string, reason?: string) => Promise<unknown>;
@@ -77,6 +86,8 @@ export function App({
   onRunList,
   onApprovalList,
   onImprovementList,
+  onControlSummary,
+  onControlRunDetail,
   onProposalGet,
   onProposalPublish,
   onProposalReject,
@@ -90,12 +101,22 @@ export function App({
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [approvals, setApprovals] = useState<ApprovalSummary[]>([]);
   const [improvements, setImprovements] = useState<ImprovementSummary[]>([]);
+  const [controlSummary, setControlSummary] = useState<ControlSummary | undefined>(undefined);
+  const [selectedRunDetail, setSelectedRunDetail] = useState<ControlRunDetail | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const refresh = async () => {
-    if (!onRunList && !onApprovalList && !onImprovementList) return;
+    if (!onControlSummary && !onRunList && !onApprovalList && !onImprovementList) return;
     setRefreshing(true);
     try {
+      if (onControlSummary) {
+        const summary = await onControlSummary();
+        setControlSummary(summary);
+        setRuns(summary.runs);
+        setApprovals(summary.approvals);
+        setImprovements(summary.improvements);
+        return;
+      }
       const [nextRuns, nextApprovals, nextImprovements] = await Promise.all([
         onRunList ? onRunList() : Promise.resolve(runs),
         onApprovalList ? onApprovalList() : Promise.resolve(approvals),
@@ -107,6 +128,11 @@ export function App({
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const handleRunDetail = async (runId: string) => {
+    if (!onControlRunDetail) return;
+    setSelectedRunDetail(await onControlRunDetail(runId));
   };
 
   useEffect(() => {
@@ -162,12 +188,15 @@ export function App({
 
   return (
     <div>
-      {(onRunList || onApprovalList || onImprovementList) && (
+      {(onControlSummary || onRunList || onApprovalList || onImprovementList) && (
         <Dashboard
           runs={runs}
           approvals={approvals}
           improvements={improvements}
+          controlSummary={controlSummary}
+          selectedRunDetail={selectedRunDetail}
           onRefresh={() => void refresh()}
+          onRunDetail={onControlRunDetail ? (runId: string) => void handleRunDetail(runId) : undefined}
           refreshing={refreshing}
         />
       )}

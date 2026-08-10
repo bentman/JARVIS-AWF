@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-09 21:41
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0024 familiar control center with read-only control summary/detail protocol methods, LLM and readiness status exposure, GUI overview/detail panels, and peer CLI status/Skill inspection commands.
+  - Scope: backend core ops and stdio JSON-RPC, frontend shared protocol, AWF-GUI IPC/preload/renderer dashboard, AWF-CLI slash commands, focused tests, and ADR-0024.
+  - Validation: `backend/.venv/bin/python -m pytest backend/tests -q` -> 570 passed, 1 skipped, 7 warnings; `backend/.venv/bin/python -m ruff check .` passed; `npm --prefix frontend run build --workspaces` passed; `npm --prefix frontend test --workspaces` -> shared 12 passed, CLI 41 passed, GUI 37 passed.
+  - Notes: `awf/events.subscribe` remains unsupported over request/response stdio; Skill execution remains out of scope until a guarded core invocation path exists.
+
 - Timestamp: 2026-08-09 21:12
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Implemented ADR-0023 voice conversation sessions with durable voice state events, active-session transcript persistence, default-workflow voice submission, protocol voice methods, GUI push-to-talk controls, and Kokoro response synthesis.

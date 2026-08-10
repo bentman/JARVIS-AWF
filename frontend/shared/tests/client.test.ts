@@ -210,4 +210,32 @@ describe("ProtocolClient", () => {
     expect(transport.lastRequest().method).toBe("awf/voice.sessionClose");
     expect(transport.lastRequest().params).toEqual({ voiceSessionId: "vs-1", reason: "done" });
   });
+
+  it("builds correct params for control center and readiness methods", () => {
+    const { transport, client } = setup();
+
+    void client.controlSummary();
+    expect(transport.lastRequest().method).toBe("awf/control.summary");
+    expect(transport.lastRequest().params).toEqual({});
+
+    void client.controlRunDetail("run-1");
+    expect(transport.lastRequest().method).toBe("awf/control.runDetail");
+    expect(transport.lastRequest().params).toEqual({ runId: "run-1" });
+
+    void client.systemReadiness();
+    expect(transport.lastRequest().method).toBe("awf/system.readiness");
+    expect(transport.lastRequest().params).toEqual({});
+
+    void client.llmServers();
+    expect(transport.lastRequest().method).toBe("awf/llm.servers");
+    expect(transport.lastRequest().params).toEqual({});
+
+    void client.llmModels();
+    expect(transport.lastRequest().method).toBe("awf/llm.models");
+    expect(transport.lastRequest().params).toEqual({});
+
+    void client.llmServeStatus();
+    expect(transport.lastRequest().method).toBe("awf/llm.serveStatus");
+    expect(transport.lastRequest().params).toEqual({});
+  });
 });

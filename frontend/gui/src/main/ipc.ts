@@ -7,6 +7,12 @@ export interface IpcMainLike {
 }
 
 export const CHANNELS = {
+  controlSummary: "awf:controlSummary",
+  controlRunDetail: "awf:controlRunDetail",
+  systemReadiness: "awf:systemReadiness",
+  llmServers: "awf:llmServers",
+  llmModels: "awf:llmModels",
+  llmServeStatus: "awf:llmServeStatus",
   runStatus: "awf:runStatus",
   runList: "awf:runList",
   approvalList: "awf:approvalList",
@@ -34,6 +40,12 @@ export const CHANNELS = {
  * gets direct access to the client or to Node - only these narrow, typed
  * channels via the preload's contextBridge. */
 export function registerIpcHandlers(ipcMain: IpcMainLike, client: ProtocolClient): void {
+  ipcMain.handle(CHANNELS.controlSummary, () => client.controlSummary());
+  ipcMain.handle(CHANNELS.controlRunDetail, (_event, runId) => client.controlRunDetail(runId as string));
+  ipcMain.handle(CHANNELS.systemReadiness, () => client.systemReadiness());
+  ipcMain.handle(CHANNELS.llmServers, () => client.llmServers());
+  ipcMain.handle(CHANNELS.llmModels, () => client.llmModels());
+  ipcMain.handle(CHANNELS.llmServeStatus, () => client.llmServeStatus());
   ipcMain.handle(CHANNELS.runStatus, (_event, runId) => client.runStatus(runId as string));
   ipcMain.handle(CHANNELS.runList, () => client.runList());
   ipcMain.handle(CHANNELS.approvalList, () => client.approvalList());

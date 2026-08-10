@@ -12,6 +12,7 @@ import shlex
 import shutil
 import sqlite3
 import subprocess
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
 import yaml
@@ -40,6 +41,7 @@ from awf.registry.index import latest_version
 from awf.registry.kinds import (
     AGENTS,
     CAPABILITIES,
+    KINDS,
     MCP,
     MEMORY_PROFILES,
     MODEL_PROFILES,
@@ -1201,9 +1203,99 @@ def op_secret_list_names(conn: sqlite3.Connection) -> list[str]:
     return list_secret_names(conn)
 
 
-def op_llm_servers(repo_root: Path) -> dict:
-    from dataclasses import asdict
+def _jsonable(value):
+    if is_dataclass(value):
+        return _jsonable(asdict(value))
+    if isinstance(value, dict):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, Path):
+        return str(value)
+    return value
 
+
+def _recent_verdict_artifacts(conn: sqlite3.Connection, *, limit: int = 5) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM artifacts WHERE artifact_type = 'verdict' ORDER BY created_at DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _registry_counts(repo_root: Path, conn: sqlite3.Connection) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for registry_kind in KINDS:
+        counts[registry_kind.key] = len(op_registry_list(repo_root, kind=registry_kind.key, conn=conn))
+    return counts
+
+
+def op_system_readiness(repo_root: Path) -> dict:
+    from awf.hardware.profiler import resolve_hardware_profile_id
+
+    try:
+        profile_id, payload = resolve_hardware_profile_id(repo_root)
+        return {
+            "profile_id": profile_id,
+            "inventory": _jsonable(payload.get("inventory")),
+            "tokens": _jsonable(payload.get("tokens", [])),
+            "readiness": _jsonable(payload.get("readiness", {})),
+        }
+    except Exception as exc:
+        return {
+            "profile_id": None,
+            "inventory": None,
+            "tokens": [],
+            "readiness": {},
+            "error": str(exc),
+        }
+
+
+def _control_error(exc: Exception) -> dict:
+    return {"error": str(exc)}
+
+
+def op_control_center_summary(repo_root: Path, conn: sqlite3.Connection) -> dict:
+    try:
+        llm_servers = op_llm_servers(repo_root)
+    except Exception as exc:
+        llm_servers = _control_error(exc)
+    try:
+        llm_status = op_llm_serve(repo_root, conn, action="status")
+    except Exception as exc:
+        llm_status = _control_error(exc)
+    readiness = op_system_readiness(repo_root)
+    improvements = op_improvement_list(conn)
+    return {
+        "runs": op_run_list(conn),
+        "approvals": op_approval_list(conn),
+        "improvements": improvements,
+        "recent_verdicts": _recent_verdict_artifacts(conn),
+        "registry_counts": _registry_counts(repo_root, conn),
+        "llm": {
+            "servers": llm_servers,
+            "status": llm_status,
+        },
+        "readiness": readiness,
+    }
+
+
+def op_control_center_run_detail(repo_root: Path, conn: sqlite3.Connection, *, run_id: str) -> dict:
+    status = op_run_status(conn, run_id=run_id)
+    artifacts = op_artifact_list(conn, run_id=run_id)
+    timeline = op_episodic_timeline(conn, run_id=run_id)
+    improvements = [proposal for proposal in op_improvement_list(conn) if proposal.get("run_id") == run_id]
+    verdicts = [artifact for artifact in artifacts if artifact.get("artifact_type") == "verdict"]
+    return {
+        "run": status,
+        "artifacts": artifacts,
+        "timeline": timeline,
+        "improvements": improvements,
+        "verdicts": verdicts,
+    }
+
+
+def op_llm_servers(repo_root: Path) -> dict:
     from awf.hardware.profiler import resolve_hardware_profile_id
     from awf.llm.discovery import binary_path, local_models
     from awf.llm.selector import current_selection

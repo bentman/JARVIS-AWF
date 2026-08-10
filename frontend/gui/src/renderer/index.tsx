@@ -1,7 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.js";
-import type { ApprovalSummary, ImprovementSummary, RunSummary } from "./Dashboard.js";
+import type { ApprovalSummary, ControlRunDetail, ControlSummary, ImprovementSummary, RunSummary } from "./Dashboard.js";
 import type { MemorySearchResult } from "./MemoryPanel.js";
 import type { ProposalSummary } from "./ProposalReview.js";
 import type { VoiceSessionResult, VoiceSubmitTextResult } from "./VoiceActivation.js";
@@ -20,6 +20,12 @@ declare global {
   interface Window {
     awf: {
       runStatus: (runId: string) => Promise<unknown>;
+      controlSummary: () => Promise<ControlSummary>;
+      controlRunDetail: (runId: string) => Promise<ControlRunDetail>;
+      systemReadiness: () => Promise<unknown>;
+      llmServers: () => Promise<unknown>;
+      llmModels: () => Promise<unknown>;
+      llmServeStatus: () => Promise<unknown>;
       runList: () => Promise<RunSummary[]>;
       approvalList: () => Promise<ApprovalSummary[]>;
       approvalDetail: (approvalId: string) => Promise<unknown>;
@@ -92,6 +98,8 @@ if (container) {
       onRunList: () => window.awf.runList(),
       onApprovalList: () => window.awf.approvalList(),
       onImprovementList: () => window.awf.improvementList(),
+      onControlSummary: () => window.awf.controlSummary(),
+      onControlRunDetail: (runId: string) => window.awf.controlRunDetail(runId),
       onProposalGet: (proposalId: string) => window.awf.proposalGet(proposalId),
       onProposalPublish: (proposalId: string, digest: string) => window.awf.proposalPublish(proposalId, digest),
       onProposalReject: (proposalId: string, reason?: string) => window.awf.proposalReject(proposalId, reason),

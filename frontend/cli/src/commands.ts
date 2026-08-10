@@ -22,7 +22,14 @@ export type CommandClient = Pick<
   | "improvementMerge"
   | "improvementReject"
   | "secretListNames"
+  | "controlSummary"
+  | "controlRunDetail"
+  | "systemReadiness"
+  | "llmServers"
+  | "llmModels"
+  | "llmServeStatus"
   | "registryList"
+  | "registryGet"
   | "workflowAuthorDraft"
   | "proposalGet"
   | "proposalUpdate"
@@ -79,8 +86,12 @@ export const HELP_TEXT = `
 /session-show <session-id>            Show an active session
 /episodic-search <query>              Search event history
 /episodic <run-id>                    Show a Run timeline
+/control                              Control-center overview
+/readiness                            Hardware and runtime readiness
+/llm                                  LLM server/model status
 /agents                               Registered Agent Manifests
 /skills                               Registry Skills
+/skill <name>@<version>               Show a registry Skill
 /workflows                            Registry Workflow definitions
 /capabilities                         Capability Records with risk classes
 /mcp                                  Registered MCP servers and trust status
@@ -231,10 +242,33 @@ export async function dispatchCommand(
     if (!args[0]) throw new CommandError("usage: /episodic <run-id>");
     return { kind: "json", data: await client.episodicTimeline(args[0]) };
   }
+  if (name === "control") return { kind: "json", data: await client.controlSummary() };
+  if (name === "readiness") return { kind: "json", data: await client.systemReadiness() };
+  if (name === "llm") {
+    const [servers, models, status] = await Promise.all([
+      client.llmServers(),
+      client.llmModels(),
+      client.llmServeStatus(),
+    ]);
+    return { kind: "json", data: { servers, models, status } };
+  }
+  if (name === "skill") {
+    if (!args[0]) throw new CommandError("usage: /skill <name>@<version>");
+    const [skillName, version] = splitRegistryRef(args[0], "skill");
+    return { kind: "json", data: await client.registryGet("skills", skillName, version) };
+  }
   if (name === "secrets") return { kind: "json", data: await client.secretListNames() };
 
   const registryKind = REGISTRY_KIND_BY_COMMAND[name ?? ""];
   if (registryKind) return { kind: "json", data: await client.registryList(registryKind) };
 
   throw new CommandError(`unknown command: /${name}`);
+}
+
+function splitRegistryRef(ref: string, label: string): [string, string] {
+  const [name, version, extra] = ref.split("@");
+  if (!name || !version || extra !== undefined) {
+    throw new CommandError(`usage: /${label} <name>@<version>`);
+  }
+  return [name, version];
 }

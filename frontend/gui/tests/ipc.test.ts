@@ -13,6 +13,12 @@ function makeFakeIpcMain(): { ipcMain: IpcMainLike; handlers: Map<string, (...ar
 
 function makeFakeClient() {
   return {
+    controlSummary: vi.fn().mockResolvedValue({ runs: [], approvals: [] }),
+    controlRunDetail: vi.fn().mockResolvedValue({ run: { run_id: "run-1" } }),
+    systemReadiness: vi.fn().mockResolvedValue({ profile_id: "linux-x64-cpu" }),
+    llmServers: vi.fn().mockResolvedValue({ default_server: "llama-server" }),
+    llmModels: vi.fn().mockResolvedValue({ local_models: [] }),
+    llmServeStatus: vi.fn().mockResolvedValue({ state: "stopped" }),
     runStatus: vi.fn().mockResolvedValue({ run_id: "run-1" }),
     runList: vi.fn().mockResolvedValue([]),
     approvalList: vi.fn().mockResolvedValue([]),
@@ -46,6 +52,24 @@ describe("registerIpcHandlers", () => {
     const client = makeFakeClient();
 
     registerIpcHandlers(ipcMain, client);
+
+    await handlers.get(CHANNELS.controlSummary)?.({});
+    expect(client.controlSummary).toHaveBeenCalled();
+
+    await handlers.get(CHANNELS.controlRunDetail)?.({}, "run-1");
+    expect(client.controlRunDetail).toHaveBeenCalledWith("run-1");
+
+    await handlers.get(CHANNELS.systemReadiness)?.({});
+    expect(client.systemReadiness).toHaveBeenCalled();
+
+    await handlers.get(CHANNELS.llmServers)?.({});
+    expect(client.llmServers).toHaveBeenCalled();
+
+    await handlers.get(CHANNELS.llmModels)?.({});
+    expect(client.llmModels).toHaveBeenCalled();
+
+    await handlers.get(CHANNELS.llmServeStatus)?.({});
+    expect(client.llmServeStatus).toHaveBeenCalled();
 
     await handlers.get(CHANNELS.runStatus)?.({}, "run-1");
     expect(client.runStatus).toHaveBeenCalledWith("run-1");

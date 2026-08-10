@@ -71,6 +71,12 @@ METHOD_NAMES = (
     "awf/episodic.timeline",
     "awf/secret.set",
     "awf/secret.listNames",
+    "awf/control.summary",
+    "awf/control.runDetail",
+    "awf/system.readiness",
+    "awf/llm.servers",
+    "awf/llm.models",
+    "awf/llm.serveStatus",
     "awf/events.subscribe",
 )
 
@@ -246,6 +252,18 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
         return ops.op_secret_set(repo_root, conn, name=params["name"], value=params["value"])
     if method == "awf/secret.listNames":
         return ops.op_secret_list_names(conn)
+    if method == "awf/control.summary":
+        return ops.op_control_center_summary(repo_root, conn)
+    if method == "awf/control.runDetail":
+        return ops.op_control_center_run_detail(repo_root, conn, run_id=params["runId"])
+    if method == "awf/system.readiness":
+        return ops.op_system_readiness(repo_root)
+    if method == "awf/llm.servers":
+        return ops.op_llm_servers(repo_root)
+    if method == "awf/llm.models":
+        return ops.op_llm_models(repo_root)
+    if method == "awf/llm.serveStatus":
+        return ops.op_llm_serve(repo_root, conn, action="status")
     if method == "awf/events.subscribe":
         raise JsonRpcError(
             METHOD_NOT_FOUND,

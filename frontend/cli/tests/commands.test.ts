@@ -32,6 +32,13 @@ function makeFakeClient(overrides: Partial<CommandClient> = {}): CommandClient {
     memoryPublish: vi.fn().mockResolvedValue({ proposal: { proposal_id: "p1", status: "published" } }),
     memoryReject: vi.fn().mockResolvedValue({ proposal_id: "p1", status: "rejected" }),
     memoryBlock: vi.fn().mockResolvedValue({ ref: "pref@1.0.0", trust_status: "blocked" }),
+    controlSummary: vi.fn().mockResolvedValue({ runs: [], approvals: [] }),
+    controlRunDetail: vi.fn().mockResolvedValue({ run: { run_id: "run-1" } }),
+    systemReadiness: vi.fn().mockResolvedValue({ profile_id: "linux-x64-cpu" }),
+    llmServers: vi.fn().mockResolvedValue({ default_server: "llama-server" }),
+    llmModels: vi.fn().mockResolvedValue({ local_models: [] }),
+    llmServeStatus: vi.fn().mockResolvedValue({ state: "stopped" }),
+    registryGet: vi.fn().mockResolvedValue({ kind: "skills", name: "demo", version: "1.0.0" }),
     sessionStart: vi.fn().mockResolvedValue({ session_id: "s1" }),
     sessionShow: vi.fn().mockResolvedValue({ session_id: "s1", entries: [] }),
     episodicSearch: vi.fn().mockResolvedValue([]),
@@ -211,6 +218,35 @@ describe("dispatchCommand", () => {
 
     await dispatchCommand(client, "/episodic run-1", DEFAULT_SETTINGS);
     expect(client.episodicTimeline).toHaveBeenCalledWith("run-1");
+  });
+
+  it("dispatches control center status commands", async () => {
+    const client = makeFakeClient();
+
+    await dispatchCommand(client, "/control", DEFAULT_SETTINGS);
+    expect(client.controlSummary).toHaveBeenCalled();
+
+    await dispatchCommand(client, "/readiness", DEFAULT_SETTINGS);
+    expect(client.systemReadiness).toHaveBeenCalled();
+
+    await dispatchCommand(client, "/llm", DEFAULT_SETTINGS);
+    expect(client.llmServers).toHaveBeenCalled();
+    expect(client.llmModels).toHaveBeenCalled();
+    expect(client.llmServeStatus).toHaveBeenCalled();
+  });
+
+  it("/skill inspects a registry Skill without invoking it", async () => {
+    const client = makeFakeClient();
+
+    await dispatchCommand(client, "/skill demo@1.0.0", DEFAULT_SETTINGS);
+
+    expect(client.registryGet).toHaveBeenCalledWith("skills", "demo", "1.0.0");
+  });
+
+  it("/skill requires a name@version ref", async () => {
+    const client = makeFakeClient();
+
+    await expect(dispatchCommand(client, "/skill demo", DEFAULT_SETTINGS)).rejects.toBeInstanceOf(CommandError);
   });
 
   it("/settings, /theme, /keybindings never touch the protocol client", async () => {

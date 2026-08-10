@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-10 00:17
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Fixed AWF-GUI backend spawn failure (`spawn awf ENOENT`) by resolving the `awf`/`awf-speech` venv binaries from the compiled main-process file location instead of `process.cwd()`, which npm workspace scripts leave pointed at `frontend/gui` rather than the repo root.
+  - Scope: `frontend/gui/src/main/main.ts`.
+  - Validation: manual launch via `npm --prefix frontend run dev` with `AWF_CORE_COMMAND`/`AWF_SPEECH_COMMAND`/`AWF_REPO_ROOT` unset confirmed `backend/.venv/bin/awf serve --stdio` spawned and the Control center populated live readiness/registry data; `npm --prefix frontend run build --workspaces` passed; `npm --prefix frontend test --workspaces` -> shared 12 passed, CLI 41 passed, GUI 39 passed.
+  - Notes: no new automated test covers command resolution; this is an Electron main-process entrypoint path exercised by manual launch.
+
 - Timestamp: 2026-08-09 22:39
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Added Guard authorization for Model Gateway completion candidates, hardware-profile model defaults for resident-mind selection, and corrected ADR-0017 implementation drift.

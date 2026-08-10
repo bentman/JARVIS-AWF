@@ -54,33 +54,33 @@ export function MemoryPanel({
   };
 
   return (
-    <section aria-label="memory">
+    <section aria-label="memory" className="card">
       <h2>Memory</h2>
       <label>
         Search memory
         <input value={query} onChange={(event) => setQuery(event.target.value)} />
       </label>
-      <button type="button" onClick={() => void search()}>
+      <button type="button" className="btn btn-primary" onClick={() => void search()}>
         Search
       </button>
       {message && <p>{message}</p>}
       {result && (
         <div>
           <h3>Semantic memories</h3>
-          <ul>
+          <ul className="list">
             {result.semantic.map((hit) => (
-              <li key={hit.ref}>
-                <span>
+              <li key={hit.ref} className="row">
+                <span className="mono">
                   {hit.ref} confidence={hit.confidence}
                 </span>
-                <button type="button" onClick={() => void block(hit.ref)}>
+                <button type="button" className="btn btn-danger" onClick={() => void block(hit.ref)}>
                   Block
                 </button>
               </li>
             ))}
           </ul>
           <h3>Episodic matches</h3>
-          <ul>
+          <ul className="list">
             {result.episodic.map((hit, index) => (
               <li key={`${hit.event_id ?? index}`}>{String(hit.reason_code ?? hit.event_type ?? "event")}</li>
             ))}
@@ -90,20 +90,20 @@ export function MemoryPanel({
       <h3>Memory proposal</h3>
       <label>
         Proposal id
-        <input value={proposalId} onChange={(event) => setProposalId(event.target.value)} />
+        <input className="mono" value={proposalId} onChange={(event) => setProposalId(event.target.value)} />
       </label>
       <label>
         Digest
-        <input value={digest} onChange={(event) => setDigest(event.target.value)} />
+        <input className="mono" value={digest} onChange={(event) => setDigest(event.target.value)} />
       </label>
       <label>
         Reject reason
         <input value={reason} onChange={(event) => setReason(event.target.value)} />
       </label>
-      <button type="button" onClick={() => void publish()}>
+      <button type="button" className="btn btn-primary" onClick={() => void publish()}>
         Publish memory
       </button>
-      <button type="button" onClick={() => void reject()}>
+      <button type="button" className="btn btn-danger" onClick={() => void reject()}>
         Reject memory
       </button>
     </section>

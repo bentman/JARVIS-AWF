@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { stateClass } from "./state.js";
 
 export interface ProposalSummary {
   proposal_id: string;
@@ -60,13 +61,17 @@ export function ProposalReview({
   };
 
   return (
-    <section aria-label="Workflow proposal review">
+    <section aria-label="Workflow proposal review" className="card">
       <h2>Workflow proposal review</h2>
       <label>
         Proposal id
-        <input value={proposalId} onChange={(event) => setProposalId(event.currentTarget.value)} />
+        <input
+          className="mono"
+          value={proposalId}
+          onChange={(event) => setProposalId(event.currentTarget.value)}
+        />
       </label>
-      <button onClick={() => void load()} disabled={busy || !proposalId.trim()}>
+      <button className="btn btn-primary" onClick={() => void load()} disabled={busy || !proposalId.trim()}>
         Load proposal
       </button>
       {proposal && (
@@ -74,19 +79,21 @@ export function ProposalReview({
           <h3>
             {proposal.name}@{proposal.version}
           </h3>
-          <p>Status: {proposal.status}</p>
-          <p>Digest: {proposal.draft_digest}</p>
-          <p>Path: {proposal.draft_path}</p>
+          <p>
+            Status: <span className={`chip ${stateClass(proposal.status)}`}>{proposal.status}</span>
+          </p>
+          <p className="mono">Digest: {proposal.draft_digest}</p>
+          <p className="mono">Path: {proposal.draft_path}</p>
           <p>{proposal.summary}</p>
-          <pre>{proposal.content}</pre>
-          <button onClick={() => void publish()} disabled={busy || proposal.status !== "draft"}>
+          <pre className="pre-scroll">{proposal.content}</pre>
+          <button className="btn btn-primary" onClick={() => void publish()} disabled={busy || proposal.status !== "draft"}>
             Publish
           </button>
           <label>
             Reject reason
             <input value={reason} onChange={(event) => setReason(event.currentTarget.value)} />
           </label>
-          <button onClick={() => void reject()} disabled={busy || proposal.status !== "draft"}>
+          <button className="btn btn-danger" onClick={() => void reject()} disabled={busy || proposal.status !== "draft"}>
             Reject
           </button>
         </article>

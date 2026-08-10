@@ -29,6 +29,9 @@ function createWindow(client: ProtocolClient, repoRoot: string): void {
   const win = new BrowserWindow({
     width: 1000,
     height: 700,
+    minWidth: 960,
+    minHeight: 640,
+    backgroundColor: "#0a0a0b",
     webPreferences: {
       preload: path.join(import.meta.dirname, "..", "preload", "preload.js"),
       contextIsolation: true,

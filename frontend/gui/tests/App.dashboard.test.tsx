@@ -131,6 +131,7 @@ describe("App dashboard wiring (runList/approvalList IPC channels)", () => {
       />,
     );
 
+    fireEvent.click(await screen.findByText("Runs"));
     fireEvent.click(await screen.findByText("View details"));
 
     await waitFor(() => expect(onControlRunDetail).toHaveBeenCalledWith("run-1"));

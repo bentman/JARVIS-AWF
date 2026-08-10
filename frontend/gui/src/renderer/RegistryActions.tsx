@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { stateClass } from "./state.js";
 
 export interface RegistryEntry {
   source: "config" | "data";
@@ -80,13 +81,14 @@ export function RegistryActions({
   };
 
   return (
-    <section aria-label="Registry actions">
+    <section aria-label="Registry actions" className="card">
       <h2>Registry actions</h2>
       <p>Validate, publish, reindex, retire, or set trust through the AWF core registry operations.</p>
       <label>
         Draft path
         <input
           aria-label="Registry draft path"
+          className="mono"
           value={path}
           onChange={(event) => setPath(event.currentTarget.value)}
           placeholder="data/proposals/example.yaml"
@@ -98,39 +100,53 @@ export function RegistryActions({
       </label>
       {onRegistryList && (
         <div aria-label="Registry browser">
-          <button type="button" onClick={() => void listEntries()}>
+          <button type="button" className="btn btn-secondary" onClick={() => void listEntries()}>
             List
           </button>
           {listError && <p role="alert">{listError}</p>}
           {entries.length > 0 && (
-            <ul>
+            <ul className="list">
               {entries.map((entry) => (
-                <li key={`${entry.kind}/${entry.name}@${entry.version}`}>
-                  {entry.kind}/{entry.name}@{entry.version}
-                  {entry.trust_status && ` (${entry.trust_status})`}
+                <li key={`${entry.kind}/${entry.name}@${entry.version}`} className="row">
+                  <span className="mono">
+                    {entry.kind}/{entry.name}@{entry.version}
+                  </span>
+                  {entry.trust_status && (
+                    <span className={`chip ${stateClass(entry.trust_status)}`}>{entry.trust_status}</span>
+                  )}
                   {onRegistryGet && (
-                    <button type="button" onClick={() => void viewEntry(entry)}>
+                    <button type="button" className="btn btn-secondary" onClick={() => void viewEntry(entry)}>
                       View
                     </button>
                   )}
-                  <button type="button" onClick={() => useEntry(entry)}>
+                  <button type="button" className="btn btn-secondary" onClick={() => useEntry(entry)}>
                     Use
                   </button>
                 </li>
               ))}
             </ul>
           )}
-          {selectedDetail && <pre aria-label="Registry entry detail">{asText(selectedDetail)}</pre>}
+          {selectedDetail && (
+            <pre aria-label="Registry entry detail" className="pre-scroll">
+              {asText(selectedDetail)}
+            </pre>
+          )}
         </div>
       )}
       <label>
         Name
-        <input aria-label="Registry name" value={name} onChange={(event) => setName(event.currentTarget.value)} />
+        <input
+          aria-label="Registry name"
+          className="mono"
+          value={name}
+          onChange={(event) => setName(event.currentTarget.value)}
+        />
       </label>
       <label>
         Version
         <input
           aria-label="Registry version"
+          className="mono"
           value={version}
           onChange={(event) => setVersion(event.currentTarget.value)}
         />
@@ -143,25 +159,45 @@ export function RegistryActions({
           onChange={(event) => setTrustStatus(event.currentTarget.value)}
         />
       </label>
-      <div>
-        <button type="button" onClick={() => void runAction(() => onRegistryValidate(path, kind || undefined))}>
+      <div className="row">
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => void runAction(() => onRegistryValidate(path, kind || undefined))}
+        >
           Validate
         </button>
-        <button type="button" onClick={() => void runAction(() => onRegistryPublish(path, kind))}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => void runAction(() => onRegistryPublish(path, kind))}
+        >
           Publish
         </button>
-        <button type="button" onClick={() => void runAction(() => onRegistryReindex())}>
+        <button type="button" className="btn btn-primary" onClick={() => void runAction(() => onRegistryReindex())}>
           Reindex
         </button>
-        <button type="button" onClick={() => void runAction(() => onRegistryRetire(kind, name, version))}>
+        <button
+          type="button"
+          className="btn btn-danger"
+          onClick={() => void runAction(() => onRegistryRetire(kind, name, version))}
+        >
           Retire
         </button>
-        <button type="button" onClick={() => void runAction(() => onRegistryTrust(kind, name, version, trustStatus))}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => void runAction(() => onRegistryTrust(kind, name, version, trustStatus))}
+        >
           Set trust
         </button>
       </div>
       {error && <p role="alert">{error}</p>}
-      {result && <pre aria-label="Registry action result">{result}</pre>}
+      {result && (
+        <pre aria-label="Registry action result" className="pre-scroll">
+          {result}
+        </pre>
+      )}
     </section>
   );
 }

@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ApprovalConfirmation } from "./ApprovalConfirmation.js";
+import { ApprovalsView } from "./ApprovalsView.js";
 import {
-  Dashboard,
+  ImprovementProposals,
   type ApprovalSummary,
   type ArtifactSummary,
   type ControlRunDetail,
@@ -11,8 +12,11 @@ import {
   type RunSummary,
 } from "./Dashboard.js";
 import { MemoryPanel, type MemorySearchResult } from "./MemoryPanel.js";
+import { Overview } from "./Overview.js";
 import { ProposalReview, type ProposalSummary } from "./ProposalReview.js";
 import { RegistryActions, type RegistryEntry } from "./RegistryActions.js";
+import { RunsView } from "./RunsView.js";
+import { stateClass } from "./state.js";
 import { Transcript, type TranscriptEntry } from "./Transcript.js";
 import { VoiceActivation, type VoiceSessionResult, type VoiceSubmitTextResult } from "./VoiceActivation.js";
 import type { RiskClass } from "../voiceApproval.js";
@@ -71,6 +75,8 @@ export interface AppProps extends VoiceSessionFns {
   onMemoryReject?: (proposalId: string, reason?: string) => Promise<unknown>;
 }
 
+type ViewName = "overview" | "runs" | "approvals" | "proposals" | "memory" | "registry" | "voice";
+
 // An approval whose node never declared `riskClass` (Section 12.2) has no
 // real value to show - treated as R2 here too, the same safe-never-R0/R1
 // default `op_approval_approve` itself uses, not silently downgraded to
@@ -125,6 +131,7 @@ export function App({
   const [controlSummary, setControlSummary] = useState<ControlSummary | undefined>(undefined);
   const [selectedRunDetail, setSelectedRunDetail] = useState<ControlRunDetail | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [view, setView] = useState<ViewName | undefined>(undefined);
 
   const refresh = async () => {
     if (!onControlSummary && !onRunList && !onApprovalList && !onImprovementList) return;
@@ -207,62 +214,146 @@ export function App({
   // list is what the operator actually sees and can act on.
   const effectivePendingApproval = pendingApproval ?? (approvals.length > 0 ? toPendingApproval(approvals[0]) : undefined);
 
+  const overviewAvailable = !!(onControlSummary || onRunList || onApprovalList || onImprovementList);
+  const runsAvailable = overviewAvailable;
+  const approvalsAvailable = overviewAvailable;
+  const proposalsAvailable = !!(onProposalGet && onProposalPublish && onProposalReject);
+  const memoryAvailable = !!(onMemorySearch && onMemoryBlock && onMemoryPublish && onMemoryReject);
+  const registryAvailable = !!(
+    onRegistryValidate &&
+    onRegistryPublish &&
+    onRegistryReindex &&
+    onRegistryRetire &&
+    onRegistryTrust
+  );
+  const voiceAvailable = !!(
+    onVoiceSessionStart &&
+    onVoicePushToTalkStart &&
+    onVoicePushToTalkStop &&
+    onVoiceInterrupt &&
+    onVoiceSubmitText
+  );
+
+  const views: { name: ViewName; label: string; badge?: number }[] = [
+    ...(overviewAvailable ? [{ name: "overview" as const, label: "Overview" }] : []),
+    ...(runsAvailable ? [{ name: "runs" as const, label: "Runs" }] : []),
+    ...(approvalsAvailable
+      ? [{ name: "approvals" as const, label: "Approvals", badge: approvals.length || undefined }]
+      : []),
+    ...(proposalsAvailable
+      ? [{ name: "proposals" as const, label: "Proposals", badge: improvements.length || undefined }]
+      : []),
+    ...(memoryAvailable ? [{ name: "memory" as const, label: "Memory" }] : []),
+    ...(registryAvailable ? [{ name: "registry" as const, label: "Registry" }] : []),
+    ...(voiceAvailable ? [{ name: "voice" as const, label: "Voice" }] : []),
+  ];
+  const activeView = view && views.some((v) => v.name === view) ? view : views[0]?.name;
+
+  const readinessEntries = controlSummary ? Object.values(controlSummary.readiness.readiness) : [];
+  const readinessOverall =
+    readinessEntries.length > 0 && readinessEntries.every((entry) => entry.ready) ? "ready" : "not ready";
+  const llmState = controlSummary?.llm.status?.state ?? "idle";
+
   return (
-    <div>
-      {(onControlSummary || onRunList || onApprovalList || onImprovementList) && (
-        <Dashboard
-          runs={runs}
-          approvals={approvals}
-          improvements={improvements}
-          controlSummary={controlSummary}
-          selectedRunDetail={selectedRunDetail}
-          onRefresh={() => void refresh()}
-          onRunDetail={onControlRunDetail ? (runId: string) => void handleRunDetail(runId) : undefined}
-          onArtifactRead={onArtifactRead}
-          onLlmModels={onLlmModels}
-          refreshing={refreshing}
-        />
-      )}
-      {onProposalGet && onProposalPublish && onProposalReject && (
-        <ProposalReview
-          onProposalGet={onProposalGet}
-          onProposalPublish={onProposalPublish}
-          onProposalReject={onProposalReject}
-        />
-      )}
-      {onMemorySearch && onMemoryBlock && onMemoryPublish && onMemoryReject && (
-        <MemoryPanel
-          onMemorySearch={onMemorySearch}
-          onMemoryBlock={onMemoryBlock}
-          onMemoryPublish={onMemoryPublish}
-          onMemoryReject={onMemoryReject}
-        />
-      )}
-      {onRegistryValidate && onRegistryPublish && onRegistryReindex && onRegistryRetire && onRegistryTrust && (
-        <RegistryActions
-          onRegistryValidate={onRegistryValidate}
-          onRegistryPublish={onRegistryPublish}
-          onRegistryReindex={onRegistryReindex}
-          onRegistryRetire={onRegistryRetire}
-          onRegistryTrust={onRegistryTrust}
-          onRegistryList={onRegistryList}
-          onRegistryGet={onRegistryGet}
-        />
-      )}
-      <Transcript entries={entries} />
-      {onVoiceSessionStart &&
-        onVoicePushToTalkStart &&
-        onVoicePushToTalkStop &&
-        onVoiceInterrupt &&
-        onVoiceSubmitText && (
-          <VoiceActivation
-            onSessionStart={onVoiceSessionStart}
-            onPushToTalkStart={onVoicePushToTalkStart}
-            onPushToTalkStop={onVoicePushToTalkStop}
-            onInterrupt={onVoiceInterrupt}
-            onSubmitText={handleVoiceSubmit}
-          />
-        )}
+    <div className="shell">
+      <aside className="rail">
+        <div className="mono">AWF</div>
+        <nav aria-label="Views">
+          <ul className="rail-nav list">
+            {views.map((v) => (
+              <li key={v.name}>
+                <button
+                  type="button"
+                  className="btn rail-item"
+                  aria-current={v.name === activeView ? "page" : undefined}
+                  onClick={() => setView(v.name)}
+                >
+                  {v.label}
+                  {v.badge !== undefined && <span className="rail-badge">{v.badge}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <button type="button" className="btn btn-secondary" onClick={() => void refresh()} disabled={refreshing}>
+          {refreshing ? "Refreshing..." : "Refresh"}
+        </button>
+      </aside>
+      <div className="main-col">
+        <div className="status-bar" role="status" aria-label="Status">
+          <span className="mono">{controlSummary?.readiness.profile_id ?? "no profile"}</span>
+          <span className={`chip ${stateClass(readinessOverall)}`}>{readinessOverall}</span>
+          <span className={`chip ${stateClass(llmState)}`}>{llmState}</span>
+          <span className="chip">
+            {approvals.length} pending approval{approvals.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <main className="main">
+          {activeView === "overview" && <Overview controlSummary={controlSummary} onLlmModels={onLlmModels} />}
+          {activeView === "runs" && (
+            <RunsView
+              runs={runs}
+              selectedRunDetail={selectedRunDetail}
+              onRunDetail={onControlRunDetail ? (runId: string) => void handleRunDetail(runId) : undefined}
+              onArtifactRead={onArtifactRead}
+            />
+          )}
+          {activeView === "approvals" && <ApprovalsView approvals={approvals} />}
+          {activeView === "proposals" && (
+            <>
+              {onProposalGet && onProposalPublish && onProposalReject && (
+                <ProposalReview
+                  onProposalGet={onProposalGet}
+                  onProposalPublish={onProposalPublish}
+                  onProposalReject={onProposalReject}
+                />
+              )}
+              <ImprovementProposals improvements={improvements} onArtifactRead={onArtifactRead} />
+            </>
+          )}
+          {activeView === "memory" && onMemorySearch && onMemoryBlock && onMemoryPublish && onMemoryReject && (
+            <MemoryPanel
+              onMemorySearch={onMemorySearch}
+              onMemoryBlock={onMemoryBlock}
+              onMemoryPublish={onMemoryPublish}
+              onMemoryReject={onMemoryReject}
+            />
+          )}
+          {activeView === "registry" &&
+            onRegistryValidate &&
+            onRegistryPublish &&
+            onRegistryReindex &&
+            onRegistryRetire &&
+            onRegistryTrust && (
+              <RegistryActions
+                onRegistryValidate={onRegistryValidate}
+                onRegistryPublish={onRegistryPublish}
+                onRegistryReindex={onRegistryReindex}
+                onRegistryRetire={onRegistryRetire}
+                onRegistryTrust={onRegistryTrust}
+                onRegistryList={onRegistryList}
+                onRegistryGet={onRegistryGet}
+              />
+            )}
+          {activeView === "voice" &&
+            onVoiceSessionStart &&
+            onVoicePushToTalkStart &&
+            onVoicePushToTalkStop &&
+            onVoiceInterrupt &&
+            onVoiceSubmitText && (
+              <>
+                <VoiceActivation
+                  onSessionStart={onVoiceSessionStart}
+                  onPushToTalkStart={onVoicePushToTalkStart}
+                  onPushToTalkStop={onVoicePushToTalkStop}
+                  onInterrupt={onVoiceInterrupt}
+                  onSubmitText={handleVoiceSubmit}
+                />
+                <Transcript entries={entries} />
+              </>
+            )}
+        </main>
+      </div>
       {effectivePendingApproval && (
         <ApprovalConfirmation
           approvalId={effectivePendingApproval.approvalId}

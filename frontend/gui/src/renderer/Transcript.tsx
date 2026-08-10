@@ -11,10 +11,11 @@ export interface TranscriptEntry {
  * visible transcript. There are no voice-only capabilities. */
 export function Transcript({ entries }: { entries: TranscriptEntry[] }): React.JSX.Element {
   return (
-    <div role="log" aria-label="Transcript">
+    <div role="log" aria-label="Transcript" className="card">
       {entries.map((entry) => (
-        <p key={entry.id}>
-          <strong>{entry.speaker}:</strong> {entry.text}
+        <p key={entry.id} className="transcript-row">
+          <strong className="transcript-speaker">{entry.speaker}:</strong>{" "}
+          <span className="transcript-body">{entry.text}</span>
         </p>
       ))}
     </div>

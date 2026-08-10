@@ -1,4 +1,5 @@
 import React from "react";
+import { stateClass } from "./state.js";
 import { decideVoiceAcknowledgement, type RiskClass } from "../voiceApproval.js";
 
 export interface ApprovalConfirmationProps {
@@ -31,16 +32,20 @@ export function ApprovalConfirmation({
   }, [decision.decided, approvalId]);
 
   return (
-    <div role="dialog" aria-label="Approval confirmation">
+    <div role="dialog" aria-label="Approval confirmation" className="card approval-card">
       <p>
-        Action digest: <code>{actionDigest}</code>
+        Action digest: <code className="mono">{actionDigest}</code>
       </p>
-      <p>Risk class: {riskClass}</p>
+      <p className={`chip ${stateClass(riskClass)}`}>Risk class: {riskClass}</p>
       {decision.requiresOnScreenConfirmation && (
         <p role="alert">Voice alone cannot approve this action - confirm on screen.</p>
       )}
-      <button onClick={() => onApprove(approvalId)}>Approve</button>
-      <button onClick={() => onReject(approvalId, "rejected on screen")}>Reject</button>
+      <button className="btn btn-primary" onClick={() => onApprove(approvalId)}>
+        Approve
+      </button>
+      <button className="btn btn-danger" onClick={() => onReject(approvalId, "rejected on screen")}>
+        Reject
+      </button>
     </div>
   );
 }

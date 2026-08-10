@@ -41,6 +41,18 @@ function nextTurnId(): string {
   return `turn-${Date.now()}`;
 }
 
+// The Part C table doesn't cover voice-session states directly, but the ADR's
+// own worked example calls out `listening` reading warn and `speaking`
+// reading ok - a small local mapping on top of the shared `stateClass`,
+// scoped to this component's vocabulary only.
+function voiceStateClass(state: VoiceSessionState): string {
+  if (state === "speaking") return "state-ok";
+  if (state === "listening" || state === "transcribing" || state === "submitting" || state === "recovering") {
+    return "state-warn";
+  }
+  return "state-idle";
+}
+
 export function VoiceActivation({
   onSessionStart,
   onPushToTalkStart,
@@ -127,8 +139,10 @@ export function VoiceActivation({
     });
 
   return (
-    <div role="group" aria-label="Voice session">
-      <p>Status: {state}</p>
+    <div role="group" aria-label="Voice session" className="card">
+      <p>
+        Status: <span className={`chip ${voiceStateClass(state)}`}>{state}</span>
+      </p>
       {voiceSessionId && <p>Voice session: {voiceSessionId}</p>}
       <label>
         Default workflow
@@ -143,6 +157,7 @@ export function VoiceActivation({
         Voice profile
         <input
           type="text"
+          className="mono"
           value={voiceProfileRef}
           onChange={(e) => setVoiceProfileRef(e.target.value)}
           placeholder="narrator@1.0.0"
@@ -153,21 +168,35 @@ export function VoiceActivation({
         <textarea value={recognizedText} onChange={(e) => setRecognizedText(e.target.value)} />
       </label>
       {partialText && <p aria-label="Partial transcript">Partial: {partialText}</p>}
-      <button onClick={startSession} disabled={busy || state === "closed"}>
-        Start voice session
-      </button>
-      <button onClick={startPushToTalk} disabled={busy || !voiceSessionId || state === "listening"}>
-        Push to talk
-      </button>
-      <button onClick={stopPushToTalk} disabled={busy || !voiceSessionId || state !== "listening"}>
-        Stop talking
-      </button>
-      <button onClick={submitText} disabled={busy || !voiceSessionId || !recognizedText}>
-        Submit voice text
-      </button>
-      <button onClick={interrupt} disabled={busy || !voiceSessionId}>
-        Interrupt
-      </button>
+      <div className="row">
+        <button className="btn btn-primary" onClick={startSession} disabled={busy || state === "closed"}>
+          Start voice session
+        </button>
+        <button
+          className="btn btn-secondary"
+          onClick={startPushToTalk}
+          disabled={busy || !voiceSessionId || state === "listening"}
+        >
+          Push to talk
+        </button>
+        <button
+          className="btn btn-secondary"
+          onClick={stopPushToTalk}
+          disabled={busy || !voiceSessionId || state !== "listening"}
+        >
+          Stop talking
+        </button>
+        <button
+          className="btn btn-primary"
+          onClick={submitText}
+          disabled={busy || !voiceSessionId || !recognizedText}
+        >
+          Submit voice text
+        </button>
+        <button className="btn btn-danger" onClick={interrupt} disabled={busy || !voiceSessionId}>
+          Interrupt
+        </button>
+      </div>
       {error && <p role="alert">{error}</p>}
     </div>
   );

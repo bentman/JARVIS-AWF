@@ -26,6 +26,11 @@ declare global {
       llmServers: () => Promise<unknown>;
       llmModels: () => Promise<unknown>;
       llmServeStatus: () => Promise<unknown>;
+      registryValidate: (path: string, kind?: string) => Promise<unknown>;
+      registryPublish: (path: string, kind: string) => Promise<unknown>;
+      registryReindex: () => Promise<unknown>;
+      registryRetire: (kind: string, name: string, version: string) => Promise<unknown>;
+      registryTrust: (kind: string, name: string, version: string, status: string) => Promise<unknown>;
       runList: () => Promise<RunSummary[]>;
       approvalList: () => Promise<ApprovalSummary[]>;
       approvalDetail: (approvalId: string) => Promise<unknown>;
@@ -100,6 +105,13 @@ if (container) {
       onImprovementList: () => window.awf.improvementList(),
       onControlSummary: () => window.awf.controlSummary(),
       onControlRunDetail: (runId: string) => window.awf.controlRunDetail(runId),
+      onRegistryValidate: (path: string, kind?: string) => window.awf.registryValidate(path, kind),
+      onRegistryPublish: (path: string, kind: string) => window.awf.registryPublish(path, kind),
+      onRegistryReindex: () => window.awf.registryReindex(),
+      onRegistryRetire: (kind: string, name: string, version: string) =>
+        window.awf.registryRetire(kind, name, version),
+      onRegistryTrust: (kind: string, name: string, version: string, status: string) =>
+        window.awf.registryTrust(kind, name, version, status),
       onProposalGet: (proposalId: string) => window.awf.proposalGet(proposalId),
       onProposalPublish: (proposalId: string, digest: string) => window.awf.proposalPublish(proposalId, digest),
       onProposalReject: (proposalId: string, reason?: string) => window.awf.proposalReject(proposalId, reason),

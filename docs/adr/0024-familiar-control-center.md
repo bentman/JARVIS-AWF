@@ -7,7 +7,7 @@ Implemented.
 Acceptance run: `backend/.venv/bin/python -m pytest backend/tests -q` -> 570
 passed, 1 skipped, 7 warnings; `backend/.venv/bin/python -m ruff check .`
 passed; `npm --prefix frontend run build --workspaces` passed; `npm --prefix
-frontend test --workspaces` -> shared 12 passed, CLI 41 passed, GUI 37 passed.
+frontend test --workspaces` -> shared 12 passed, CLI 41 passed, GUI 39 passed.
 
 ## Context
 
@@ -208,6 +208,8 @@ and leaves a clean seam for later streaming.
   - verdict/artifact/diff links;
   - model and hardware readiness panels;
   - registry browser entry points;
+  - registry validate/publish/reindex/retire/trust actions routed through the
+    shared protocol;
   - memory controls;
   - transcript panel.
 - Keep existing components where they already match the target:
@@ -239,8 +241,8 @@ and leaves a clean seam for later streaming.
 2. Add shared TypeScript types/client methods and focused client tests.
 3. Add GUI IPC/preload methods for the new protocol calls.
 4. Refactor the dashboard into a control-center overview with focused detail
-   panes, preserving existing proposal, memory, voice, transcript, and approval
-   components.
+   panes and protocol-routed registry actions, preserving existing proposal,
+   memory, voice, transcript, and approval components.
 5. Add CLI commands for `/control`, `/readiness`, `/llm`, and `/skill`.
 6. Add targeted backend/frontend tests for the new protocol and UI surfaces.
 7. Validate with focused backend tests, frontend build/tests, Ruff, and

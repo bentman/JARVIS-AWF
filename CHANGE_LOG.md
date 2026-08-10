@@ -19,6 +19,12 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-09 21:54
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Corrected ADR-0023 implementation wording to match the shipped push-to-talk/final-text voice path and completed ADR-0024 GUI registry action wiring through the shared protocol.
+  - Scope: ADR-0023/ADR-0024, frontend shared registry client methods, AWF-GUI IPC/preload/renderer registry action panel, and focused frontend tests.
+  - Validation: frontend shared targeted test -> 12 passed; frontend GUI targeted tests -> 9 passed; `npm --prefix frontend run build --workspaces` passed; `npm --prefix frontend test --workspaces` -> shared 12 passed, CLI 41 passed, GUI 39 passed; `backend/.venv/bin/python -m ruff check .` passed; `backend/.venv/bin/python -m pytest backend/tests -q` -> 570 passed, 1 skipped, 7 warnings; `git diff --check` passed.
+
 - Timestamp: 2026-08-09 21:41
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Implemented ADR-0024 familiar control center with read-only control summary/detail protocol methods, LLM and readiness status exposure, GUI overview/detail panels, and peer CLI status/Skill inspection commands.

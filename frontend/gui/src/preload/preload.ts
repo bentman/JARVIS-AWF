@@ -14,6 +14,13 @@ contextBridge.exposeInMainWorld("awf", {
   llmServers: () => ipcRenderer.invoke(CHANNELS.llmServers),
   llmModels: () => ipcRenderer.invoke(CHANNELS.llmModels),
   llmServeStatus: () => ipcRenderer.invoke(CHANNELS.llmServeStatus),
+  registryValidate: (path: string, kind?: string) => ipcRenderer.invoke(CHANNELS.registryValidate, path, kind),
+  registryPublish: (path: string, kind: string) => ipcRenderer.invoke(CHANNELS.registryPublish, path, kind),
+  registryReindex: () => ipcRenderer.invoke(CHANNELS.registryReindex),
+  registryRetire: (kind: string, name: string, version: string) =>
+    ipcRenderer.invoke(CHANNELS.registryRetire, kind, name, version),
+  registryTrust: (kind: string, name: string, version: string, status: string) =>
+    ipcRenderer.invoke(CHANNELS.registryTrust, kind, name, version, status),
   runStatus: (runId: string) => ipcRenderer.invoke(CHANNELS.runStatus, runId),
   runList: () => ipcRenderer.invoke(CHANNELS.runList),
   approvalList: () => ipcRenderer.invoke(CHANNELS.approvalList),

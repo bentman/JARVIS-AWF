@@ -13,6 +13,11 @@ export const CHANNELS = {
   llmServers: "awf:llmServers",
   llmModels: "awf:llmModels",
   llmServeStatus: "awf:llmServeStatus",
+  registryValidate: "awf:registryValidate",
+  registryPublish: "awf:registryPublish",
+  registryReindex: "awf:registryReindex",
+  registryRetire: "awf:registryRetire",
+  registryTrust: "awf:registryTrust",
   runStatus: "awf:runStatus",
   runList: "awf:runList",
   approvalList: "awf:approvalList",
@@ -46,6 +51,19 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, client: ProtocolClient
   ipcMain.handle(CHANNELS.llmServers, () => client.llmServers());
   ipcMain.handle(CHANNELS.llmModels, () => client.llmModels());
   ipcMain.handle(CHANNELS.llmServeStatus, () => client.llmServeStatus());
+  ipcMain.handle(CHANNELS.registryValidate, (_event, path, kind) =>
+    client.registryValidate(path as string, kind as string | undefined),
+  );
+  ipcMain.handle(CHANNELS.registryPublish, (_event, path, kind) =>
+    client.registryPublish(path as string, kind as string),
+  );
+  ipcMain.handle(CHANNELS.registryReindex, () => client.registryReindex());
+  ipcMain.handle(CHANNELS.registryRetire, (_event, kind, name, version) =>
+    client.registryRetire(kind as string, name as string, version as string),
+  );
+  ipcMain.handle(CHANNELS.registryTrust, (_event, kind, name, version, status) =>
+    client.registryTrust(kind as string, name as string, version as string, status as string),
+  );
   ipcMain.handle(CHANNELS.runStatus, (_event, runId) => client.runStatus(runId as string));
   ipcMain.handle(CHANNELS.runList, () => client.runList());
   ipcMain.handle(CHANNELS.approvalList, () => client.approvalList());

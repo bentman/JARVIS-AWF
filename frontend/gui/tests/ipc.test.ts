@@ -19,6 +19,11 @@ function makeFakeClient() {
     llmServers: vi.fn().mockResolvedValue({ default_server: "llama-server" }),
     llmModels: vi.fn().mockResolvedValue({ local_models: [] }),
     llmServeStatus: vi.fn().mockResolvedValue({ state: "stopped" }),
+    registryValidate: vi.fn().mockResolvedValue({ valid: true }),
+    registryPublish: vi.fn().mockResolvedValue({ published: true }),
+    registryReindex: vi.fn().mockResolvedValue({ indexed: true }),
+    registryRetire: vi.fn().mockResolvedValue({ retired: true }),
+    registryTrust: vi.fn().mockResolvedValue({ trust_status: "trusted" }),
     runStatus: vi.fn().mockResolvedValue({ run_id: "run-1" }),
     runList: vi.fn().mockResolvedValue([]),
     approvalList: vi.fn().mockResolvedValue([]),
@@ -70,6 +75,21 @@ describe("registerIpcHandlers", () => {
 
     await handlers.get(CHANNELS.llmServeStatus)?.({});
     expect(client.llmServeStatus).toHaveBeenCalled();
+
+    await handlers.get(CHANNELS.registryValidate)?.({}, "/tmp/demo.yaml", "workflows");
+    expect(client.registryValidate).toHaveBeenCalledWith("/tmp/demo.yaml", "workflows");
+
+    await handlers.get(CHANNELS.registryPublish)?.({}, "/tmp/demo.yaml", "workflows");
+    expect(client.registryPublish).toHaveBeenCalledWith("/tmp/demo.yaml", "workflows");
+
+    await handlers.get(CHANNELS.registryReindex)?.({});
+    expect(client.registryReindex).toHaveBeenCalled();
+
+    await handlers.get(CHANNELS.registryRetire)?.({}, "workflows", "demo", "1.0.0");
+    expect(client.registryRetire).toHaveBeenCalledWith("workflows", "demo", "1.0.0");
+
+    await handlers.get(CHANNELS.registryTrust)?.({}, "workflows", "demo", "1.0.0", "trusted");
+    expect(client.registryTrust).toHaveBeenCalledWith("workflows", "demo", "1.0.0", "trusted");
 
     await handlers.get(CHANNELS.runStatus)?.({}, "run-1");
     expect(client.runStatus).toHaveBeenCalledWith("run-1");

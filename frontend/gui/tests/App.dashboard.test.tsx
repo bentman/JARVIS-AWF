@@ -65,6 +65,22 @@ describe("App dashboard wiring (runList/approvalList IPC channels)", () => {
     expect(screen.queryByRole("region", { name: "Dashboard" })).toBeNull();
   });
 
+  it("renders registry actions when registry handlers are supplied", () => {
+    render(
+      <App
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+        onRegistryValidate={vi.fn()}
+        onRegistryPublish={vi.fn()}
+        onRegistryReindex={vi.fn()}
+        onRegistryRetire={vi.fn()}
+        onRegistryTrust={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "Registry actions" })).toBeTruthy();
+  });
+
   it("uses control summary as the dashboard source when available", async () => {
     const onControlSummary = vi.fn().mockResolvedValue({
       runs: [{ run_id: "run-1", workflow_ref: "demo@1.0.0", status: "SUCCEEDED", created_at: "t", updated_at: "t" }],

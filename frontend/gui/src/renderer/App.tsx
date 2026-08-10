@@ -10,6 +10,7 @@ import {
 } from "./Dashboard.js";
 import { MemoryPanel, type MemorySearchResult } from "./MemoryPanel.js";
 import { ProposalReview, type ProposalSummary } from "./ProposalReview.js";
+import { RegistryActions } from "./RegistryActions.js";
 import { Transcript, type TranscriptEntry } from "./Transcript.js";
 import { VoiceActivation, type VoiceSessionResult, type VoiceSubmitTextResult } from "./VoiceActivation.js";
 import type { RiskClass } from "../voiceApproval.js";
@@ -50,6 +51,11 @@ export interface AppProps extends VoiceSessionFns {
   onImprovementList?: () => Promise<ImprovementSummary[]>;
   onControlSummary?: () => Promise<ControlSummary>;
   onControlRunDetail?: (runId: string) => Promise<ControlRunDetail>;
+  onRegistryValidate?: (path: string, kind?: string) => Promise<unknown>;
+  onRegistryPublish?: (path: string, kind: string) => Promise<unknown>;
+  onRegistryReindex?: () => Promise<unknown>;
+  onRegistryRetire?: (kind: string, name: string, version: string) => Promise<unknown>;
+  onRegistryTrust?: (kind: string, name: string, version: string, status: string) => Promise<unknown>;
   onProposalGet?: (proposalId: string) => Promise<ProposalSummary>;
   onProposalPublish?: (proposalId: string, digest: string) => Promise<unknown>;
   onProposalReject?: (proposalId: string, reason?: string) => Promise<unknown>;
@@ -88,6 +94,11 @@ export function App({
   onImprovementList,
   onControlSummary,
   onControlRunDetail,
+  onRegistryValidate,
+  onRegistryPublish,
+  onRegistryReindex,
+  onRegistryRetire,
+  onRegistryTrust,
   onProposalGet,
   onProposalPublish,
   onProposalReject,
@@ -213,6 +224,15 @@ export function App({
           onMemoryBlock={onMemoryBlock}
           onMemoryPublish={onMemoryPublish}
           onMemoryReject={onMemoryReject}
+        />
+      )}
+      {onRegistryValidate && onRegistryPublish && onRegistryReindex && onRegistryRetire && onRegistryTrust && (
+        <RegistryActions
+          onRegistryValidate={onRegistryValidate}
+          onRegistryPublish={onRegistryPublish}
+          onRegistryReindex={onRegistryReindex}
+          onRegistryRetire={onRegistryRetire}
+          onRegistryTrust={onRegistryTrust}
         />
       )}
       <Transcript entries={entries} />

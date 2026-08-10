@@ -25,10 +25,11 @@ The current codebase has the foundation:
   core callback, and TTS.
 - `backend/src/awf/speech/{wake_openwakeword,vad_silero,stt_whisper,tts_kokoro}.py`
   provide local speech adapters behind simple function contracts.
-- `frontend/gui/src/main/voicePipeline.ts` spawns `awf-speech round-trip` as a
-  subprocess.
-- `frontend/gui/src/renderer/VoiceActivation.tsx` is push-to-talk-by-file, not
-  live microphone capture.
+- `frontend/gui/src/main/voicePipeline.ts` spawns `awf-speech round-trip` and
+  TTS synthesis as subprocesses.
+- `frontend/gui/src/renderer/VoiceActivation.tsx` owns push-to-talk controls,
+  browser microphone acquisition/release, final-text submission, and
+  interruption controls.
 - `frontend/gui/src/renderer/App.tsx` appends recognized command text and
   response text into the visible transcript.
 - `backend/src/awf/cli/core_ops.py` already enforces that voice alone cannot
@@ -36,9 +37,10 @@ The current codebase has the foundation:
 - ADR-0020 added active sessions; `backend/src/awf/memory/sessions.py` can
   persist bounded turn entries.
 
-The missing shape is a live voice session loop. The system needs a durable,
-observable bridge from GUI audio capture to the same core protocol used by
-text surfaces. The bridge must not become a second command system.
+The v1 missing shape is the governed voice session bridge. The system needs a
+durable, observable path from GUI voice controls to the same core protocol used
+by text surfaces. Continuous audio streaming, partial STT streaming, and
+streaming TTS remain later transport work.
 
 Provider and community practice supports this shape:
 
@@ -73,10 +75,9 @@ audio and play audio, but recognized text is submitted through JSON-RPC/core
 operations. The GUI does not read or mutate durable state directly and does
 not implement a separate approval or workflow path.
 
-**The live voice loop is frame-oriented.** Add a small internal voice frame
-contract with explicit frame types:
+**The voice session contract is frame-oriented.** Add a small internal voice
+frame contract with explicit frame types:
 
-- `audio.input`
 - `wake.detected`
 - `vad.speech_started`
 - `vad.speech_stopped`
@@ -92,8 +93,9 @@ contract with explicit frame types:
 - `session.closed`
 
 System frames (`interruption`, errors, session lifecycle, speaking-state
-changes) must preempt queued output. Audio/text data frames remain ordered
-within a turn.
+changes) must preempt queued output. In v1 the GUI emits lifecycle, VAD,
+interruption, and final-text submission events; direct audio input frames and
+partial STT streaming are not implemented.
 
 **Turn state is explicit.** A voice session has a deterministic state machine:
 
@@ -108,15 +110,15 @@ what was cut off. Errors move the session to `recovering`, then back to either
 persisted before core submission. Every spoken response has visible text in the
 same transcript. Voice-only capabilities are not introduced.
 
-**Barge-in is local and deterministic.** VAD speech-start while TTS is playing
-is the first implementation trigger for interruption. The implementation must
-cancel queued audio chunks, stop playback, and start a new user turn without
-approving or committing any pending action.
+**Barge-in is an explicit core event in v1.** The implemented path exposes an
+interrupt control that records the interruption and returns the voice session
+to listening. Automatic VAD-detected interruption during playback is reserved
+for the streaming audio transport.
 
-**Streaming TTS is the first streaming output.** The existing core does not yet
-stream agent text, so ADR-0023 starts by chunking/verbalizing available core
-text as it arrives from protocol responses. Later resident-mind streaming can
-feed the same `core.output_text` frame without changing the GUI contract.
+**TTS remains subprocess synthesis in v1.** The GUI speaks the completed core
+response by calling the existing Kokoro-backed synthesis command. Chunked TTS
+and streaming assistant output can later feed the same `core.output_text` and
+`tts.*` frame contract.
 
 **Conversation memory uses active sessions.** A live voice session maps to an
 ADR-0020 active session. Final user utterances, assistant text, interruption
@@ -163,12 +165,10 @@ curatable and avoids transcript growth becoming an unbounded audio log.
 - Extend `backend/src/awf/speech/pipeline.py` rather than replacing the current
   round-trip function. The existing function remains the deterministic
   file-based harness.
-- Add streaming-capable adapter methods where the current functions are
-  blocking:
-  - VAD: accept PCM chunks and emit speech-start/speech-stop frames.
-  - STT: accept completed utterance buffers first; partial STT may be added
-    after the state machine exists.
-  - TTS: split response text into speakable chunks and emit audio-chunk frames.
+- Keep the existing blocking speech adapters for deterministic round-trip and
+  synthesis commands. The frame contract accepts future streaming frames, but
+  v1 does not stream PCM chunks, partial transcription, or TTS audio chunks
+  through the GUI protocol.
 - Add core operations for voice sessions in `backend/src/awf/cli/core_ops.py`:
   - `op_voice_session_start`
   - `op_voice_session_event`
@@ -190,26 +190,26 @@ curatable and avoids transcript growth becoming an unbounded audio log.
 
 ### AWF-GUI main/preload
 
-- Replace the primary GUI voice path in `frontend/gui/src/main/voicePipeline.ts`
-  with a live-session bridge:
-  - owns microphone/playback process boundaries;
-  - forwards voice frames to the renderer for display;
+- Add a voice-session bridge in `frontend/gui/src/main/voicePipeline.ts`:
+  - keeps the deterministic file round-trip subprocess path;
+  - keeps completed-response TTS synthesis behind the `awf-speech` subprocess;
   - forwards final text and lifecycle events to JSON-RPC;
-  - exposes explicit `start`, `stop`, and `interrupt` IPC channels.
+  - exposes explicit `start`, `stop`, `push-to-talk`, `submit`, and
+    `interrupt` IPC channels.
 - Keep the current subprocess round-trip IPC for test/debug use.
 - Extend `frontend/gui/src/preload/preload.ts` with narrow voice-session IPC
   methods only.
 
 ### AWF-GUI renderer
 
-- Replace `VoiceActivation.tsx` file inputs as the primary control with live
-  controls:
+- Replace `VoiceActivation.tsx` file inputs as the primary operator control
+  with session controls:
   - push-to-talk start/stop;
   - optional wake-word enablement;
   - visible state: idle/listening/transcribing/speaking/recovering;
   - interruption indicator.
-- Extend `Transcript.tsx` to render partial STT separately from committed final
-  turns.
+- Display final submitted voice text and spoken response text in the existing
+  transcript. Partial STT display is a future streaming-transport feature.
 - Keep `ApprovalConfirmation.tsx` as the only R2+ confirmation path.
 - Resolve displayed/speaking voice profiles from protocol data instead of
   hardcoded renderer constants.
@@ -252,7 +252,7 @@ the existing command/run surface. Initial behavior:
 The operation must not execute a frontend-only command and must not bypass
 Capability Guard, Gates, or approvals.
 
-### Task C — Live GUI session bridge
+### Task C — GUI session bridge
 
 Add main-process session orchestration with explicit IPC:
 
@@ -261,21 +261,21 @@ Add main-process session orchestration with explicit IPC:
 - `awf:voicePushToTalkStart`
 - `awf:voicePushToTalkStop`
 - `awf:voiceInterrupt`
-- `awf:voiceFrame`
+- `awf:voiceSubmitText`
+- `awf:voiceSpeakText`
 
-The renderer receives frames for UI state and transcript display. The main
-process owns audio capture/playback and the Python speech session process.
+The renderer receives state changes for UI display. Browser microphone access
+is used for push-to-talk permission and capture lifecycle; the implemented
+submission path uses final text rather than streamed audio frames.
 
-### Task D — Barge-in and recovery
+### Task D — Interruption and recovery
 
-When VAD detects speech while TTS playback is active:
+For the v1 explicit interrupt action:
 
 1. emit `interruption`;
-2. stop playback immediately;
-3. discard queued TTS chunks for the interrupted assistant turn;
-4. append an interruption marker to the active session;
-5. transition to `listening`;
-6. display the partial assistant text as interrupted.
+2. append an interruption marker to the active session;
+3. transition to `listening`;
+4. keep approvals and pending actions unchanged.
 
 If STT, TTS, or model readiness fails, the session transitions to `recovering`
 and reports the failure in the visible transcript/status. Recovery returns to
@@ -283,10 +283,9 @@ push-to-talk-ready `idle` unless wake listening is enabled and ready.
 
 ### Task E — Voice profile and role speech
 
-Expose a core operation that resolves a role or agent ref to a Voice Profile.
-Use existing `voice-profiles` registry loading and Agent Manifest `voice`
-fields. The GUI uses resolved `voice_id`, speed, privacy, and max utterance
-limits when speaking.
+Resolve the selected voice profile at the core boundary. The GUI may pass a
+requested profile ref, but the core returns the effective `voice_profile_ref`
+and `voice_id` used for speaking.
 
 ### Task F — Validation
 
@@ -294,7 +293,7 @@ Backend focused tests:
 
 - state machine accepts the normal turn sequence;
 - impossible transitions fail without durable success;
-- interruption during speaking cancels queued TTS and returns to listening;
+- interruption records a session event and returns to listening;
 - final STT text is appended to an active session before core submission;
 - assistant text is appended with the selected voice profile ref;
 - R2+ voice approval stays pending and requires on-screen confirmation;
@@ -302,10 +301,10 @@ Backend focused tests:
 
 Frontend focused tests:
 
-- live voice controls render state transitions from frames;
-- partial STT is visible but not committed as final transcript;
-- final STT appears before submission;
-- interruption marks the assistant turn as interrupted and stops playback;
+- session controls render lifecycle state transitions;
+- browser microphone tracks are acquired and released by push-to-talk controls;
+- final submitted text appears in the transcript with the core response;
+- interruption calls the core interruption event path;
 - R2+ approval cannot be triggered by voice-only events;
 - renderer reaches voice only through preload IPC.
 
@@ -323,10 +322,12 @@ Live validation:
 
 - Run model readiness with `awf-speech models verify`.
 - Run the existing file round-trip with pinned fixture audio.
-- Run AWF-GUI live push-to-talk on a host with microphone and speaker access.
-- Confirm streamed/segmented TTS begins before the whole session is closed.
-- Confirm speaking during playback interrupts the response and starts a new
-  turn.
+- Run AWF-GUI push-to-talk controls on a host with microphone and speaker
+  access.
+- Confirm browser microphone acquisition/release works on the target desktop.
+- Confirm response synthesis plays on the target desktop.
+- Confirm interruption returns the session to listening without approving or
+  committing a pending action.
 - Confirm an R2+ approval attempted by voice remains pending until an on-screen
   click or keypress confirms the exact digest.
 
@@ -342,8 +343,9 @@ Implemented on 2026-08-09.
 - Added core and JSON-RPC voice session methods for start, event, close, and
   default-workflow text submission.
 - Added TypeScript protocol methods and voice-channel approval params.
-- Replaced the GUI's primary voice control with live push-to-talk session
-  controls and kept file round-trip as a debug/test path.
+- Replaced the GUI's primary voice control with push-to-talk session controls,
+  browser microphone acquisition/release, and final-text submission; kept file
+  round-trip as a debug/test path.
 - Added a response-synthesis command and GUI hook that reuse the existing
   Kokoro TTS path for spoken replies.
 - Preserved the core R2+ approval rule: voice-only approval remains pending
@@ -351,16 +353,16 @@ Implemented on 2026-08-09.
 
 ## Acceptance criteria
 
-- AWF-GUI supports a live push-to-talk voice session without file-path inputs
+- AWF-GUI supports push-to-talk voice session controls without file-path inputs
   as the primary interaction.
 - Wake-word mode remains optional and disabled until the operator has acquired
   the wake model and enabled listening.
-- Final recognized speech is visible and persisted before it is submitted to
-  the core.
+- Final submitted voice text is visible and persisted before it is submitted
+  to the core.
 - Spoken responses have visible transcript text and use resolved voice
   profiles.
-- Barge-in stops active playback, records an interruption, and returns to a
-  clear listening state.
+- Interruption records an event and returns to a clear listening state without
+  granting approvals.
 - Voice and text submit through the same governed core path.
 - R2+ approvals cannot be granted by voice alone.
 - File-based round-trip validation remains available for deterministic tests.

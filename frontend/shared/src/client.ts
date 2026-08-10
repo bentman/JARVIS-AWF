@@ -165,12 +165,24 @@ export class ProtocolClient {
     return this.call("awf/registry.get", { kind, name, version });
   }
 
-  registryValidate(path: string): Promise<Record<string, unknown>> {
-    return this.call("awf/registry.validate", { path });
+  registryValidate(path: string, kind?: string): Promise<Record<string, unknown>> {
+    return this.call("awf/registry.validate", kind ? { path, kind } : { path });
   }
 
   registryPublish(path: string, kind: string): Promise<Record<string, unknown>> {
     return this.call("awf/registry.publish", { path, kind });
+  }
+
+  registryReindex(): Promise<Record<string, unknown>> {
+    return this.call("awf/registry.reindex", {});
+  }
+
+  registryRetire(kind: string, name: string, version: string): Promise<Record<string, unknown>> {
+    return this.call("awf/registry.retire", { kind, name, version });
+  }
+
+  registryTrust(kind: string, name: string, version: string, status: string): Promise<Record<string, unknown>> {
+    return this.call("awf/registry.trust", { kind, name, version, status });
   }
 
   workflowAuthorDraft(options: {

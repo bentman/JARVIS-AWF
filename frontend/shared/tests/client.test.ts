@@ -100,8 +100,30 @@ describe("ProtocolClient", () => {
       version: "1.0.0",
     });
 
-    void client.registryPublish("/tmp/demo.yaml", "workflows");
+    void client.registryValidate("/tmp/demo.yaml", "workflows");
+    expect(transport.lastRequest().method).toBe("awf/registry.validate");
     expect(transport.lastRequest().params).toEqual({ path: "/tmp/demo.yaml", kind: "workflows" });
+
+    void client.registryPublish("/tmp/demo.yaml", "workflows");
+    expect(transport.lastRequest().method).toBe("awf/registry.publish");
+    expect(transport.lastRequest().params).toEqual({ path: "/tmp/demo.yaml", kind: "workflows" });
+
+    void client.registryReindex();
+    expect(transport.lastRequest().method).toBe("awf/registry.reindex");
+    expect(transport.lastRequest().params).toEqual({});
+
+    void client.registryRetire("workflows", "demo", "1.0.0");
+    expect(transport.lastRequest().method).toBe("awf/registry.retire");
+    expect(transport.lastRequest().params).toEqual({ kind: "workflows", name: "demo", version: "1.0.0" });
+
+    void client.registryTrust("workflows", "demo", "1.0.0", "trusted");
+    expect(transport.lastRequest().method).toBe("awf/registry.trust");
+    expect(transport.lastRequest().params).toEqual({
+      kind: "workflows",
+      name: "demo",
+      version: "1.0.0",
+      status: "trusted",
+    });
   });
 
   it("builds correct params for proposal methods", () => {

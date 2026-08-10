@@ -20,6 +20,14 @@ contextBridge.exposeInMainWorld("awf", {
     ipcRenderer.invoke(CHANNELS.proposalPublish, proposalId, digest),
   proposalReject: (proposalId: string, reason?: string) =>
     ipcRenderer.invoke(CHANNELS.proposalReject, proposalId, reason),
+  improvementList: () => ipcRenderer.invoke(CHANNELS.improvementList),
+  improvementGet: (improvementId: string) => ipcRenderer.invoke(CHANNELS.improvementGet, improvementId),
+  improvementRequestMerge: (improvementId: string) =>
+    ipcRenderer.invoke(CHANNELS.improvementRequestMerge, improvementId),
+  improvementMerge: (improvementId: string, approvalId: string) =>
+    ipcRenderer.invoke(CHANNELS.improvementMerge, improvementId, approvalId),
+  improvementReject: (improvementId: string, reason?: string) =>
+    ipcRenderer.invoke(CHANNELS.improvementReject, improvementId, reason),
   memorySearch: (query: string, profile?: string) => ipcRenderer.invoke(CHANNELS.memorySearch, query, profile),
   memoryGet: (ref: string) => ipcRenderer.invoke(CHANNELS.memoryGet, ref),
   memoryPropose: (path: string, summary?: string) => ipcRenderer.invoke(CHANNELS.memoryPropose, path, summary),

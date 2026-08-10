@@ -180,6 +180,70 @@ def test_proposal_publish_command_dispatches_to_core_ops(tmp_path, monkeypatch):
     assert captured == {"proposal_id": "p1", "digest": "abc"}
 
 
+def test_improvement_commands_dispatch_to_core_ops(tmp_path, monkeypatch):
+    repo_root = make_repo(tmp_path)
+    captured = {}
+
+    monkeypatch.setattr(cli_main.ops, "op_improvement_list", lambda conn, *, status=None: [{"status": status}])
+    exit_code = cli_main.run(["improvement", "list", "--status", "ready_for_review"], repo_root)
+    assert exit_code == 0
+
+    def fake_prepare(repo_root, conn, *, run_id, summary):
+        captured["prepare"] = {"run_id": run_id, "summary": summary}
+        return {"improvement_id": "imp-1"}
+
+    monkeypatch.setattr(cli_main.ops, "op_improvement_prepare", fake_prepare)
+    exit_code = cli_main.run(["improvement", "prepare", "run-1", "--summary", "focused"], repo_root)
+    assert exit_code == 0
+    assert captured["prepare"] == {"run_id": "run-1", "summary": "focused"}
+
+    def fake_ready(repo_root, conn, *, improvement_id, verdict_artifact_id, validation_artifact_ids):
+        captured["ready"] = {
+            "improvement_id": improvement_id,
+            "verdict_artifact_id": verdict_artifact_id,
+            "validation_artifact_ids": validation_artifact_ids,
+        }
+        return {"status": "ready_for_review"}
+
+    monkeypatch.setattr(cli_main.ops, "op_improvement_mark_ready", fake_ready)
+    exit_code = cli_main.run(
+        [
+            "improvement",
+            "mark-ready",
+            "imp-1",
+            "--verdict-artifact-id",
+            "verdict-1",
+            "--validation-artifact-id",
+            "test-1",
+        ],
+        repo_root,
+    )
+    assert exit_code == 0
+    assert captured["ready"] == {
+        "improvement_id": "imp-1",
+        "verdict_artifact_id": "verdict-1",
+        "validation_artifact_ids": ["test-1"],
+    }
+
+    monkeypatch.setattr(
+        cli_main.ops,
+        "op_improvement_request_merge",
+        lambda repo_root, conn, *, improvement_id: captured.setdefault("request", improvement_id) or {},
+    )
+    exit_code = cli_main.run(["improvement", "request-merge", "imp-1"], repo_root)
+    assert exit_code == 0
+    assert captured["request"] == "imp-1"
+
+    def fake_merge(repo_root, conn, *, improvement_id, approval_id):
+        captured["merge"] = {"improvement_id": improvement_id, "approval_id": approval_id}
+        return {"status": "merged"}
+
+    monkeypatch.setattr(cli_main.ops, "op_improvement_merge", fake_merge)
+    exit_code = cli_main.run(["improvement", "merge", "imp-1", "ap-1"], repo_root)
+    assert exit_code == 0
+    assert captured["merge"] == {"improvement_id": "imp-1", "approval_id": "ap-1"}
+
+
 def test_registry_reindex_command_dispatches_to_core_ops(tmp_path, capsys, monkeypatch):
     repo_root = make_repo(tmp_path)
     monkeypatch.setattr(

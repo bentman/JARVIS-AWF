@@ -1,7 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.js";
-import type { ApprovalSummary, RunSummary } from "./Dashboard.js";
+import type { ApprovalSummary, ImprovementSummary, RunSummary } from "./Dashboard.js";
 import type { MemorySearchResult } from "./MemoryPanel.js";
 import type { ProposalSummary } from "./ProposalReview.js";
 
@@ -27,6 +27,11 @@ declare global {
       proposalGet: (proposalId: string) => Promise<ProposalSummary>;
       proposalPublish: (proposalId: string, digest: string) => Promise<unknown>;
       proposalReject: (proposalId: string, reason?: string) => Promise<unknown>;
+      improvementList: () => Promise<ImprovementSummary[]>;
+      improvementGet: (improvementId: string) => Promise<unknown>;
+      improvementRequestMerge: (improvementId: string) => Promise<unknown>;
+      improvementMerge: (improvementId: string, approvalId: string) => Promise<unknown>;
+      improvementReject: (improvementId: string, reason?: string) => Promise<unknown>;
       memorySearch: (query: string, profile?: string) => Promise<MemorySearchResult>;
       memoryGet: (ref: string) => Promise<unknown>;
       memoryPropose: (path: string, summary?: string) => Promise<unknown>;
@@ -54,6 +59,7 @@ if (container) {
         window.awf.voiceRoundTrip(wakeAudioPath, commandAudioPath, voiceId, "/tmp/awf-gui-response.wav"),
       onRunList: () => window.awf.runList(),
       onApprovalList: () => window.awf.approvalList(),
+      onImprovementList: () => window.awf.improvementList(),
       onProposalGet: (proposalId: string) => window.awf.proposalGet(proposalId),
       onProposalPublish: (proposalId: string, digest: string) => window.awf.proposalPublish(proposalId, digest),
       onProposalReject: (proposalId: string, reason?: string) => window.awf.proposalReject(proposalId, reason),

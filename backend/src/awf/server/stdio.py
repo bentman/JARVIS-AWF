@@ -32,6 +32,13 @@ METHOD_NAMES = (
     "awf/approval.approve",
     "awf/approval.reject",
     "awf/machine.actionPreview",
+    "awf/improvement.list",
+    "awf/improvement.get",
+    "awf/improvement.prepare",
+    "awf/improvement.markReady",
+    "awf/improvement.requestMerge",
+    "awf/improvement.merge",
+    "awf/improvement.reject",
     "awf/artifact.list",
     "awf/artifact.read",
     "awf/registry.list",
@@ -99,6 +106,30 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
         return ops.op_approval_reject(conn, approval_id=params["approvalId"], reason=params.get("reason", ""))
     if method == "awf/machine.actionPreview":
         return ops.op_machine_action_preview(conn, approval_id=params["approvalId"])
+    if method == "awf/improvement.list":
+        return ops.op_improvement_list(conn, status=params.get("status"))
+    if method == "awf/improvement.get":
+        return ops.op_improvement_get(conn, improvement_id=params["improvementId"])
+    if method == "awf/improvement.prepare":
+        return ops.op_improvement_prepare(repo_root, conn, run_id=params["runId"], summary=params.get("summary"))
+    if method == "awf/improvement.markReady":
+        return ops.op_improvement_mark_ready(
+            repo_root,
+            conn,
+            improvement_id=params["improvementId"],
+            verdict_artifact_id=params["verdictArtifactId"],
+            validation_artifact_ids=params.get("validationArtifactIds", []),
+        )
+    if method == "awf/improvement.requestMerge":
+        return ops.op_improvement_request_merge(repo_root, conn, improvement_id=params["improvementId"])
+    if method == "awf/improvement.merge":
+        return ops.op_improvement_merge(
+            repo_root, conn, improvement_id=params["improvementId"], approval_id=params["approvalId"]
+        )
+    if method == "awf/improvement.reject":
+        return ops.op_improvement_reject(
+            repo_root, conn, improvement_id=params["improvementId"], reason=params.get("reason")
+        )
     if method == "awf/artifact.list":
         return ops.op_artifact_list(conn, run_id=params["runId"])
     if method == "awf/artifact.read":

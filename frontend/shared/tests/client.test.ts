@@ -121,6 +121,36 @@ describe("ProtocolClient", () => {
     expect(transport.lastRequest().params).toEqual({ proposalId: "p1", reason: "not useful" });
   });
 
+  it("builds correct params for improvement methods", () => {
+    const { transport, client } = setup();
+
+    void client.improvementList("ready_for_review");
+    expect(transport.lastRequest().method).toBe("awf/improvement.list");
+    expect(transport.lastRequest().params).toEqual({ status: "ready_for_review" });
+
+    void client.improvementGet("imp-1");
+    expect(transport.lastRequest().params).toEqual({ improvementId: "imp-1" });
+
+    void client.improvementPrepare("run-1", "summary");
+    expect(transport.lastRequest().params).toEqual({ runId: "run-1", summary: "summary" });
+
+    void client.improvementMarkReady("imp-1", "verdict-1", ["test-1"]);
+    expect(transport.lastRequest().params).toEqual({
+      improvementId: "imp-1",
+      verdictArtifactId: "verdict-1",
+      validationArtifactIds: ["test-1"],
+    });
+
+    void client.improvementRequestMerge("imp-1");
+    expect(transport.lastRequest().params).toEqual({ improvementId: "imp-1" });
+
+    void client.improvementMerge("imp-1", "ap-1");
+    expect(transport.lastRequest().params).toEqual({ improvementId: "imp-1", approvalId: "ap-1" });
+
+    void client.improvementReject("imp-1", "not ready");
+    expect(transport.lastRequest().params).toEqual({ improvementId: "imp-1", reason: "not ready" });
+  });
+
   it("builds correct params for memory, session, and episodic methods", () => {
     const { transport, client } = setup();
 

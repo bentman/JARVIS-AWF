@@ -16,6 +16,11 @@ export const CHANNELS = {
   proposalGet: "awf:proposalGet",
   proposalPublish: "awf:proposalPublish",
   proposalReject: "awf:proposalReject",
+  improvementList: "awf:improvementList",
+  improvementGet: "awf:improvementGet",
+  improvementRequestMerge: "awf:improvementRequestMerge",
+  improvementMerge: "awf:improvementMerge",
+  improvementReject: "awf:improvementReject",
   memorySearch: "awf:memorySearch",
   memoryGet: "awf:memoryGet",
   memoryPropose: "awf:memoryPropose",
@@ -45,6 +50,19 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, client: ProtocolClient
   );
   ipcMain.handle(CHANNELS.proposalReject, (_event, proposalId, reason) =>
     client.proposalReject(proposalId as string, reason as string | undefined),
+  );
+  ipcMain.handle(CHANNELS.improvementList, () => client.improvementList());
+  ipcMain.handle(CHANNELS.improvementGet, (_event, improvementId) =>
+    client.improvementGet(improvementId as string),
+  );
+  ipcMain.handle(CHANNELS.improvementRequestMerge, (_event, improvementId) =>
+    client.improvementRequestMerge(improvementId as string),
+  );
+  ipcMain.handle(CHANNELS.improvementMerge, (_event, improvementId, approvalId) =>
+    client.improvementMerge(improvementId as string, approvalId as string),
+  );
+  ipcMain.handle(CHANNELS.improvementReject, (_event, improvementId, reason) =>
+    client.improvementReject(improvementId as string, reason as string | undefined),
   );
   ipcMain.handle(CHANNELS.memorySearch, (_event, query, profile) =>
     client.memorySearch(query as string, (profile as string | undefined) ?? "default@1.0.0"),

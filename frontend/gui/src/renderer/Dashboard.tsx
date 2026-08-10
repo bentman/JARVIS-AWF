@@ -21,9 +21,23 @@ export interface ApprovalSummary {
   preview?: { machine_action?: Record<string, unknown>; machine_action_digest?: string } | null;
 }
 
+export interface ImprovementSummary {
+  improvement_id: string;
+  run_id: string;
+  status: string;
+  summary: string;
+  diff_digest: string;
+  patch_artifact_id: string;
+  verdict_artifact_id: string | null;
+  merge_commit: string | null;
+  approval?: { approval_id: string; status: string } | null;
+  changed_paths?: Record<string, unknown>[];
+}
+
 export interface DashboardProps {
   runs: RunSummary[];
   approvals: ApprovalSummary[];
+  improvements?: ImprovementSummary[];
   onRefresh: () => void;
   refreshing: boolean;
 }
@@ -32,7 +46,13 @@ export interface DashboardProps {
  * channels - `registerIpcHandlers` called the same `ProtocolClient` the CLI
  * uses - but nothing in the renderer ever called them. This is that
  * caller: real run/approval state, not dead plumbing. */
-export function Dashboard({ runs, approvals, onRefresh, refreshing }: DashboardProps): React.JSX.Element {
+export function Dashboard({
+  runs,
+  approvals,
+  improvements = [],
+  onRefresh,
+  refreshing,
+}: DashboardProps): React.JSX.Element {
   return (
     <div role="region" aria-label="Dashboard">
       <button onClick={onRefresh} disabled={refreshing}>
@@ -64,6 +84,24 @@ export function Dashboard({ runs, approvals, onRefresh, refreshing }: DashboardP
                 {approval.preview?.machine_action && (
                   <pre>{JSON.stringify(approval.preview.machine_action, null, 2)}</pre>
                 )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <section aria-label="Improvement proposals">
+        <h2>Improvement proposals</h2>
+        {improvements.length === 0 ? (
+          <p>No improvement proposals.</p>
+        ) : (
+          <ul>
+            {improvements.map((proposal) => (
+              <li key={proposal.improvement_id}>
+                {proposal.summary} - {proposal.status} ({proposal.improvement_id})
+                <div>Diff: {proposal.diff_digest}</div>
+                <div>Patch artifact: {proposal.patch_artifact_id}</div>
+                {proposal.verdict_artifact_id && <div>Verdict: {proposal.verdict_artifact_id}</div>}
+                {proposal.approval && <div>Approval: {proposal.approval.approval_id} - {proposal.approval.status}</div>}
               </li>
             ))}
           </ul>

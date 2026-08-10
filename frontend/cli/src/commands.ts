@@ -15,6 +15,12 @@ export type CommandClient = Pick<
   | "approvalApprove"
   | "approvalReject"
   | "artifactList"
+  | "improvementList"
+  | "improvementGet"
+  | "improvementPrepare"
+  | "improvementRequestMerge"
+  | "improvementMerge"
+  | "improvementReject"
   | "secretListNames"
   | "registryList"
   | "workflowAuthorDraft"
@@ -53,6 +59,12 @@ export const HELP_TEXT = `
 /approve <id>                         Approve a pending approval
 /reject <id> <reason>                 Reject a pending approval
 /artifacts <run-id>                   List artifacts for a Run
+/improvements                         List Improvement Proposals
+/improvement <id>                     Show an Improvement Proposal
+/improvement-prepare <run-id>         Create/update an Improvement Proposal
+/improvement-request-merge <id>       Request merge approval
+/improvement-merge <id> <approval-id> Merge after approval
+/improvement-reject <id> <reason>     Reject an Improvement Proposal
 /author-workflow <objective>          Draft a Workflow proposal
 /proposal <id>                        Show a Workflow proposal
 /proposal-publish <id> <digest>       Publish a draft proposal
@@ -138,6 +150,29 @@ export async function dispatchCommand(
   if (name === "artifacts") {
     if (!args[0]) throw new CommandError("usage: /artifacts <run-id>");
     return { kind: "json", data: await client.artifactList(args[0]) };
+  }
+  if (name === "improvements") return { kind: "json", data: await client.improvementList() };
+  if (name === "improvement") {
+    if (!args[0]) throw new CommandError("usage: /improvement <id>");
+    return { kind: "json", data: await client.improvementGet(args[0]) };
+  }
+  if (name === "improvement-prepare") {
+    if (!args[0]) throw new CommandError("usage: /improvement-prepare <run-id>");
+    const [runId, ...summaryParts] = args;
+    return { kind: "json", data: await client.improvementPrepare(runId, summaryParts.join(" ") || undefined) };
+  }
+  if (name === "improvement-request-merge") {
+    if (!args[0]) throw new CommandError("usage: /improvement-request-merge <id>");
+    return { kind: "json", data: await client.improvementRequestMerge(args[0]) };
+  }
+  if (name === "improvement-merge") {
+    if (!args[0] || !args[1]) throw new CommandError("usage: /improvement-merge <id> <approval-id>");
+    return { kind: "json", data: await client.improvementMerge(args[0], args[1]) };
+  }
+  if (name === "improvement-reject") {
+    if (!args[0] || args.length < 2) throw new CommandError("usage: /improvement-reject <id> <reason>");
+    const [id, ...reasonParts] = args;
+    return { kind: "json", data: await client.improvementReject(id, reasonParts.join(" ")) };
   }
   if (name === "author-workflow") {
     if (args.length < 1) throw new CommandError("usage: /author-workflow <objective>");

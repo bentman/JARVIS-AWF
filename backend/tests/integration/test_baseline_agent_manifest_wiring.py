@@ -88,6 +88,32 @@ def test_agent_ref_supplies_adapter_role_and_instructions(tmp_path, conn):
     assert "add a feature" in captured["objective"]
 
 
+def test_agent_node_receives_workflow_input_and_renders_input_template(tmp_path, conn):
+    captured = {}
+
+    def fake_adapter(invocation: AgentInvocation) -> AgentResult:
+        captured["invocation"] = invocation
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    executor = make_agent_node_executor(
+        {"codex": fake_adapter},
+        tmp_path,
+        tmp_path,
+        workflow_input={"objective": "fix the regression", "ticket": "AWF-22"},
+    )
+    node = {
+        "id": "build",
+        "type": "agent",
+        "adapter": "codex",
+        "objective": "Implement: {{ input.objective }} ({{ input.ticket }})",
+    }
+
+    executor(conn, "run-1", "step-1", node)
+
+    assert captured["invocation"].objective == "[user/input, untrusted]\nImplement: fix the regression (AWF-22)"
+    assert captured["invocation"].inputs == {"objective": "fix the regression", "ticket": "AWF-22"}
+
+
 def test_agent_ref_persona_is_compiled_into_adapter_objective(tmp_path, conn):
     publish_persona(tmp_path, "narrator")
     publish_manifest(

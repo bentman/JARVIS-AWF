@@ -22,6 +22,11 @@ function makeFakeClient() {
     proposalGet: vi.fn().mockResolvedValue({ proposal_id: "p1" }),
     proposalPublish: vi.fn().mockResolvedValue({ status: "published" }),
     proposalReject: vi.fn().mockResolvedValue({ status: "rejected" }),
+    improvementList: vi.fn().mockResolvedValue([]),
+    improvementGet: vi.fn().mockResolvedValue({ improvement_id: "imp-1" }),
+    improvementRequestMerge: vi.fn().mockResolvedValue({ approval: { approval_id: "ap-1" } }),
+    improvementMerge: vi.fn().mockResolvedValue({ status: "merged" }),
+    improvementReject: vi.fn().mockResolvedValue({ status: "rejected" }),
     memorySearch: vi.fn().mockResolvedValue({ semantic: [], episodic: [] }),
     memoryGet: vi.fn().mockResolvedValue({ ref: "pref@1.0.0" }),
     memoryPropose: vi.fn().mockResolvedValue({ proposal_id: "p1" }),
@@ -64,6 +69,21 @@ describe("registerIpcHandlers", () => {
 
     await handlers.get(CHANNELS.proposalReject)?.({}, "p1", "not useful");
     expect(client.proposalReject).toHaveBeenCalledWith("p1", "not useful");
+
+    await handlers.get(CHANNELS.improvementList)?.({});
+    expect(client.improvementList).toHaveBeenCalled();
+
+    await handlers.get(CHANNELS.improvementGet)?.({}, "imp-1");
+    expect(client.improvementGet).toHaveBeenCalledWith("imp-1");
+
+    await handlers.get(CHANNELS.improvementRequestMerge)?.({}, "imp-1");
+    expect(client.improvementRequestMerge).toHaveBeenCalledWith("imp-1");
+
+    await handlers.get(CHANNELS.improvementMerge)?.({}, "imp-1", "ap-1");
+    expect(client.improvementMerge).toHaveBeenCalledWith("imp-1", "ap-1");
+
+    await handlers.get(CHANNELS.improvementReject)?.({}, "imp-1", "not ready");
+    expect(client.improvementReject).toHaveBeenCalledWith("imp-1", "not ready");
 
     await handlers.get(CHANNELS.memorySearch)?.({}, "targeted", "default@1.0.0");
     expect(client.memorySearch).toHaveBeenCalledWith("targeted", "default@1.0.0");

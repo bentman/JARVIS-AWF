@@ -50,6 +50,7 @@ A Step that raises is caught here at the Run level: the Run is marked
 exception propagate to the caller as an unhandled crash.
 """
 
+import re
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
@@ -76,10 +77,15 @@ EXECUTABLE_NODE_TYPES = ("activity", "agent", "gate", "handoff", "approval", "su
 # Node types that manage their own internal Step rows and should not get a
 # generic outer Step created for them by the engine.
 SELF_STEPPING_NODE_TYPES = ("handoff", "loop")
+_INPUT_TEMPLATE_RE = re.compile(r"\{\{\s*input\.(\w+)\s*\}\}")
 
 
 class WorkflowEngineError(RuntimeError):
     pass
+
+
+def _render_input_templates(value: str, workflow_input: dict) -> str:
+    return _INPUT_TEMPLATE_RE.sub(lambda match: str(workflow_input.get(match.group(1), "")), value)
 
 
 def _synthesized_capability_for_node(node: dict, adapter_name: str) -> CapabilityRecord:
@@ -117,7 +123,10 @@ def _resolve_agent_manifest(node: dict, repo_root: Path) -> AgentManifest | None
 
 
 def make_agent_node_executor(
-    adapter_registry: dict[str, AdapterFn], worktree_path: Path, repo_root: Path
+    adapter_registry: dict[str, AdapterFn],
+    worktree_path: Path,
+    repo_root: Path,
+    workflow_input: dict | None = None,
 ) -> NodeExecutor:
     def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
         manifest = _resolve_agent_manifest(node, repo_root)
@@ -125,9 +134,10 @@ def make_agent_node_executor(
         if not adapter_name:
             raise WorkflowEngineError(f"agent node '{node['id']}': no adapter - declare 'adapter' or 'agentRef'")
 
+        input_data = dict(workflow_input or {})
         invocation = AgentInvocation(
-            objective=node["objective"],
-            inputs={},
+            objective=_render_input_templates(node["objective"], input_data),
+            inputs=input_data,
             workspace_root=worktree_path,
             constraints=node.get("constraints", {}),
         )

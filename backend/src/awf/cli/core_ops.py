@@ -7,6 +7,7 @@ Capability Guard / durability / worktree-commit paths as the CLI.
 """
 
 import hashlib
+import json
 import shlex
 import shutil
 import sqlite3
@@ -27,6 +28,7 @@ from awf.engine.run import create_run
 from awf.envfile import get_env_value
 from awf.gates.gate_node import make_trifecta_gate_executor
 from awf.ids import uuid7
+from awf.improvement import proposals as improvement_proposals
 from awf.isolation.scratch import create_scratch_dir, remove_scratch_dir, scratch_path
 from awf.isolation.worktree import create_worktree, remove_worktree, worktree_path
 from awf.paths import artifacts_dir, env_path
@@ -168,7 +170,7 @@ def _make_run_child(worktree: Path, artifacts_root: Path, repo_root: Path):
 
         try:
             child_executors = _build_node_executors(
-                child_workflow, worktree, artifacts_root, repo_root, child_scratch_dir
+                child_workflow, worktree, artifacts_root, repo_root, child_scratch_dir, input_data
             )
             result = _run_workflow_safely(
                 conn, run_id=child_run_id, workflow=child_workflow, node_executors=child_executors
@@ -216,7 +218,12 @@ def _make_run_map_item(artifacts_root: Path, repo_root: Path):
             item_scratch_dir = create_scratch_dir(repo_root, child_run_id)
             try:
                 item_executors = _build_node_executors(
-                    child_workflow, item_worktree, artifacts_root, repo_root, item_scratch_dir
+                    child_workflow,
+                    item_worktree,
+                    artifacts_root,
+                    repo_root,
+                    item_scratch_dir,
+                    {"item": item, "index": index},
                 )
                 result = _run_workflow_safely(
                     item_conn, run_id=child_run_id, workflow=child_workflow, node_executors=item_executors
@@ -237,12 +244,17 @@ def _make_run_map_item(artifacts_root: Path, repo_root: Path):
 
 
 def _build_node_executors(
-    workflow, worktree: Path, artifacts_root: Path, repo_root: Path, run_scratch_dir: Path
+    workflow,
+    worktree: Path,
+    artifacts_root: Path,
+    repo_root: Path,
+    run_scratch_dir: Path,
+    workflow_input: dict | None = None,
 ) -> dict:
     run_child = _make_run_child(worktree, artifacts_root, repo_root)
     run_map_item = _make_run_map_item(artifacts_root, repo_root)
     executors = {
-        "agent": make_agent_node_executor(ADAPTER_REGISTRY, worktree, repo_root),
+        "agent": make_agent_node_executor(ADAPTER_REGISTRY, worktree, repo_root, workflow_input),
         "activity": make_activity_node_executor(repo_root=repo_root, worktree_path=worktree),
         "approval": make_approval_node_executor(),
         "subworkflow": make_subworkflow_node_executor(run_child),
@@ -283,11 +295,15 @@ def _resolve_workflow(repo_root: Path, workflow_ref: str, conn: sqlite3.Connecti
     return load_workflow(path)
 
 
-def _cleanup_run_workspace(repo_root: Path, run_id: str, result: dict) -> None:
+def _retain_worktree_for_improvement(workflow_ref: str, input_data: dict) -> bool:
+    return workflow_ref.startswith("self-improvement@") or input_data.get("retainWorktreeForImprovement") is True
+
+
+def _cleanup_run_workspace(repo_root: Path, run_id: str, result: dict, *, retain_worktree: bool = False) -> None:
     # Cache state is ephemeral by design (Section 7/10.4) - reclaim it once
     # a Run reaches a terminal state. FAILED keeps its worktree/scratch dir
     # around for post-mortem inspection; only SUCCEEDED is cleaned up here.
-    if result.get("status") == "SUCCEEDED":
+    if result.get("status") == "SUCCEEDED" and not retain_worktree:
         remove_worktree(repo_root, run_id)
         remove_scratch_dir(repo_root, run_id)
 
@@ -322,10 +338,17 @@ def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str
 
     worktree = create_worktree(repo_root, run_id)
     run_scratch_dir = create_scratch_dir(repo_root, run_id)
-    node_executors = _build_node_executors(workflow, worktree, artifacts_dir(repo_root), repo_root, run_scratch_dir)
+    node_executors = _build_node_executors(
+        workflow, worktree, artifacts_dir(repo_root), repo_root, run_scratch_dir, input_data
+    )
 
     result = _run_workflow_safely(conn, run_id=run_id, workflow=workflow, node_executors=node_executors)
-    _cleanup_run_workspace(repo_root, run_id, result)
+    _cleanup_run_workspace(
+        repo_root,
+        run_id,
+        result,
+        retain_worktree=_retain_worktree_for_improvement(workflow.ref, input_data),
+    )
     return {"run_id": run_id, **result}
 
 
@@ -348,12 +371,24 @@ def op_run_resume(repo_root: Path, conn: sqlite3.Connection) -> list[dict]:
     results = []
     for run_id in scan_incomplete_runs(conn):
         run_row = conn.execute("SELECT workflow_ref FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+        input_row = conn.execute("SELECT input_json FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+        try:
+            input_data = json.loads(input_row["input_json"]) if input_row is not None else {}
+        except json.JSONDecodeError:
+            input_data = {}
         workflow = _resolve_workflow(repo_root, run_row["workflow_ref"], conn=conn)
         worktree = worktree_path(repo_root, run_id)
         run_scratch_dir = scratch_path(repo_root, run_id)
-        node_executors = _build_node_executors(workflow, worktree, artifacts_dir(repo_root), repo_root, run_scratch_dir)
+        node_executors = _build_node_executors(
+            workflow, worktree, artifacts_dir(repo_root), repo_root, run_scratch_dir, input_data
+        )
         result = _run_workflow_safely(conn, run_id=run_id, workflow=workflow, node_executors=node_executors)
-        _cleanup_run_workspace(repo_root, run_id, result)
+        _cleanup_run_workspace(
+            repo_root,
+            run_id,
+            result,
+            retain_worktree=_retain_worktree_for_improvement(run_row["workflow_ref"], input_data),
+        )
         results.append({"run_id": run_id, **result})
     return results
 
@@ -472,6 +507,71 @@ def op_artifact_read(conn: sqlite3.Connection, *, artifact_id: str, artifacts_ro
         raise CoreOpError(f"no such artifact: {artifact_id}")
     content = (artifacts_root / row["relative_path"]).read_text()
     return {**dict(row), "content": content}
+
+
+def op_improvement_prepare(
+    repo_root: Path, conn: sqlite3.Connection, *, run_id: str, summary: str | None = None
+) -> dict:
+    try:
+        return improvement_proposals.prepare(repo_root, conn, run_id=run_id, summary=summary)
+    except improvement_proposals.ImprovementProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
+def op_improvement_get(conn: sqlite3.Connection, *, improvement_id: str) -> dict:
+    try:
+        return improvement_proposals.get(conn, improvement_id=improvement_id)
+    except improvement_proposals.ImprovementProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
+def op_improvement_list(conn: sqlite3.Connection, *, status: str | None = None) -> list[dict]:
+    return improvement_proposals.list_(conn, status=status)
+
+
+def op_improvement_mark_ready(
+    repo_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    improvement_id: str,
+    verdict_artifact_id: str,
+    validation_artifact_ids: list[str],
+) -> dict:
+    try:
+        return improvement_proposals.mark_ready(
+            repo_root,
+            conn,
+            improvement_id=improvement_id,
+            verdict_artifact_id=verdict_artifact_id,
+            validation_artifact_ids=validation_artifact_ids,
+        )
+    except improvement_proposals.ImprovementProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
+def op_improvement_request_merge(repo_root: Path, conn: sqlite3.Connection, *, improvement_id: str) -> dict:
+    try:
+        return improvement_proposals.request_merge(repo_root, conn, improvement_id=improvement_id)
+    except improvement_proposals.ImprovementProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
+def op_improvement_merge(
+    repo_root: Path, conn: sqlite3.Connection, *, improvement_id: str, approval_id: str
+) -> dict:
+    try:
+        return improvement_proposals.merge(repo_root, conn, improvement_id=improvement_id, approval_id=approval_id)
+    except improvement_proposals.ImprovementProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
+def op_improvement_reject(
+    repo_root: Path, conn: sqlite3.Connection, *, improvement_id: str, reason: str | None = None
+) -> dict:
+    try:
+        return improvement_proposals.reject(repo_root, conn, improvement_id=improvement_id, reason=reason)
+    except improvement_proposals.ImprovementProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
 
 
 def op_registry_list(repo_root: Path, *, kind: str, conn: sqlite3.Connection | None = None) -> list[dict]:

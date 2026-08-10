@@ -140,6 +140,43 @@ DDL_STATEMENTS = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_registry_proposal_events_proposal_id ON registry_proposal_events (proposal_id)",
     """
+    CREATE TABLE IF NOT EXISTS improvement_proposals (
+        improvement_id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL REFERENCES runs (run_id),
+        target_repo TEXT NOT NULL,
+        target_branch TEXT NOT NULL,
+        base_commit TEXT NOT NULL,
+        candidate_branch TEXT NOT NULL,
+        candidate_commit TEXT NOT NULL,
+        diff_digest TEXT NOT NULL,
+        patch_artifact_id TEXT NOT NULL REFERENCES artifacts (artifact_id),
+        status TEXT NOT NULL CHECK (
+            status IN ('draft', 'ready_for_review', 'approved', 'merged', 'rejected', 'abandoned')
+        ),
+        summary TEXT NOT NULL,
+        changed_paths_json TEXT NOT NULL,
+        verdict_artifact_id TEXT,
+        validation_artifact_ids_json TEXT NOT NULL,
+        merge_commit TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        decided_at TEXT,
+        closed_at TEXT
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_improvement_proposals_run_id ON improvement_proposals (run_id)",
+    """
+    CREATE TABLE IF NOT EXISTS improvement_proposal_events (
+        event_id TEXT PRIMARY KEY,
+        improvement_id TEXT NOT NULL REFERENCES improvement_proposals (improvement_id),
+        event_type TEXT NOT NULL,
+        occurred_at TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        payload_json TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_improvement_proposal_events_id ON improvement_proposal_events (improvement_id)",
+    """
     CREATE TABLE IF NOT EXISTS active_sessions (
         session_id TEXT PRIMARY KEY,
         title TEXT,
@@ -172,6 +209,8 @@ EXPECTED_TABLES = (
     "registry_index",
     "registry_proposals",
     "registry_proposal_events",
+    "improvement_proposals",
+    "improvement_proposal_events",
     "active_sessions",
     "active_session_entries",
 )

@@ -11,6 +11,13 @@ export type MethodName =
   | "awf/approval.approve"
   | "awf/approval.reject"
   | "awf/machine.actionPreview"
+  | "awf/improvement.list"
+  | "awf/improvement.get"
+  | "awf/improvement.prepare"
+  | "awf/improvement.markReady"
+  | "awf/improvement.requestMerge"
+  | "awf/improvement.merge"
+  | "awf/improvement.reject"
   | "awf/artifact.list"
   | "awf/artifact.read"
   | "awf/registry.list"
@@ -114,6 +121,31 @@ export interface MachineActionPreview {
 export interface ApprovalDetail {
   approval: Approval;
   preview: MachineActionPreview | null;
+}
+
+export interface ImprovementProposal {
+  improvement_id: string;
+  run_id: string;
+  target_repo: string;
+  target_branch: string;
+  base_commit: string;
+  candidate_branch: string;
+  candidate_commit: string;
+  diff_digest: string;
+  patch_artifact_id: string;
+  status: "draft" | "ready_for_review" | "approved" | "merged" | "rejected" | "abandoned";
+  summary: string;
+  changed_paths: Record<string, unknown>[];
+  verdict_artifact_id: string | null;
+  validation_artifact_ids: string[];
+  merge_commit: string | null;
+  created_at: string;
+  updated_at: string;
+  decided_at: string | null;
+  closed_at: string | null;
+  approval: Approval | null;
+  merge_action_digest: string;
+  events: Record<string, unknown>[];
 }
 
 export interface Artifact {

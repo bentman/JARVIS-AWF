@@ -4,6 +4,7 @@ import {
   type Approval,
   type ApprovalDetail,
   type Artifact,
+  type ImprovementProposal,
   type JsonRpcResponse,
   type MachineActionPreview,
   type MemorySearchResult,
@@ -104,6 +105,38 @@ export class ProtocolClient {
 
   machineActionPreview(approvalId: string): Promise<MachineActionPreview> {
     return this.call("awf/machine.actionPreview", { approvalId });
+  }
+
+  improvementList(status?: string): Promise<ImprovementProposal[]> {
+    return this.call("awf/improvement.list", { status });
+  }
+
+  improvementGet(improvementId: string): Promise<ImprovementProposal> {
+    return this.call("awf/improvement.get", { improvementId });
+  }
+
+  improvementPrepare(runId: string, summary?: string): Promise<ImprovementProposal> {
+    return this.call("awf/improvement.prepare", { runId, summary });
+  }
+
+  improvementMarkReady(
+    improvementId: string,
+    verdictArtifactId: string,
+    validationArtifactIds: string[] = [],
+  ): Promise<ImprovementProposal> {
+    return this.call("awf/improvement.markReady", { improvementId, verdictArtifactId, validationArtifactIds });
+  }
+
+  improvementRequestMerge(improvementId: string): Promise<Record<string, unknown>> {
+    return this.call("awf/improvement.requestMerge", { improvementId });
+  }
+
+  improvementMerge(improvementId: string, approvalId: string): Promise<ImprovementProposal> {
+    return this.call("awf/improvement.merge", { improvementId, approvalId });
+  }
+
+  improvementReject(improvementId: string, reason?: string): Promise<ImprovementProposal> {
+    return this.call("awf/improvement.reject", { improvementId, reason });
   }
 
   artifactList(runId: string): Promise<Artifact[]> {

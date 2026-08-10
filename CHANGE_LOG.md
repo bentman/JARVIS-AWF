@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-09 20:43
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0022 system improvement with consent through durable Improvement Proposals, exact diff digests, R2 merge approvals, retained candidate worktrees, and JSON-RPC/CLI/GUI proposal surfaces.
+  - Scope: `backend/src/awf/improvement/*`, SQLite schema/bootstrap, core ops, stdio JSON-RPC, Python CLI, frontend shared/CLI/GUI improvement surfaces, `config/app_registry/workflows/self-improvement/1.0.0.yaml`, focused tests, and ADR-0022.
+  - Validation: `backend/.venv/bin/python -m pytest backend/tests -q` outside the Codex sandbox -> 559 passed, 7 warnings; `backend/.venv/bin/python -m ruff check .` passed; `npm --prefix frontend run build --workspaces` passed; `npm --prefix frontend test --workspaces` -> shared 10 passed, CLI 38 passed, GUI 32 passed.
+  - Notes: local self-improvement closeout only; no external PR/forge integration or auto-merge is claimed.
+
 - Timestamp: 2026-08-09 11:18
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Implemented ADR-0021 governed machine reach with constrained filesystem, bounded writes, command, network, and MCP exposure paths bound to Capability Records, guard events, exact action digests, and approval previews.

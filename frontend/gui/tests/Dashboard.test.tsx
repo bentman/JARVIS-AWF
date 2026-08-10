@@ -12,8 +12,28 @@ describe("Dashboard", () => {
         ]}
         approvals={[
           {
-            approval_id: "ap-1", run_id: "run-1", step_id: "step-1", action_digest: "sha256:deadbeef",
-            status: "pending", reason: null, requested_at: "t", decided_at: null, risk_class: "R2",
+            approval_id: "ap-1",
+            run_id: "run-1",
+            step_id: "step-1",
+            action_digest: "sha256:deadbeef",
+            status: "pending",
+            reason: null,
+            requested_at: "t",
+            decided_at: null,
+            risk_class: "R2",
+          },
+        ]}
+        improvements={[
+          {
+            improvement_id: "imp-1",
+            run_id: "run-1",
+            status: "ready_for_review",
+            summary: "Focused fix",
+            diff_digest: "sha256:feedface",
+            patch_artifact_id: "patch-1",
+            verdict_artifact_id: "verdict-1",
+            merge_commit: null,
+            approval: { approval_id: "ap-2", status: "pending" },
           },
         ]}
         onRefresh={vi.fn()}
@@ -24,6 +44,8 @@ describe("Dashboard", () => {
     expect(screen.getByText(/demo@1.0.0/)).toBeTruthy();
     expect(screen.getByText(/sha256:deadbeef/)).toBeTruthy();
     expect(screen.getByText(/R2/)).toBeTruthy();
+    expect(screen.getByText(/Focused fix/)).toBeTruthy();
+    expect(screen.getByText(/sha256:feedface/)).toBeTruthy();
   });
 
   it("shows empty-state text, not nothing, when there is no data", () => {
@@ -31,6 +53,7 @@ describe("Dashboard", () => {
 
     expect(screen.getByText("No runs yet.")).toBeTruthy();
     expect(screen.getByText("No pending approvals.")).toBeTruthy();
+    expect(screen.getByText("No improvement proposals.")).toBeTruthy();
   });
 
   it("clicking Refresh calls onRefresh", () => {

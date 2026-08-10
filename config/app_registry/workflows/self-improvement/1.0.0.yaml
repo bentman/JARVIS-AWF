@@ -1,0 +1,42 @@
+apiVersion: awf/v1
+kind: Workflow
+metadata:
+  name: self-improvement
+  version: 1.0.0
+  digest: "sha256:self-improvement-v1"
+spec:
+  inputSchema:
+    type: object
+    properties:
+      objective:
+        type: string
+      retainWorktreeForImprovement:
+        type: boolean
+    required: [objective]
+  outputSchema:
+    type: object
+    properties:
+      verdict_artifact_id:
+        type: ["string", "null"]
+  budgets:
+    maxRepairIterations: 1
+  nodes:
+    - id: implement
+      type: agent
+      adapter: codex
+      objective: |
+        Implement the operator-requested repository improvement in this isolated worktree.
+
+        Operator objective:
+        {{ input.objective }}
+
+        Keep the change focused and leave merge approval to AWF improvement closeout.
+      next: verify
+    - id: verify
+      type: gate
+      check: self_improvement_focused_validation
+      checkCommand: "backend/.venv/bin/python -m ruff check ."
+      next: null
+      onFail: null
+  outputs:
+    verdict_artifact_id: "{{ engine.verdict_artifact_id }}"

@@ -13,6 +13,12 @@ function makeFakeClient(overrides: Partial<CommandClient> = {}): CommandClient {
     approvalApprove: vi.fn().mockResolvedValue({ approval_id: "ap-1", status: "approved" }),
     approvalReject: vi.fn().mockResolvedValue({ approval_id: "ap-1", status: "rejected" }),
     artifactList: vi.fn().mockResolvedValue([]),
+    improvementList: vi.fn().mockResolvedValue([]),
+    improvementGet: vi.fn().mockResolvedValue({ improvement_id: "imp-1" }),
+    improvementPrepare: vi.fn().mockResolvedValue({ improvement_id: "imp-1" }),
+    improvementRequestMerge: vi.fn().mockResolvedValue({ approval: { approval_id: "ap-1" } }),
+    improvementMerge: vi.fn().mockResolvedValue({ improvement_id: "imp-1", status: "merged" }),
+    improvementReject: vi.fn().mockResolvedValue({ improvement_id: "imp-1", status: "rejected" }),
     secretListNames: vi.fn().mockResolvedValue([]),
     registryList: vi.fn().mockResolvedValue([]),
     workflowAuthorDraft: vi.fn().mockResolvedValue({ proposal_id: "p1", status: "draft" }),
@@ -105,6 +111,28 @@ describe("dispatchCommand", () => {
     const client = makeFakeClient();
     await dispatchCommand(client, "/artifacts run-1", DEFAULT_SETTINGS);
     expect(client.artifactList).toHaveBeenCalledWith("run-1");
+  });
+
+  it("dispatches improvement commands", async () => {
+    const client = makeFakeClient();
+
+    await dispatchCommand(client, "/improvements", DEFAULT_SETTINGS);
+    expect(client.improvementList).toHaveBeenCalled();
+
+    await dispatchCommand(client, "/improvement imp-1", DEFAULT_SETTINGS);
+    expect(client.improvementGet).toHaveBeenCalledWith("imp-1");
+
+    await dispatchCommand(client, "/improvement-prepare run-1 focused fix", DEFAULT_SETTINGS);
+    expect(client.improvementPrepare).toHaveBeenCalledWith("run-1", "focused fix");
+
+    await dispatchCommand(client, "/improvement-request-merge imp-1", DEFAULT_SETTINGS);
+    expect(client.improvementRequestMerge).toHaveBeenCalledWith("imp-1");
+
+    await dispatchCommand(client, "/improvement-merge imp-1 ap-1", DEFAULT_SETTINGS);
+    expect(client.improvementMerge).toHaveBeenCalledWith("imp-1", "ap-1");
+
+    await dispatchCommand(client, "/improvement-reject imp-1 not ready", DEFAULT_SETTINGS);
+    expect(client.improvementReject).toHaveBeenCalledWith("imp-1", "not ready");
   });
 
   it.each([

@@ -60,6 +60,49 @@ def cmd_artifacts(args: argparse.Namespace, repo_root: Path, conn) -> int:
     return 0
 
 
+def cmd_improvement_list(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_improvement_list(conn, status=args.status))
+    return 0
+
+
+def cmd_improvement_show(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_improvement_get(conn, improvement_id=args.improvement_id))
+    return 0
+
+
+def cmd_improvement_prepare(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_improvement_prepare(repo_root, conn, run_id=args.run_id, summary=args.summary))
+    return 0
+
+
+def cmd_improvement_mark_ready(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(
+        ops.op_improvement_mark_ready(
+            repo_root,
+            conn,
+            improvement_id=args.improvement_id,
+            verdict_artifact_id=args.verdict_artifact_id,
+            validation_artifact_ids=args.validation_artifact_id,
+        )
+    )
+    return 0
+
+
+def cmd_improvement_request_merge(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_improvement_request_merge(repo_root, conn, improvement_id=args.improvement_id))
+    return 0
+
+
+def cmd_improvement_merge(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_improvement_merge(repo_root, conn, improvement_id=args.improvement_id, approval_id=args.approval_id))
+    return 0
+
+
+def cmd_improvement_reject(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_improvement_reject(repo_root, conn, improvement_id=args.improvement_id, reason=args.reason))
+    return 0
+
+
 def cmd_registry_validate(args: argparse.Namespace, repo_root: Path, conn) -> int:
     _print(ops.op_registry_validate(Path(args.definition_file), kind=args.kind))
     return 0
@@ -260,6 +303,35 @@ def build_parser() -> argparse.ArgumentParser:
     artifacts_parser = sub.add_parser("artifacts")
     artifacts_parser.add_argument("run_id")
     artifacts_parser.set_defaults(func=cmd_artifacts)
+
+    improvement_parser = sub.add_parser("improvement")
+    improvement_sub = improvement_parser.add_subparsers(dest="improvement_command", required=True)
+    improvement_list_parser = improvement_sub.add_parser("list")
+    improvement_list_parser.add_argument("--status", required=False, default=None)
+    improvement_list_parser.set_defaults(func=cmd_improvement_list)
+    improvement_show_parser = improvement_sub.add_parser("show")
+    improvement_show_parser.add_argument("improvement_id")
+    improvement_show_parser.set_defaults(func=cmd_improvement_show)
+    improvement_prepare_parser = improvement_sub.add_parser("prepare")
+    improvement_prepare_parser.add_argument("run_id")
+    improvement_prepare_parser.add_argument("--summary", required=False, default=None)
+    improvement_prepare_parser.set_defaults(func=cmd_improvement_prepare)
+    improvement_ready_parser = improvement_sub.add_parser("mark-ready")
+    improvement_ready_parser.add_argument("improvement_id")
+    improvement_ready_parser.add_argument("--verdict-artifact-id", required=True)
+    improvement_ready_parser.add_argument("--validation-artifact-id", action="append", default=[])
+    improvement_ready_parser.set_defaults(func=cmd_improvement_mark_ready)
+    improvement_request_parser = improvement_sub.add_parser("request-merge")
+    improvement_request_parser.add_argument("improvement_id")
+    improvement_request_parser.set_defaults(func=cmd_improvement_request_merge)
+    improvement_merge_parser = improvement_sub.add_parser("merge")
+    improvement_merge_parser.add_argument("improvement_id")
+    improvement_merge_parser.add_argument("approval_id")
+    improvement_merge_parser.set_defaults(func=cmd_improvement_merge)
+    improvement_reject_parser = improvement_sub.add_parser("reject")
+    improvement_reject_parser.add_argument("improvement_id")
+    improvement_reject_parser.add_argument("--reason", required=False, default=None)
+    improvement_reject_parser.set_defaults(func=cmd_improvement_reject)
 
     registry_parser = sub.add_parser("registry")
     registry_sub = registry_parser.add_subparsers(dest="registry_command", required=True)

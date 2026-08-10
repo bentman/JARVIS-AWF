@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ApprovalConfirmation } from "./ApprovalConfirmation.js";
-import { Dashboard, type ApprovalSummary, type RunSummary } from "./Dashboard.js";
+import { Dashboard, type ApprovalSummary, type ImprovementSummary, type RunSummary } from "./Dashboard.js";
 import { MemoryPanel, type MemorySearchResult } from "./MemoryPanel.js";
 import { ProposalReview, type ProposalSummary } from "./ProposalReview.js";
 import { Transcript, type TranscriptEntry } from "./Transcript.js";
@@ -29,6 +29,7 @@ export interface AppProps {
   onVoiceRoundTrip?: VoiceRoundTripFn;
   onRunList?: () => Promise<RunSummary[]>;
   onApprovalList?: () => Promise<ApprovalSummary[]>;
+  onImprovementList?: () => Promise<ImprovementSummary[]>;
   onProposalGet?: (proposalId: string) => Promise<ProposalSummary>;
   onProposalPublish?: (proposalId: string, digest: string) => Promise<unknown>;
   onProposalReject?: (proposalId: string, reason?: string) => Promise<unknown>;
@@ -59,6 +60,7 @@ export function App({
   onVoiceRoundTrip,
   onRunList,
   onApprovalList,
+  onImprovementList,
   onProposalGet,
   onProposalPublish,
   onProposalReject,
@@ -71,18 +73,21 @@ export function App({
   const nextId = useRef(initialTranscript.length);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [approvals, setApprovals] = useState<ApprovalSummary[]>([]);
+  const [improvements, setImprovements] = useState<ImprovementSummary[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const refresh = async () => {
-    if (!onRunList && !onApprovalList) return;
+    if (!onRunList && !onApprovalList && !onImprovementList) return;
     setRefreshing(true);
     try {
-      const [nextRuns, nextApprovals] = await Promise.all([
+      const [nextRuns, nextApprovals, nextImprovements] = await Promise.all([
         onRunList ? onRunList() : Promise.resolve(runs),
         onApprovalList ? onApprovalList() : Promise.resolve(approvals),
+        onImprovementList ? onImprovementList() : Promise.resolve(improvements),
       ]);
       setRuns(nextRuns);
       setApprovals(nextApprovals);
+      setImprovements(nextImprovements);
     } finally {
       setRefreshing(false);
     }
@@ -120,8 +125,14 @@ export function App({
 
   return (
     <div>
-      {(onRunList || onApprovalList) && (
-        <Dashboard runs={runs} approvals={approvals} onRefresh={() => void refresh()} refreshing={refreshing} />
+      {(onRunList || onApprovalList || onImprovementList) && (
+        <Dashboard
+          runs={runs}
+          approvals={approvals}
+          improvements={improvements}
+          onRefresh={() => void refresh()}
+          refreshing={refreshing}
+        />
       )}
       {onProposalGet && onProposalPublish && onProposalReject && (
         <ProposalReview

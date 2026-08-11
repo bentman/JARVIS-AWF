@@ -1589,27 +1589,28 @@ def _doctor_node(repo_root: Path) -> dict:
     npm_present, npm_version = _command_version("npm", "--version")
     node_modules = repo_root / "frontend" / "node_modules"
     detail = {"node": node_version, "npm": npm_version, "node_modules": str(node_modules)}
+    frontend_node_requirement = "Node.js 24 LTS >=24.15.0"
     if not node_present or not npm_present:
         return _doctor_check(
             "frontend",
             "warn",
             "Node.js or npm is not available; CLI/GUI frontends cannot run from this shell.",
             detail=detail,
-            next_action="Install Node.js 26+ and run `npm --prefix frontend install`.",
+            next_action=f"Install {frontend_node_requirement} and run `npm --prefix frontend install`.",
         )
-    node_major = None
+    node_parts = None
     if node_version and node_version.startswith("v"):
         try:
-            node_major = int(node_version[1:].split(".", 1)[0])
+            node_parts = tuple(int(part) for part in node_version[1:].split(".")[:3])
         except ValueError:
-            node_major = None
-    if node_major is not None and node_major < 26:
+            node_parts = None
+    if node_parts is not None and node_parts < (24, 15, 0):
         return _doctor_check(
             "frontend",
             "warn",
             f"Node.js {node_version} is below the frontend requirement.",
             detail=detail,
-            next_action="Install Node.js 26+ and rerun `npm --prefix frontend install`.",
+            next_action=f"Install {frontend_node_requirement} and rerun `npm --prefix frontend install`.",
         )
     if not node_modules.is_dir():
         return _doctor_check(

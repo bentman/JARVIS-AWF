@@ -212,3 +212,43 @@ def test_system_doctor_reports_operator_next_actions(tmp_path, monkeypatch):
     assert report["status"] == "warn"
     assert report["first_run_command"].startswith("awf run assistant-default")
     assert any("Node.js" in action for action in report["next_actions"])
+
+
+def test_system_doctor_accepts_node_24_lts_frontend_floor(tmp_path, monkeypatch):
+    repo_root, _conn = make_awf_repo(tmp_path)
+    (repo_root / "frontend" / "node_modules").mkdir(parents=True)
+
+    def version(command, *args):
+        if command == "node":
+            return True, "v24.19.0"
+        if command == "npm":
+            return True, "11.6.2"
+        return False, None
+
+    monkeypatch.setattr("awf.cli.core_ops._command_version", version)
+
+    report = op_system_doctor(repo_root)
+    check = next(item for item in report["checks"] if item["name"] == "frontend")
+
+    assert check["status"] == "ok"
+    assert "Node.js" not in " ".join(report["next_actions"])
+
+
+def test_system_doctor_warns_below_node_24_lts_frontend_floor(tmp_path, monkeypatch):
+    repo_root, _conn = make_awf_repo(tmp_path)
+    (repo_root / "frontend" / "node_modules").mkdir(parents=True)
+
+    def version(command, *args):
+        if command == "node":
+            return True, "v24.14.0"
+        if command == "npm":
+            return True, "11.6.2"
+        return False, None
+
+    monkeypatch.setattr("awf.cli.core_ops._command_version", version)
+
+    report = op_system_doctor(repo_root)
+    check = next(item for item in report["checks"] if item["name"] == "frontend")
+
+    assert check["status"] == "warn"
+    assert check["next_action"] == "Install Node.js 24 LTS >=24.15.0 and rerun `npm --prefix frontend install`."

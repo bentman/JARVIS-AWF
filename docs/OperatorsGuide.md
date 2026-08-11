@@ -1,232 +1,531 @@
 # AWF Operator's Guide
 
-A plain-language guide to using JARVIS-AWF day to day.
-This is not the technical spec — that lives in `docs/AGENTIC_WORKFLOW_FABRIC_SPEC.md` and `docs/adr/`.
+A plain-language guide to getting JARVIS-AWF running and using it day to day.
+The technical contract lives in `docs/AGENTIC_WORKFLOW_FABRIC_SPEC.md` and `docs/adr/`.
 
-**What AWF is, in one sentence:** you describe work, AWF starts a durable workflow for it, records everything, verifies the result, and asks *you* before anything risky or permanent happens.
+**What AWF does:** you describe work, AWF starts a durable workflow for it, records what happened, verifies the result, and asks before anything risky or permanent proceeds.
 
-**The one rule to remember:** AWF proposes, you approve. Nothing gets published, merged, or run with elevated risk without your explicit sign-off.
-
----
-
-## 1. First-time setup
-
-Do this once per machine.
-
-1. **Run the repo bootstrap wrapper** (recommended):
-   - Linux/WSL: `bash scripts/bootstrap.sh`
-   - Windows: `.\scripts\bootstrap.ps1`
-   - Use `--skip-speech` on Linux/WSL or `-SkipSpeech` on Windows only when diagnosing a dependency outage.
-   - The wrapper writes `reports/diagnostics/<datetime>-bootstrap.txt`; include that report when filing setup issues.
-2. **Or create a Python venv and install manually** (Python 3.12–3.14):
-   - Linux/WSL: `python3.12 -m venv backend/.venv` then `backend/.venv/bin/pip install -e .[dev]`
-   - Windows: `py -m venv .\backend\.venv` then `.\backend\.venv\Scripts\pip install -e .[dev]`
-3. **Bootstrap the repo:** run `awf-setup`
-   → You get a `.env` file with a generated secret key, and an empty database at `data/awf_db/awf.db`.
-4. **Match dependencies to your hardware:**
-   - `awf-setup --provision` → tells you which hardware extra fits this machine, and the install command (doesn't install anything).
-   - `awf-setup --install` → runs that install for you.
-   - `awf-setup --verify` → confirms what actually got installed (runtime, providers, tooling) and that pip is healthy.
-5. **Download voice models:** `awf-speech models sync`
-   → Fetches the wake-word, VAD, speech-to-text, and text-to-speech models for your hardware. `awf-speech models verify` checks them later.
-   Speech is installed by the hardware-selected setup path. STT uses Faster Whisper where CTranslate2 wheels and CUDA are available, and an ONNX Whisper CPU floor elsewhere; Windows ARM64 selects QNN when the Qualcomm NPU is inventoried, while Linux ARM64 installs QNN as a candidate and selects it only when QNN provider/backend tokens and model artifacts are present. Adreno/OpenCL is a separate ARM64 GPU readiness path. Linux OpenWakeWord provisioning installs the usable sibling dependencies normally, installs the package without the unavailable `tflite-runtime` metadata dependency, and verifies the actual `openwakeword`/`onnxruntime` imports.
-6. **Frontends (optional):** `npm --prefix frontend install` then `npm --prefix frontend run build` (Node.js 24 LTS `>=24.15.0`).
-7. **Check the install:** `awf doctor`
-   → Reports Python/venv, local paths, registry defaults, frontend dependencies, visible agent CLIs, speech readiness, and the next operator action.
-
-You also need at least one CLI coding agent installed and logged in with your own account (Claude Code, Codex CLI, Antigravity CLI, GitHub Copilot CLI, or Cline CLI) for workflows that delegate implementation work. The default assistant workflow runs locally without those CLIs, so first-run chat and control-center checks can work before agent setup is complete.
+**The rule to remember:** AWF proposes, you approve. It does not publish workflows, merge code, store memories, or run elevated-risk actions without explicit approval.
 
 ---
 
-## 2. The three ways to use AWF
+## 1. First-Time Setup
 
-All three talk to the same core. Nothing one can do that another can't.
+Run these commands from the repository root.
 
-| Surface | Start it with | Best for |
+### Windows PowerShell
+
+```powershell
+.\scripts\bootstrap.ps1
+.\backend\.venv\Scripts\awf doctor
+```
+
+### Linux or WSL2
+
+```bash
+bash scripts/bootstrap.sh
+backend/.venv/bin/awf doctor
+```
+
+The bootstrap wrapper creates the Python virtual environment, installs AWF, provisions hardware-matched runtime dependencies, creates `.env`, initializes `data/awf_db/awf.db`, syncs speech models, installs frontend dependencies when npm is available, and writes a setup transcript under `reports/diagnostics/`.
+
+Use `-SkipSpeech` on Windows or `--skip-speech` on Linux/WSL only while diagnosing model or dependency acquisition problems.
+
+If setup fails, run the doctor command shown above and read the `next:` lines. Include the latest `reports/diagnostics/<datetime>-bootstrap.txt` when filing a setup issue.
+
+---
+
+## 2. Launch AWF
+
+AWF has three operator surfaces. They all talk to the same backend and use the same database.
+
+| Surface | Launch command | Use it for |
 |---|---|---|
-| **Core CLI** (`awf ...`) | already installed by setup | scripting, quick one-off commands |
-| **Terminal app** (AWF-CLI) | `node frontend/cli/dist/cli.js` | day-to-day assistant use with plain text plus `/slash` commands |
-| **Desktop app** (AWF-GUI) | `npm --prefix frontend run dev` | the control center: dashboard, approvals, voice, memory |
+| Core CLI | `awf ...` or the venv path below | scripts, checks, one-off workflow runs |
+| Terminal UI (TUI) | `node frontend/cli/dist/cli.js` | daily text assistant use and slash commands |
+| Desktop GUI | `npm --prefix frontend run dev` | dashboard, approvals, run details, memory, registry, voice |
 
-In the terminal app, type a normal request to use the default assistant workflow, or type `/help` to see every command.
+If `awf` is not on `PATH`, use the repo virtual environment path.
 
----
+### Windows PowerShell
 
-## 3. Running work
+```powershell
+.\backend\.venv\Scripts\awf doctor
+.\backend\.venv\Scripts\awf run assistant-default@1.0.0 --objective "check the system"
+node frontend\cli\dist\cli.js
+npm --prefix frontend run dev
+```
 
-**Do:** `awf run <workflow>@<version>` (e.g. `awf run assistant-default@1.0.0 --objective "check the system"`)
-**Get:** a Run. The agent works in its own isolated copy of the repo (a Git worktree), so your working files are never touched. Every step is saved as it completes.
+### Linux or WSL2
 
-Use `assistant-default@1.0.0` to confirm the app is accepting requests end-to-end. Use implementation workflows such as `produce-gate-repair-demo@1.0.0` after the relevant agent CLIs are installed and authenticated.
+```bash
+backend/.venv/bin/awf doctor
+backend/.venv/bin/awf run assistant-default@1.0.0 --objective "check the system"
+node frontend/cli/dist/cli.js
+npm --prefix frontend run dev
+```
 
-Then:
-- `awf runs` → recent Runs with outcome summaries.
-- `awf status <run-id>` → where the Run is, step by step.
-- `awf artifacts <run-id>` → the evidence it produced (verdicts, findings, diffs).
-- `awf resume` → after a crash or reboot, picks up any unfinished Runs from the last completed step. Nothing re-runs twice.
+The TUI requires built frontend files. If `frontend/cli/dist/cli.js` does not exist, run:
 
-`awf run`, `awf status`, `awf runs`, `awf resume`, `awf approvals`, `awf artifacts`, `awf readiness`, and `awf doctor` print operator-readable summaries by default. Add `--json` when a script needs the raw payload.
+```bash
+npm --prefix frontend install
+npm --prefix frontend run build
+```
 
-If a Run needs your permission mid-flight, it pauses and waits — see Approvals below.
-
----
-
-## 4. Approvals — where you stay in charge
-
-Some actions are risky (writing outside the sandbox, merging code, network calls). Those create an **approval** and the Run waits.
-
-- `awf approvals` → list what's waiting.
-- `awf approve <id>` → let it proceed.
-- `awf reject <id> --reason "..."` → stop it.
-
-**What an approval means:** you're approving one *exact* action — the exact file, command, URL, or diff shown to you (identified by a digest). If anything about the action changes, the old approval is void and you're asked again.
-
-**Voice can never approve risky actions.** Anything above low risk requires an on-screen click on the exact action. That's deliberate.
+The GUI command builds the frontend first, then starts the Electron desktop app. First launch may download Electron's binary before the window appears.
 
 ---
 
-## 5. Letting AWF write workflows for you
+## 3. First Run Check
 
-You don't have to hand-write workflow YAML.
+Use the default assistant workflow to prove the app is accepting work end to end:
 
-**Do:** `awf author workflow --objective "describe what you want done"`
-**Get:** a draft workflow proposal, written by the local model, saved under `data/proposals/`. It is *not* live yet.
+```bash
+awf run assistant-default@1.0.0 --objective "check the system"
+awf runs
+```
 
-Then:
-- `awf proposal show <id>` → read the draft.
-- Edit it if you like: `awf proposal update <id> --file <your-edited-file>`
-- `awf proposal publish <id> --digest <digest>` → makes it a real, runnable workflow. The digest proves you're publishing exactly what you reviewed.
-- `awf proposal reject <id> --reason "..."` → discard it.
+Expected result: the command creates a Run, returns operator-readable status text, and records the Run in the database. This workflow does not require an external coding-agent CLI.
 
-Once published, run it like any other workflow.
+If it fails:
 
----
+```bash
+awf doctor
+awf readiness
+```
 
-## 6. The local "resident mind" model
-
-AWF can run its own local LLM (used for authoring, reviews, and chat) — no cloud required.
-
-1. Put a `.gguf` model file in a folder under `models/llm/<model-name>/`. (You download models yourself; AWF never fetches model weights.)
-2. `awf llm servers` → see the three backend options and whether each is reachable.
-3. `awf llm acquire` → downloads the `llama-server` binary for this machine (the only server AWF manages itself).
-4. `awf llm select llama-server` → makes it the resident mind. Or point at your own already-running server: `awf llm select ollama` / `awf llm select openai-compatible`.
-5. `awf llm serve start` / `stop` / `status` → lifecycle for the managed server.
-
-`awf llm models` lists what's available. Remote (non-local) endpoints are refused unless you explicitly pass `--allow-remote`.
-
-Server settings live in `config/llm/servers.yaml`. Some accelerated builds (Linux CUDA, ARM64 Adreno/QNN) must be placed manually — helper notes are in `docs/helpers/`.
+Read the `next:` lines from `awf doctor` first. `awf readiness` reports what hardware, speech, and runtime support AWF actually verified. CPU fallback is normal when no accelerator is proven.
 
 ---
 
-## 7. Memory
+## 4. Day-To-Day Use
 
-AWF remembers only what you let it keep.
+### TUI: daily assistant flow
 
-- **Sessions** are short-term working context: `awf session start`, `awf session show <id>`. They expire; they don't become permanent facts.
-- **Episodic memory** is "what happened": `awf episodic search <query>`, `awf episodic timeline <run-id>` — read-only search over the audit trail.
-- **Semantic memory** is durable facts/preferences, and it only exists if you publish it:
-  - `awf memory search <query>` / `awf memory get <name>@<version>`
-  - `awf memory propose --file <path>` → drafts a memory (models can suggest these too, but can't save them).
-  - `awf memory publish <id> --digest <digest>` → makes it permanent.
-  - `awf memory block <name>@<version>` → forget it (it stops being retrieved).
+Start the terminal UI:
 
-Corrections are new versions — history isn't silently rewritten.
+```powershell
+node frontend\cli\dist\cli.js
+```
+
+Or on Linux/WSL:
+
+```bash
+node frontend/cli/dist/cli.js
+```
+
+Then type normal requests:
+
+```text
+check the system
+summarize the recent runs
+draft a workflow that validates generated registry objects
+```
+
+Plain text starts the default assistant workflow. Slash commands expose operator controls:
+
+```text
+/help
+/control
+/doctor
+/readiness
+/runs
+/status <run-id>
+/artifacts <run-id>
+/approvals
+/approval <approval-id>
+/approve <approval-id>
+/reject <approval-id> <reason>
+/workflows
+/agents
+/skills
+/mcp
+/llm
+/quit
+```
+
+Use the TUI when you want a conversational loop without leaving the terminal.
+
+### GUI: control center flow
+
+Start the desktop app:
+
+```bash
+npm --prefix frontend run dev
+```
+
+Use the GUI for:
+
+- active and recent Runs
+- pending approvals with exact action previews
+- artifact and run detail review
+- registry browsing and publishing actions
+- memory review
+- LLM and readiness status
+- push-to-talk voice
+
+The GUI resolves `backend/.venv` commands automatically when they exist, so you normally do not need to activate the Python venv before launching it.
+
+### Core CLI: scripting and quick checks
+
+Common commands:
+
+```bash
+awf doctor
+awf readiness
+awf run assistant-default@1.0.0 --objective "check the system"
+awf run <workflow>@<version> --objective "describe the work"
+awf runs
+awf status <run-id>
+awf artifacts <run-id>
+awf approvals
+awf approve <approval-id>
+awf reject <approval-id> --reason "explain why"
+awf resume
+```
+
+Most operator commands print readable summaries by default. Add `--json` for automation:
+
+```bash
+awf runs --json
+awf status <run-id> --json
+awf doctor --json
+```
 
 ---
 
-## 8. AWF improving its own code
+## 5. Runs
 
-AWF can propose changes to its own repository, but **it can never merge them itself.**
+A Run is one execution of a versioned workflow. AWF records each step before moving to the next one, so a crash or reboot can resume from completed work instead of starting over.
 
-1. Run the self-improvement workflow (e.g. `awf run self-improvement@1.0.0 --objective "describe the fix"`). The change is made in an isolated worktree and reviewed by a gate.
-2. `awf improvement prepare <run-id>` → turns the Run's diff into an Improvement Proposal.
-3. `awf improvement show <id>` → see the exact diff, verdict, and evidence.
-4. `awf improvement request-merge <id>` → creates a merge approval for that exact diff.
-5. `awf approve <approval-id>` then `awf improvement merge <id> <approval-id>` → merged.
-6. Or `awf improvement reject <id> --reason "..."`.
+Start a Run:
 
-If the candidate changes after you reviewed it, the approval is invalid and you review again.
+```bash
+awf run <workflow>@<version> --objective "describe the work"
+```
 
----
+Check it:
 
-## 9. Voice (desktop app)
+```bash
+awf runs
+awf status <run-id>
+awf artifacts <run-id>
+```
 
-In AWF-GUI:
+Recover after a crash or reboot:
 
-- **Push-to-talk:** hold, speak, release. Your words appear as text in the transcript *before* anything acts on them, and every spoken reply also appears as text.
-- Pick which voice speaks; different agent roles can sound different.
-- **Interrupt** stops playback and goes back to listening.
-- Voice goes through the exact same rules as typing — same runs, same guard, same approvals. And again: no risky approval by voice alone.
+```bash
+awf resume
+```
 
-Current honest limits: it's push-to-talk with recorded-then-transcribed turns, not always-on streaming conversation. Wake-word listening is optional and off until you enable it. `awf-speech round-trip` remains available as a file-based test path.
-
----
-
-## 10. The registry — AWF's library
-
-Everything AWF can use — workflows, agents, capabilities, skills, MCP servers, model profiles, voice profiles, personas, memory — is a versioned file in the registry.
-
-- Shipped defaults live in `config/app_registry/` (don't edit these).
-- **Your** objects live in `data/registry/`. If you publish something with the same name as a default, yours wins.
-- Browse: in the terminal app, `/workflows`, `/agents`, `/skills`, `/capabilities`, `/mcp`, `/model`, `/voices`.
-- Add your own: `awf registry validate <file> --kind <kind>` then `awf registry publish <file> --kind <kind>`.
-- Objects from outside sources start as *quarantined* and won't run until you promote them: `awf registry trust <kind> <name> <version> --status trusted`.
-- Retire what you no longer want: `awf registry retire <kind> <name> <version>`.
+Implementation workflows can call external agent CLIs such as Claude Code, Codex CLI, Antigravity CLI, GitHub Copilot CLI, or Cline CLI. Those workflows require the relevant CLI to be installed and authenticated with your own account. The default assistant workflow works without them.
 
 ---
 
-## 11. Secrets
+## 6. Approvals
 
-- `awf secret set <name>` → prompts for the value (never shown, never in shell history), stored encrypted in the database.
-- `awf secret list` → names only. There is deliberately no "get" command.
-- `awf secret rotate-key` → re-encrypts everything under a new key.
+Some actions pause a Run and wait for you. Examples include higher-risk file writes, commands outside a sandbox, network access, publishing, or merging.
 
-The encryption key lives in `.env`. Keep `.env` out of backups you share; without it, secrets are unrecoverable — which is also your kill switch.
+List pending approvals:
+
+```bash
+awf approvals
+```
+
+Inspect in the TUI or GUI:
+
+```text
+/approval <approval-id>
+```
+
+Approve or reject:
+
+```bash
+awf approve <approval-id>
+awf reject <approval-id> --reason "not the action I reviewed"
+```
+
+An approval applies to one exact action digest. If the command, file, URL, or diff changes, the old approval no longer applies.
+
+Voice can never approve risky actions by itself. Higher-risk approvals require an on-screen confirmation of the exact action.
 
 ---
 
-## 12. Checking on the system
+## 7. Workflows and Proposals
 
-- `/control` (terminal) or the GUI dashboard → one overview: active runs, pending approvals, proposals, model status.
-- `awf doctor` or `/doctor` → install and operator readiness, including missing setup steps and the first-run command.
-- `/readiness` → what hardware AWF actually verified (GPU/NPU/CPU) and whether speech and LLM are ready. AWF never assumes hardware — if it can't prove an accelerator works, it says so and uses CPU.
-- `/llm` → model server status.
-- `awf episodic timeline <run-id>` → the full audit trail for any Run. Every decision, approval, and guard check is recorded and queryable.
+You can draft workflow YAML through AWF instead of writing it by hand:
+
+```bash
+awf author workflow --objective "describe the workflow you want"
+awf proposal show <proposal-id>
+awf proposal update <proposal-id> --file <edited-file>
+awf proposal publish <proposal-id> --digest <digest>
+awf proposal reject <proposal-id> --reason "not needed"
+```
+
+Publishing requires the digest from the proposal you reviewed. That prevents a changed draft from being published under an old approval.
+
+Once published, run it like any other workflow:
+
+```bash
+awf run <workflow-name>@<version> --objective "run it"
+```
 
 ---
 
-## 13. Where things live
+## 8. Local LLM
+
+AWF can use a local model server as the resident mind for authoring, reviews, and chat.
+
+Put downloaded `.gguf` model files under:
+
+```text
+models/llm/<model-name>/
+```
+
+Then use:
+
+```bash
+awf llm servers
+awf llm models
+awf llm acquire
+awf llm select llama-server --model <model-name>
+awf llm serve start
+awf llm serve status
+awf llm serve stop
+```
+
+AWF manages the `llama-server` binary it acquires. You may also select an already-running `ollama` or OpenAI-compatible local server. Remote endpoints are refused unless you explicitly pass `--allow-remote`.
+
+Server settings live in `config/llm/servers.yaml`. Platform helper notes live in `docs/helpers/`.
+
+---
+
+## 9. Voice
+
+Voice is available in the GUI as push-to-talk. Your spoken words are transcribed into text before AWF acts, and spoken replies also appear as text.
+
+Useful speech checks:
+
+```bash
+awf-speech models verify
+awf-speech models sync
+awf-speech round-trip <wake.wav> <command.wav> --response-audio-out <out.wav>
+```
+
+Current limit: voice is push-to-talk with recorded-then-transcribed turns, not always-on streaming conversation. Wake-word listening is optional and off until enabled.
+
+---
+
+## 10. Memory
+
+AWF separates temporary session context from durable memory.
+
+Sessions:
+
+```bash
+awf session start --title "today"
+awf session show <session-id>
+```
+
+Event history:
+
+```bash
+awf episodic search <query>
+awf episodic timeline <run-id>
+```
+
+Durable semantic memory:
+
+```bash
+awf memory search <query>
+awf memory get <name>@<version>
+awf memory propose --file <path>
+awf memory publish <proposal-id> --digest <digest>
+awf memory reject <proposal-id> --reason "not true"
+awf memory block <name>@<version>
+```
+
+Models can propose memories, but they cannot publish them. Published memories are versioned; corrections become new versions.
+
+---
+
+## 11. Registry
+
+The registry is AWF's local library of workflows, agents, capabilities, MCP servers, model profiles, voice profiles, personas, memory profiles, semantic memories, and skills.
+
+Locations:
+
+- `config/app_registry/` contains repo-tracked defaults.
+- `data/registry/` contains your local objects and takes precedence over defaults.
+
+Browse in the TUI:
+
+```text
+/workflows
+/agents
+/capabilities
+/mcp
+/model
+/voices
+/skills
+/skill <name>@<version>
+```
+
+Validate and publish from the core CLI:
+
+```bash
+awf registry validate <file> --kind <kind>
+awf registry publish <file> --kind <kind>
+awf registry reindex
+awf registry trust <kind> <name> <version> --status trusted
+awf registry retire <kind> <name> <version>
+```
+
+Objects from outside sources start quarantined and do not run until trusted.
+
+---
+
+## 12. Secrets
+
+Store secret values by name:
+
+```bash
+awf secret set OPENAI_API_KEY
+awf secret list
+awf secret rotate-key
+```
+
+Secret values are prompted interactively, not passed on the command line. There is deliberately no command to print a stored secret value.
+
+The encryption key lives in `.env`. Keep `.env` private and back it up with `data/` if you need to move the installation.
+
+---
+
+## 13. Self-Improvement
+
+AWF can propose changes to this repository, but it cannot merge them by itself.
+
+Typical flow:
+
+```bash
+awf run self-improvement@1.0.0 --objective "describe the fix"
+awf improvement prepare <run-id>
+awf improvement show <improvement-id>
+awf improvement request-merge <improvement-id>
+awf approvals
+awf approve <approval-id>
+awf improvement merge <improvement-id> <approval-id>
+```
+
+Reject instead:
+
+```bash
+awf improvement reject <improvement-id> --reason "explain why"
+```
+
+If the diff changes after review, the approval is invalid and must be requested again.
+
+---
+
+## 14. Where Things Live
 
 | Path | What it is | Safe to delete? |
 |---|---|---|
-| `data/` | your database, registry, proposals, artifacts — **the thing to back up** | No |
-| `.env` | your encryption key | No |
-| `config/` | shipped defaults and machine config | No (repo-tracked) |
-| `models/` | model files you downloaded | Re-downloadable |
+| `data/` | database, local registry, proposals, artifacts | No |
+| `.env` | local encryption key | No |
+| `config/` | repo-tracked defaults and machine config | No |
+| `models/` | downloaded model files | Re-downloadable |
 | `runtimes/` | acquired server binaries | Re-acquirable |
-| `cache/` | scratch space, sandboxes | Yes, anytime |
+| `cache/` | scratch space and sandboxes | Yes |
+| `reports/` | diagnostics and validation evidence | Usually, after saving what you need |
 
-Moving to a new machine = copy `data/` + `.env`, reinstall, re-run `awf-setup --install` and `awf-speech models sync`.
+Move to a new machine by copying `data/` and `.env`, reinstalling dependencies, then running:
+
+```bash
+awf-setup --install --verify
+awf-speech models sync
+awf doctor
+```
 
 ---
 
-## 14. Things AWF will not do (on purpose)
+## 15. Troubleshooting
+
+### Install state unclear
+
+```bash
+awf doctor
+```
+
+### Hardware or speech readiness unclear
+
+```bash
+awf readiness
+awf-speech models verify
+```
+
+### Frontend files missing
+
+```bash
+npm --prefix frontend install
+npm --prefix frontend run build
+```
+
+### TUI should use a non-default backend command
+
+The TUI automatically uses the repo venv command when `backend/.venv` exists. Set `AWF_CORE_COMMAND` only when you want to force a different backend command.
+
+Windows:
+
+```powershell
+$env:AWF_CORE_COMMAND = ".\backend\.venv\Scripts\awf.exe"
+node frontend\cli\dist\cli.js
+```
+
+Linux/WSL:
+
+```bash
+AWF_CORE_COMMAND=backend/.venv/bin/awf node frontend/cli/dist/cli.js
+```
+
+### GUI opened from outside the repo
+
+Set `AWF_REPO_ROOT`.
+
+Windows:
+
+```powershell
+$env:AWF_REPO_ROOT = "E:\WORK\CODE\REPO\JARVIS-AWF"
+npm --prefix frontend run dev
+```
+
+Linux/WSL:
+
+```bash
+AWF_REPO_ROOT=/path/to/JARVIS-AWF npm --prefix frontend run dev
+```
+
+---
+
+## 16. Things AWF Will Not Do
 
 - Merge its own code changes.
 - Publish a workflow, memory, or registry object without your review.
 - Approve a risky action from voice alone.
-- Claim hardware acceleration it hasn't verified.
+- Claim hardware acceleration it has not verified.
 - Run quarantined third-party registry objects.
-- Fetch model weights on its own, or touch endpoints off your machine without an explicit flag.
-- Show you a secret value after it's stored.
+- Fetch LLM weights on its own.
+- Touch remote model endpoints unless you explicitly allow remote use.
+- Show a stored secret value.
 
-## 15. Known limits (current version)
+## 17. Known Limits
 
-- No live event streaming to the frontends — views refresh/poll.
+- Frontend views refresh or poll; live event streaming is not implemented.
 - Voice is push-to-talk turns, not continuous conversation.
-- `/skills` and `/skill <name>@<version>` browse skills; skills are not yet directly executable as their own slash commands.
-- The Cline adapter exists, but check each agent CLI's own login/version requirements — vendor CLIs change.
+- Registry skills can be browsed, but they are not directly executable as their own slash commands.
+- Agent adapters depend on vendor CLIs, and those CLIs may change login or version requirements.
 
 ---
 
-*Keep this guide short. When a capability changes, update the matching section rather than adding a new document.*
+Keep this guide short. When a capability changes, update the matching section instead of adding another document.

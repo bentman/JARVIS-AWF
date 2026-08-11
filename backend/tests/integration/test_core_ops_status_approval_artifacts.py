@@ -11,9 +11,11 @@ from awf.cli.core_ops import (
     op_control_center_run_detail,
     op_control_center_summary,
     op_run_list,
+    op_run_outcome,
     op_run_status,
     op_secret_list_names,
     op_secret_set,
+    op_system_doctor,
     op_system_readiness,
 )
 from awf.gates.artifacts import write_finding_artifact
@@ -23,17 +25,26 @@ from awf.gates.schema import Finding
 def test_run_status_and_list_reflect_real_rows(tmp_path):
     _repo_root, conn = make_awf_repo(tmp_path)
     seed_run_step(conn)
+    conn.execute(
+        "UPDATE runs SET status = 'SUCCEEDED', output_json = ? WHERE run_id = ?",
+        ('{"outputs": {"response_text": "Run completed usefully."}}', "run-1"),
+    )
+    conn.commit()
 
     status = op_run_status(conn, run_id="run-1")
     assert status["run_id"] == "run-1"
     assert len(status["steps"]) == 1
+    assert status["outcome"]["response_text"] == "Run completed usefully."
     assert [row["run_id"] for row in op_run_list(conn)] == ["run-1"]
+    assert op_run_list(conn)[0]["outcome"]["next_action"] == "No operator action required."
 
 
 def test_run_status_raises_for_unknown_run(tmp_path):
     _repo_root, conn = make_awf_repo(tmp_path)
     with pytest.raises(CoreOpError):
         op_run_status(conn, run_id="does-not-exist")
+    with pytest.raises(CoreOpError):
+        op_run_outcome(conn, run_id="does-not-exist")
 
 
 def test_approval_list_and_decisions(tmp_path):
@@ -107,6 +118,10 @@ def test_control_center_summary_aggregates_existing_core_state(tmp_path, monkeyp
         "awf.cli.core_ops.op_system_readiness",
         lambda _repo_root: {"profile_id": "linux-x64-cpu", "readiness": {}},
     )
+    monkeypatch.setattr(
+        "awf.cli.core_ops.op_system_doctor",
+        lambda _repo_root: {"status": "ok", "checks": [], "next_actions": []},
+    )
 
     summary = op_control_center_summary(repo_root, conn)
 
@@ -114,6 +129,7 @@ def test_control_center_summary_aggregates_existing_core_state(tmp_path, monkeyp
     assert summary["approvals"][0]["approval_id"] == "ap-1"
     assert summary["llm"]["status"]["state"] == "stopped"
     assert summary["readiness"]["profile_id"] == "linux-x64-cpu"
+    assert summary["doctor"]["status"] == "ok"
     assert "skills" in summary["registry_counts"]
 
 
@@ -133,6 +149,7 @@ def test_control_center_run_detail_combines_run_artifacts_and_timeline(tmp_path)
     detail = op_control_center_run_detail(repo_root, conn, run_id="run-1")
 
     assert detail["run"]["run_id"] == "run-1"
+    assert detail["outcome"]["evidence"][0]["artifact_id"] == verdict_id
     assert detail["artifacts"][0]["artifact_id"] == verdict_id
     assert detail["verdicts"][0]["artifact_id"] == verdict_id
     assert detail["timeline"]["run"]["run_id"] == "run-1"
@@ -150,3 +167,48 @@ def test_system_readiness_returns_degraded_payload_when_probe_fails(tmp_path, mo
 
     assert readiness["profile_id"] is None
     assert readiness["error"] == "probe failed"
+
+
+def test_system_doctor_reports_operator_next_actions(tmp_path, monkeypatch):
+    repo_root, _conn = make_awf_repo(tmp_path)
+    (repo_root / ".env").write_text("AWF_SECRET_KEY=local-key\n", encoding="utf-8")
+    (repo_root / "cache" / "sandbox").mkdir(parents=True)
+    (repo_root / "cache" / "temp").mkdir(parents=True)
+    workflow_dir = repo_root / "config" / "app_registry" / "workflows" / "assistant-default"
+    workflow_dir.mkdir(parents=True)
+    (workflow_dir / "1.0.0.yaml").write_text(
+        "apiVersion: awf/v1\nkind: Workflow\n"
+        "metadata: {name: assistant-default, version: 1.0.0, digest: 'sha256:demo'}\n"
+        "spec:\n"
+        "  inputSchema: {type: object, properties: {objective: {type: string}}, required: [objective]}\n"
+        "  outputSchema: {type: object, properties: {response_text: {type: string}}, required: [response_text]}\n"
+        "  budgets: {}\n"
+        "  nodes: [{id: reply, type: activity, function: assistant_reply, args: {objective: '{{ input.objective }}'}, next: null}]\n"
+        "  outputs: {response_text: '{{ engine.reply_response_text }}'}\n",
+        encoding="utf-8",
+    )
+    capability_dir = repo_root / "config" / "app_registry" / "capabilities" / "assistant_reply"
+    capability_dir.mkdir(parents=True)
+    (capability_dir / "1.0.0.yaml").write_text(
+        "identity: {type: activity, provider: awf, name: assistant_reply, version: 1.0.0}\n"
+        "schema: {input: schemas/assistant_reply.input.json, output: schemas/assistant_reply.output.json}\n"
+        "effects: {operation: execute, reversible: true, idempotent: true, external_side_effect: false}\n"
+        "risk_class: R0\n"
+        "approval: never\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "awf.cli.core_ops.op_system_readiness",
+        lambda _repo_root: {
+            "profile_id": "linux-x64-cpu",
+            "tokens": [],
+            "readiness": {"stt": {"device": "cpu", "ready": True, "reason": "available"}},
+        },
+    )
+    monkeypatch.setattr("awf.cli.core_ops._command_version", lambda command, *args: (False, None))
+
+    report = op_system_doctor(repo_root)
+
+    assert report["status"] == "warn"
+    assert report["first_run_command"].startswith("awf run assistant-default")
+    assert any("Node.js" in action for action in report["next_actions"])

@@ -74,6 +74,7 @@ METHOD_NAMES = (
     "awf/control.summary",
     "awf/control.runDetail",
     "awf/system.readiness",
+    "awf/system.doctor",
     "awf/llm.servers",
     "awf/llm.models",
     "awf/llm.serveStatus",
@@ -258,6 +259,8 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
         return ops.op_control_center_run_detail(repo_root, conn, run_id=params["runId"])
     if method == "awf/system.readiness":
         return ops.op_system_readiness(repo_root)
+    if method == "awf/system.doctor":
+        return ops.op_system_doctor(repo_root)
     if method == "awf/llm.servers":
         return ops.op_llm_servers(repo_root)
     if method == "awf/llm.models":

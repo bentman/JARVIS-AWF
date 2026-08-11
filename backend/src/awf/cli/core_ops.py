@@ -8,10 +8,12 @@ Capability Guard / durability / worktree-commit paths as the CLI.
 
 import hashlib
 import json
+import os
 import shlex
 import shutil
 import sqlite3
 import subprocess
+import sys
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
@@ -452,6 +454,104 @@ def _with_response_text(workflow_ref: str, result: dict) -> dict:
     return {**result, "outputs": {**outputs, "response_text": _default_response_text(workflow_ref, result)}}
 
 
+def _safe_json_loads(value: str | None, default):
+    if not value:
+        return default
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return default
+
+
+def _response_text_from_run_record(run: dict, workflow_ref: str) -> str:
+    output = _safe_json_loads(run.get("output_json"), {})
+    if isinstance(output, dict):
+        outputs = output.get("outputs")
+        if isinstance(outputs, dict) and isinstance(outputs.get("response_text"), str):
+            return outputs["response_text"]
+        if isinstance(output.get("error"), str):
+            return f"Workflow {workflow_ref} failed: {output['error']}"
+        if isinstance(output.get("reason"), str):
+            return f"Workflow {workflow_ref} finished with status {run.get('status')}: {output['reason']}"
+    return _default_response_text(workflow_ref, {"status": run.get("status", "UNKNOWN")})
+
+
+def _run_outcome_from_parts(run: dict, steps: list[dict], artifacts: list[dict], approvals: list[dict]) -> dict:
+    status = run.get("status", "UNKNOWN")
+    workflow_ref = run.get("workflow_ref", "unknown@0.0.0")
+    pending_approvals = [approval for approval in approvals if approval.get("status") == "pending"]
+    failed_steps = [step for step in steps if step.get("status") == "FAILED"]
+    evidence = [
+        {
+            "artifact_id": artifact.get("artifact_id"),
+            "type": artifact.get("artifact_type"),
+            "path": artifact.get("relative_path"),
+        }
+        for artifact in artifacts
+        if artifact.get("artifact_type") in {"verdict", "finding", "test-result", "report"}
+    ]
+    failures = [
+        {
+            "step_id": step.get("step_id"),
+            "node_id": step.get("node_id"),
+            "failure_class": step.get("failure_class"),
+            "output": _safe_json_loads(step.get("output_json"), {}),
+        }
+        for step in failed_steps
+    ]
+    if pending_approvals:
+        next_action = f"Review {len(pending_approvals)} pending approval(s) with `awf approvals`."
+    elif status == "FAILED":
+        next_action = "Inspect the failed step and artifacts, then rerun or prepare a repair."
+    elif status in {"WAITING_INPUT", "WAITING_APPROVAL"}:
+        next_action = "Resume after supplying the requested operator input or approval."
+    elif status == "SUCCEEDED" and evidence:
+        next_action = "Review the evidence artifacts if this result will be used for follow-up work."
+    elif status == "SUCCEEDED":
+        next_action = "No operator action required."
+    else:
+        next_action = "Check run status again or resume after a restart."
+    return {
+        "run_id": run.get("run_id"),
+        "workflow_ref": workflow_ref,
+        "status": status,
+        "response_text": _response_text_from_run_record(run, workflow_ref),
+        "evidence": evidence,
+        "artifacts": [
+            {
+                "artifact_id": artifact.get("artifact_id"),
+                "type": artifact.get("artifact_type"),
+                "path": artifact.get("relative_path"),
+                "complete": bool(artifact.get("complete")),
+            }
+            for artifact in artifacts
+        ],
+        "failures": failures,
+        "pending_approvals": [
+            {
+                "approval_id": approval.get("approval_id"),
+                "risk_class": approval.get("risk_class"),
+                "action_digest": approval.get("action_digest"),
+            }
+            for approval in pending_approvals
+        ],
+        "created_at": run.get("created_at"),
+        "updated_at": run.get("updated_at"),
+        "next_action": next_action,
+    }
+
+
+def op_run_outcome(conn: sqlite3.Connection, *, run_id: str) -> dict:
+    run_row = conn.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+    if run_row is None:
+        raise CoreOpError(f"no such run: {run_id}")
+    run = dict(run_row)
+    steps = [dict(row) for row in conn.execute("SELECT * FROM steps WHERE run_id = ? ORDER BY started_at", (run_id,))]
+    artifacts = [dict(row) for row in conn.execute("SELECT * FROM artifacts WHERE run_id = ? ORDER BY created_at", (run_id,))]
+    approvals = [dict(row) for row in conn.execute("SELECT * FROM approvals WHERE run_id = ? ORDER BY requested_at", (run_id,))]
+    return _run_outcome_from_parts(run, steps, artifacts, approvals)
+
+
 def _adapt_objective_input(input_data: dict, input_schema: dict) -> dict:
     if "objective" not in input_data or not isinstance(input_data.get("objective"), str):
         return input_data
@@ -499,13 +599,18 @@ def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str
         workflow.ref,
         _run_workflow_safely(conn, run_id=run_id, workflow=workflow, node_executors=node_executors),
     )
+    conn.execute(
+        "UPDATE runs SET output_json = ?, updated_at = ? WHERE run_id = ?",
+        (json.dumps(result), utc_now_rfc3339(), run_id),
+    )
+    conn.commit()
     _cleanup_run_workspace(
         repo_root,
         run_id,
         result,
         retain_worktree=_retain_worktree_for_improvement(workflow.ref, input_data),
     )
-    return {"run_id": run_id, **result}
+    return {"run_id": run_id, **result, "outcome": op_run_outcome(conn, run_id=run_id)}
 
 
 def op_run_status(conn: sqlite3.Connection, *, run_id: str) -> dict:
@@ -513,14 +618,14 @@ def op_run_status(conn: sqlite3.Connection, *, run_id: str) -> dict:
     if run_row is None:
         raise CoreOpError(f"no such run: {run_id}")
     steps = conn.execute("SELECT * FROM steps WHERE run_id = ? ORDER BY started_at", (run_id,)).fetchall()
-    return {**dict(run_row), "steps": [dict(row) for row in steps]}
+    return {**dict(run_row), "steps": [dict(row) for row in steps], "outcome": op_run_outcome(conn, run_id=run_id)}
 
 
 def op_run_list(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         "SELECT run_id, workflow_ref, status, created_at, updated_at FROM runs ORDER BY created_at"
     ).fetchall()
-    return [dict(row) for row in rows]
+    return [{**dict(row), "outcome": op_run_outcome(conn, run_id=row["run_id"])} for row in rows]
 
 
 def op_run_resume(repo_root: Path, conn: sqlite3.Connection) -> list[dict]:
@@ -542,13 +647,18 @@ def op_run_resume(repo_root: Path, conn: sqlite3.Connection) -> list[dict]:
             workflow.ref,
             _run_workflow_safely(conn, run_id=run_id, workflow=workflow, node_executors=node_executors),
         )
+        conn.execute(
+            "UPDATE runs SET output_json = ?, updated_at = ? WHERE run_id = ?",
+            (json.dumps(result), utc_now_rfc3339(), run_id),
+        )
+        conn.commit()
         _cleanup_run_workspace(
             repo_root,
             run_id,
             result,
             retain_worktree=_retain_worktree_for_improvement(run_row["workflow_ref"], input_data),
         )
-        results.append({"run_id": run_id, **result})
+        results.append({"run_id": run_id, **result, "outcome": op_run_outcome(conn, run_id=run_id)})
     return results
 
 
@@ -1408,6 +1518,268 @@ def op_system_readiness(repo_root: Path) -> dict:
         }
 
 
+def _doctor_check(name: str, status: str, summary: str, *, detail=None, next_action: str | None = None) -> dict:
+    return {
+        "name": name,
+        "status": status,
+        "summary": summary,
+        "detail": _jsonable(detail or {}),
+        "next_action": next_action,
+    }
+
+
+def _doctor_overall(checks: list[dict]) -> str:
+    if any(check["status"] == "error" for check in checks):
+        return "error"
+    if any(check["status"] == "warn" for check in checks):
+        return "warn"
+    return "ok"
+
+
+def _command_version(command: str, *args: str) -> tuple[bool, str | None]:
+    executable = shutil.which(command)
+    if executable is None:
+        return False, None
+    try:
+        result = subprocess.run(
+            [executable, *args],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception as exc:
+        return True, str(exc)
+    output = (result.stdout or result.stderr).strip().splitlines()
+    return True, output[0] if output else None
+
+
+def _doctor_python(repo_root: Path) -> dict:
+    selected = _repo_python_executable(repo_root)
+    selected_path = selected[1] if selected else None
+    current = Path(sys.executable)
+    expected = Path(selected_path) if selected_path else None
+    in_repo_venv = expected is not None and current.resolve() == expected.resolve()
+    version_ok = (3, 12) <= sys.version_info[:2] < (3, 15)
+    if not version_ok:
+        return _doctor_check(
+            "python",
+            "error",
+            f"Python {sys.version.split()[0]} is outside the supported >=3.12,<3.15 range.",
+            detail={"executable": sys.executable, "expected": selected_path},
+            next_action="Recreate backend/.venv with Python 3.12, 3.13, or 3.14.",
+        )
+    if not in_repo_venv:
+        return _doctor_check(
+            "python",
+            "warn",
+            "Current Python is supported but is not the repo venv interpreter.",
+            detail={"executable": sys.executable, "expected": selected_path},
+            next_action="Run commands through backend/.venv/Scripts/python.exe on Windows or backend/.venv/bin/python on Linux.",
+        )
+    return _doctor_check(
+        "python",
+        "ok",
+        f"Using repo venv Python {sys.version.split()[0]}.",
+        detail={"executable": sys.executable, "marker": selected[0] if selected else None},
+    )
+
+
+def _doctor_node(repo_root: Path) -> dict:
+    node_present, node_version = _command_version("node", "--version")
+    npm_present, npm_version = _command_version("npm", "--version")
+    node_modules = repo_root / "frontend" / "node_modules"
+    detail = {"node": node_version, "npm": npm_version, "node_modules": str(node_modules)}
+    if not node_present or not npm_present:
+        return _doctor_check(
+            "frontend",
+            "warn",
+            "Node.js or npm is not available; CLI/GUI frontends cannot run from this shell.",
+            detail=detail,
+            next_action="Install Node.js 26+ and run `npm --prefix frontend install`.",
+        )
+    node_major = None
+    if node_version and node_version.startswith("v"):
+        try:
+            node_major = int(node_version[1:].split(".", 1)[0])
+        except ValueError:
+            node_major = None
+    if node_major is not None and node_major < 26:
+        return _doctor_check(
+            "frontend",
+            "warn",
+            f"Node.js {node_version} is below the frontend requirement.",
+            detail=detail,
+            next_action="Install Node.js 26+ and rerun `npm --prefix frontend install`.",
+        )
+    if not node_modules.is_dir():
+        return _doctor_check(
+            "frontend",
+            "warn",
+            "Frontend dependencies are not installed.",
+            detail=detail,
+            next_action="Run `npm --prefix frontend install`.",
+        )
+    return _doctor_check("frontend", "ok", "Node, npm, and frontend dependencies are present.", detail=detail)
+
+
+def _doctor_registry(repo_root: Path) -> dict:
+    targets = [
+        (repo_root / "config" / "app_registry" / "workflows" / "assistant-default" / "1.0.0.yaml", "workflows"),
+        (repo_root / "config" / "app_registry" / "capabilities" / "assistant_reply" / "1.0.0.yaml", "capabilities"),
+    ]
+    results = []
+    for path, kind in targets:
+        if not path.is_file():
+            return _doctor_check(
+                "registry",
+                "error",
+                f"Required default registry object is missing: {path.relative_to(repo_root)}",
+                detail={"path": str(path), "kind": kind},
+                next_action="Restore the repo-tracked default registry object.",
+            )
+        try:
+            results.append(op_registry_validate(path, kind=kind))
+        except Exception as exc:
+            return _doctor_check(
+                "registry",
+                "error",
+                f"Default registry object failed validation: {path.relative_to(repo_root)}",
+                detail={"path": str(path), "kind": kind, "error": str(exc)},
+                next_action="Fix or restore the invalid default registry object.",
+            )
+    return _doctor_check("registry", "ok", "Default assistant workflow and capability validate.", detail={"validated": results})
+
+
+def _doctor_database(repo_root: Path) -> dict:
+    path = resolve_db_path(repo_root)
+    if not path.is_file():
+        return _doctor_check(
+            "database",
+            "error",
+            "AWF database has not been bootstrapped.",
+            detail={"path": str(path)},
+            next_action="Run `awf-setup` from the repo venv.",
+        )
+    return _doctor_check("database", "ok", "AWF database exists.", detail={"path": str(path)})
+
+
+def _doctor_env(repo_root: Path) -> dict:
+    path = env_path(repo_root)
+    if not path.is_file():
+        return _doctor_check(
+            "env",
+            "error",
+            ".env is missing.",
+            detail={"path": str(path)},
+            next_action="Run `awf-setup` to generate local secrets.",
+        )
+    try:
+        secret = get_env_value(path, "AWF_SECRET_KEY")
+    except Exception as exc:
+        return _doctor_check(
+            "env",
+            "error",
+            ".env does not contain a usable AWF_SECRET_KEY.",
+            detail={"error": str(exc)},
+            next_action="Regenerate .env with `awf-setup` or restore the correct local key.",
+        )
+    if not secret or secret == "<your-secret-key-here>":
+        return _doctor_check(
+            "env",
+            "error",
+            ".env still contains a placeholder secret key.",
+            next_action="Run `awf-setup` or replace AWF_SECRET_KEY with a generated local key.",
+        )
+    return _doctor_check("env", "ok", ".env contains a local AWF secret key.")
+
+
+def _doctor_paths(repo_root: Path) -> dict:
+    cache_temp = repo_root / "cache" / "temp"
+    cache_sandbox = repo_root / "cache" / "sandbox"
+    missing = [str(path.relative_to(repo_root)) for path in (cache_temp, cache_sandbox) if not path.is_dir()]
+    if missing:
+        return _doctor_check(
+            "local_paths",
+            "warn",
+            "Some local cache directories are missing.",
+            detail={"missing": missing, "platform": os.name},
+            next_action="Run `awf-setup`; Windows operators should use cache/temp for temp-heavy commands.",
+        )
+    return _doctor_check(
+        "local_paths",
+        "ok",
+        "Local cache and sandbox paths exist.",
+        detail={"cache_temp": str(cache_temp), "cache_sandbox": str(cache_sandbox), "platform": os.name},
+    )
+
+
+def _doctor_agent_clis() -> dict:
+    commands = {
+        "codex": ("codex", "--version"),
+        "claude-code": ("claude", "--version"),
+        "antigravity": ("antigravity", "--version"),
+        "copilot": ("gh", "--version"),
+        "cline": ("cline", "--version"),
+    }
+    found = {}
+    for adapter, command in commands.items():
+        present, version = _command_version(*command)
+        found[adapter] = {"present": present, "version": version}
+    if any(item["present"] for item in found.values()):
+        return _doctor_check("agent_clis", "ok", "At least one implementation agent CLI is visible.", detail=found)
+    return _doctor_check(
+        "agent_clis",
+        "warn",
+        "No implementation agent CLI is visible; first-run assistant still works.",
+        detail=found,
+        next_action="Install and authenticate Codex, Claude Code, Antigravity, GitHub Copilot CLI, or Cline before running implementation workflows.",
+    )
+
+
+def _doctor_speech(readiness: dict) -> dict:
+    results = readiness.get("readiness", {}) if isinstance(readiness, dict) else {}
+    speech = {name: result for name, result in results.items() if name in {"stt", "tts", "vad", "wake"}}
+    if not speech:
+        return _doctor_check(
+            "speech",
+            "warn",
+            "Speech readiness is unavailable.",
+            detail=readiness,
+            next_action="Run `awf-speech models verify`; run `awf-speech models sync` if artifacts are missing.",
+        )
+    if all(result.get("ready") for result in speech.values()):
+        return _doctor_check("speech", "ok", "Speech readiness checks are ready.", detail=speech)
+    return _doctor_check(
+        "speech",
+        "warn",
+        "One or more speech functions are not ready.",
+        detail=speech,
+        next_action="Run `awf-speech models verify`, then `awf-speech models sync` for missing artifacts.",
+    )
+
+
+def op_system_doctor(repo_root: Path) -> dict:
+    readiness = op_system_readiness(repo_root)
+    checks = [
+        _doctor_python(repo_root),
+        _doctor_env(repo_root),
+        _doctor_database(repo_root),
+        _doctor_paths(repo_root),
+        _doctor_registry(repo_root),
+        _doctor_node(repo_root),
+        _doctor_agent_clis(),
+        _doctor_speech(readiness),
+    ]
+    next_actions = [check["next_action"] for check in checks if check.get("next_action")]
+    return {
+        "status": _doctor_overall(checks),
+        "checks": checks,
+        "readiness": readiness,
+        "next_actions": next_actions,
+        "first_run_command": 'awf run assistant-default@1.0.0 --objective "check the system"',
+    }
+
+
 def _control_error(exc: Exception) -> dict:
     return {"error": str(exc)}
 
@@ -1422,6 +1794,7 @@ def op_control_center_summary(repo_root: Path, conn: sqlite3.Connection) -> dict
     except Exception as exc:
         llm_status = _control_error(exc)
     readiness = op_system_readiness(repo_root)
+    doctor = op_system_doctor(repo_root)
     improvements = op_improvement_list(conn)
     return {
         "runs": op_run_list(conn),
@@ -1434,6 +1807,7 @@ def op_control_center_summary(repo_root: Path, conn: sqlite3.Connection) -> dict
             "status": llm_status,
         },
         "readiness": readiness,
+        "doctor": doctor,
     }
 
 
@@ -1445,6 +1819,7 @@ def op_control_center_run_detail(repo_root: Path, conn: sqlite3.Connection, *, r
     verdicts = [artifact for artifact in artifacts if artifact.get("artifact_type") == "verdict"]
     return {
         "run": status,
+        "outcome": op_run_outcome(conn, run_id=run_id),
         "artifacts": artifacts,
         "timeline": timeline,
         "improvements": improvements,

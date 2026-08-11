@@ -23,27 +23,144 @@ def _print(obj) -> None:
     print(json.dumps(obj, indent=2, default=str))
 
 
+def _print_or_json(args: argparse.Namespace, obj, text: str) -> None:
+    if getattr(args, "json", False):
+        _print(obj)
+    else:
+        print(text)
+
+
+def _format_outcome(outcome: dict) -> str:
+    lines = [
+        f"Run: {outcome.get('run_id')}",
+        f"Workflow: {outcome.get('workflow_ref')}",
+        f"Status: {outcome.get('status')}",
+        f"Result: {outcome.get('response_text')}",
+    ]
+    evidence = outcome.get("evidence") if isinstance(outcome.get("evidence"), list) else []
+    failures = outcome.get("failures") if isinstance(outcome.get("failures"), list) else []
+    pending = outcome.get("pending_approvals") if isinstance(outcome.get("pending_approvals"), list) else []
+    if evidence:
+        lines.append("Evidence:")
+        lines.extend(f"  - {item.get('type')}: {item.get('path')} ({item.get('artifact_id')})" for item in evidence)
+    if failures:
+        lines.append("Failures:")
+        lines.extend(
+            f"  - {item.get('node_id')} ({item.get('step_id')}): {item.get('failure_class') or 'failed'}"
+            for item in failures
+        )
+    if pending:
+        lines.append("Pending approvals:")
+        lines.extend(f"  - {item.get('approval_id')} {item.get('risk_class') or ''}".rstrip() for item in pending)
+    if outcome.get("next_action"):
+        lines.append(f"Next: {outcome['next_action']}")
+    return "\n".join(lines)
+
+
+def _outcome_from_result(result: dict) -> dict:
+    outcome = result.get("outcome")
+    if isinstance(outcome, dict):
+        return outcome
+    return {
+        "run_id": result.get("run_id"),
+        "workflow_ref": result.get("workflow_ref"),
+        "status": result.get("status"),
+        "response_text": result.get("outputs", {}).get("response_text") if isinstance(result.get("outputs"), dict) else "",
+        "evidence": [],
+        "failures": [],
+        "pending_approvals": [],
+        "next_action": None,
+    }
+
+
+def _format_run_list(runs: list[dict]) -> str:
+    if not runs:
+        return "No runs."
+    lines = ["Runs:"]
+    for run in runs:
+        outcome = run.get("outcome") if isinstance(run.get("outcome"), dict) else {}
+        response = outcome.get("response_text") or ""
+        lines.append(f"  - {run.get('run_id')} {run.get('status')} {run.get('workflow_ref')} :: {response}")
+    return "\n".join(lines)
+
+
+def _format_approvals(approvals: list[dict]) -> str:
+    if not approvals:
+        return "No pending approvals."
+    lines = ["Pending approvals:"]
+    for approval in approvals:
+        risk = approval.get("risk_class") or "risk?"
+        lines.append(f"  - {approval.get('approval_id')} {risk} run={approval.get('run_id')} digest={approval.get('action_digest')}")
+    return "\n".join(lines)
+
+
+def _format_artifacts(artifacts: list[dict]) -> str:
+    if not artifacts:
+        return "No artifacts for this run."
+    lines = ["Artifacts:"]
+    for artifact in artifacts:
+        lines.append(
+            f"  - {artifact.get('artifact_type')}: {artifact.get('relative_path')} ({artifact.get('artifact_id')})"
+        )
+    return "\n".join(lines)
+
+
+def _format_readiness(readiness: dict) -> str:
+    lines = [f"Profile: {readiness.get('profile_id') or 'unknown'}"]
+    if readiness.get("error"):
+        lines.append(f"Error: {readiness['error']}")
+    results = readiness.get("readiness") if isinstance(readiness.get("readiness"), dict) else {}
+    for name, result in results.items():
+        state = "ready" if result.get("ready") else "not ready"
+        lines.append(f"{name}: {state} on {result.get('device')} - {result.get('reason')}")
+    tokens = readiness.get("tokens") if isinstance(readiness.get("tokens"), list) else []
+    if tokens:
+        lines.append(f"Tokens: {', '.join(tokens)}")
+    return "\n".join(lines)
+
+
+def _format_doctor(report: dict) -> str:
+    lines = [f"AWF doctor: {report.get('status')}"]
+    for check in report.get("checks", []):
+        lines.append(f"- {check.get('name')}: {check.get('status')} - {check.get('summary')}")
+        if check.get("next_action"):
+            lines.append(f"  next: {check['next_action']}")
+    if report.get("first_run_command"):
+        lines.append(f"First run: {report['first_run_command']}")
+    return "\n".join(lines)
+
+
 def cmd_run(args: argparse.Namespace, repo_root: Path, conn) -> int:
     input_data = {"objective": args.objective} if args.objective else {}
     if args.input:
         input_data = json.loads(Path(args.input).read_text())
     result = ops.op_run_start(repo_root, conn, workflow_ref=args.workflow, input_data=input_data)
-    _print(result)
+    _print_or_json(args, result, _format_outcome(_outcome_from_result(result)))
     return 0 if result.get("status") == "SUCCEEDED" else 1
 
 
 def cmd_status(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    _print(ops.op_run_status(conn, run_id=args.run_id))
+    result = ops.op_run_status(conn, run_id=args.run_id)
+    _print_or_json(args, result, _format_outcome(result["outcome"]))
     return 0
 
 
 def cmd_resume(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    _print(ops.op_run_resume(repo_root, conn))
+    results = ops.op_run_resume(repo_root, conn)
+    text = "No incomplete runs to resume." if not results else "\n\n".join(_format_outcome(_outcome_from_result(item)) for item in results)
+    _print_or_json(args, results, text)
+    return 0
+
+
+def cmd_runs(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    result = ops.op_run_list(conn)
+    _print_or_json(args, result, _format_run_list(result))
     return 0
 
 
 def cmd_approvals(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    _print(ops.op_approval_list(conn))
+    result = ops.op_approval_list(conn)
+    _print_or_json(args, result, _format_approvals(result))
     return 0
 
 
@@ -58,8 +175,21 @@ def cmd_reject(args: argparse.Namespace, repo_root: Path, conn) -> int:
 
 
 def cmd_artifacts(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    _print(ops.op_artifact_list(conn, run_id=args.run_id))
+    result = ops.op_artifact_list(conn, run_id=args.run_id)
+    _print_or_json(args, result, _format_artifacts(result))
     return 0
+
+
+def cmd_readiness(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    result = ops.op_system_readiness(repo_root)
+    _print_or_json(args, result, _format_readiness(result))
+    return 0 if "error" not in result else 1
+
+
+def cmd_doctor(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    result = ops.op_system_doctor(repo_root)
+    _print_or_json(args, result, _format_doctor(result))
+    return 0 if result.get("status") != "error" else 1
 
 
 def cmd_improvement_list(args: argparse.Namespace, repo_root: Path, conn) -> int:
@@ -283,16 +413,24 @@ def build_parser() -> argparse.ArgumentParser:
     run_input = run_parser.add_mutually_exclusive_group()
     run_input.add_argument("--input", required=False, default=None)
     run_input.add_argument("--objective", required=False, default=None)
+    run_parser.add_argument("--json", action="store_true")
     run_parser.set_defaults(func=cmd_run)
 
     status_parser = sub.add_parser("status")
     status_parser.add_argument("run_id")
+    status_parser.add_argument("--json", action="store_true")
     status_parser.set_defaults(func=cmd_status)
 
     resume_parser = sub.add_parser("resume")
+    resume_parser.add_argument("--json", action="store_true")
     resume_parser.set_defaults(func=cmd_resume)
 
+    runs_parser = sub.add_parser("runs")
+    runs_parser.add_argument("--json", action="store_true")
+    runs_parser.set_defaults(func=cmd_runs)
+
     approvals_parser = sub.add_parser("approvals")
+    approvals_parser.add_argument("--json", action="store_true")
     approvals_parser.set_defaults(func=cmd_approvals)
 
     approve_parser = sub.add_parser("approve")
@@ -306,7 +444,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     artifacts_parser = sub.add_parser("artifacts")
     artifacts_parser.add_argument("run_id")
+    artifacts_parser.add_argument("--json", action="store_true")
     artifacts_parser.set_defaults(func=cmd_artifacts)
+
+    readiness_parser = sub.add_parser("readiness")
+    readiness_parser.add_argument("--json", action="store_true")
+    readiness_parser.set_defaults(func=cmd_readiness)
+
+    doctor_parser = sub.add_parser("doctor")
+    doctor_parser.add_argument("--json", action="store_true")
+    doctor_parser.set_defaults(func=cmd_doctor)
 
     improvement_parser = sub.add_parser("improvement")
     improvement_sub = improvement_parser.add_subparsers(dest="improvement_command", required=True)

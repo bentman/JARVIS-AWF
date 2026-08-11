@@ -9,6 +9,7 @@ export interface OverviewProps {
 export function Overview({ controlSummary, onLlmModels }: OverviewProps): React.JSX.Element {
   const registryCounts = controlSummary?.registry_counts ?? {};
   const readiness = controlSummary?.readiness;
+  const doctor = controlSummary?.doctor;
   const llmStatus = controlSummary?.llm.status;
   const llmServers = controlSummary?.llm.servers;
   const recentVerdicts: ArtifactSummary[] = controlSummary?.recent_verdicts ?? [];
@@ -21,6 +22,28 @@ export function Overview({ controlSummary, onLlmModels }: OverviewProps): React.
 
   return (
     <>
+      <section aria-label="Operator readiness" className="card">
+        <h2>Operator readiness</h2>
+        {doctor ? (
+          <>
+            <div>
+              Status: <span className={`chip state-${doctor.status === "ok" ? "ok" : doctor.status === "warn" ? "warn" : "danger"}`}>{doctor.status}</span>
+            </div>
+            <ul className="list">
+              {doctor.checks.map((check) => (
+                <li key={check.name}>
+                  <span className={`dot ${check.status === "ok" ? "state-ok" : check.status === "warn" ? "state-warn" : "state-danger"}`} />
+                  {check.name}: {check.summary}
+                  {check.next_action && <div className="row-reason">Next: {check.next_action}</div>}
+                </li>
+              ))}
+            </ul>
+            <div className="mono">{doctor.first_run_command}</div>
+          </>
+        ) : (
+          <p className="empty">No operator readiness data.</p>
+        )}
+      </section>
       <section aria-label="System readiness" className="card">
         <h2>System readiness</h2>
         {readiness ? (

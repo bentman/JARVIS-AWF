@@ -27,7 +27,15 @@ cd <REPO_ROOT_PATH>
 git pull
 ```
 
-## Setup sequence
+## Recommended setup
+
+```bash
+bash scripts/bootstrap.sh
+```
+
+The wrapper creates `backend/.venv` when needed, installs AWF through the repo venv, installs the hardware-selected backend dependencies, bootstraps local state, syncs and verifies speech models, installs frontend dependencies when npm is available, runs `awf doctor`, and prints the first assistant run command. Use `--skip-speech` for a faster core-only setup.
+
+## Manual setup sequence
 
 ```text
 create venv -> install -> provision -> bootstrap -> acquire models -> validate
@@ -129,12 +137,16 @@ Exit codes: `0` pass, `1` fail, `2` skipped, `3` environment unsatisfied. `runti
 
 ```bash
 backend/.venv/bin/awf run assistant-default@1.0.0 --objective "check the system"
+backend/.venv/bin/awf runs
 backend/.venv/bin/awf status <run-id>
 backend/.venv/bin/awf artifacts <run-id>
 backend/.venv/bin/awf approvals
+backend/.venv/bin/awf doctor
 ```
 
 `assistant-default@1.0.0` is the local first-run workflow. It verifies that AWF can accept a request, create a durable Run, and return response text without requiring an external coding-agent CLI. Use implementation workflows after the relevant agent CLIs are installed and authenticated.
+
+The run, status, runs, resume, approvals, artifacts, readiness, and doctor commands print operator-readable summaries by default. Add `--json` when automation needs the raw payload.
 
 Store a provider API key by name, so it never appears in a registry file:
 
@@ -166,6 +178,12 @@ Wrong ONNX Runtime installed, or providers missing:
 ```bash
 backend/.venv/bin/awf-setup --provision
 backend/.venv/bin/awf-setup --install --verify
+```
+
+Install or setup state unclear:
+
+```bash
+backend/.venv/bin/awf doctor
 ```
 
 Speech models missing:

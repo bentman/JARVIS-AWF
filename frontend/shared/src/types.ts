@@ -53,6 +53,7 @@ export type MethodName =
   | "awf/control.summary"
   | "awf/control.runDetail"
   | "awf/system.readiness"
+  | "awf/system.doctor"
   | "awf/llm.servers"
   | "awf/llm.models"
   | "awf/llm.serveStatus"
@@ -88,11 +89,26 @@ export interface RunStep {
   ended_at: string | null;
 }
 
+export interface RunOutcome {
+  run_id: string;
+  workflow_ref: string;
+  status: string;
+  response_text: string;
+  evidence: { artifact_id?: string; type?: string; path?: string }[];
+  artifacts: { artifact_id?: string; type?: string; path?: string; complete?: boolean }[];
+  failures: { step_id?: string; node_id?: string; failure_class?: string | null; output?: unknown }[];
+  pending_approvals: { approval_id?: string; risk_class?: string | null; action_digest?: string }[];
+  created_at?: string;
+  updated_at?: string;
+  next_action: string;
+}
+
 export interface RunStatus {
   run_id: string;
   workflow_ref: string;
   status: string;
   steps: RunStep[];
+  outcome?: RunOutcome;
   [key: string]: unknown;
 }
 
@@ -102,6 +118,7 @@ export interface RunSummary {
   status: string;
   created_at: string;
   updated_at: string;
+  outcome?: RunOutcome;
 }
 
 export interface RunStartResult {
@@ -109,6 +126,7 @@ export interface RunStartResult {
   status: string;
   repairs_used?: number;
   verdict_artifact_id?: string | null;
+  outcome?: RunOutcome;
   [key: string]: unknown;
 }
 
@@ -202,6 +220,22 @@ export interface SystemReadiness {
   error?: string;
 }
 
+export interface DoctorCheck {
+  name: string;
+  status: "ok" | "warn" | "error";
+  summary: string;
+  detail: Record<string, unknown>;
+  next_action?: string | null;
+}
+
+export interface SystemDoctor {
+  status: "ok" | "warn" | "error";
+  checks: DoctorCheck[];
+  readiness: SystemReadiness;
+  next_actions: string[];
+  first_run_command: string;
+}
+
 export interface LlmServersReport {
   default_server?: string;
   host_profile_id?: string;
@@ -240,10 +274,12 @@ export interface ControlSummary {
     status: LlmServeStatus;
   };
   readiness: SystemReadiness;
+  doctor?: SystemDoctor;
 }
 
 export interface ControlRunDetail {
   run: RunStatus;
+  outcome?: RunOutcome;
   artifacts: Artifact[];
   timeline: Record<string, unknown>;
   improvements: ImprovementProposal[];

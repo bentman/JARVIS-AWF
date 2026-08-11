@@ -52,6 +52,12 @@ describe("Dashboard", () => {
             tokens: ["cuda_available"],
             readiness: { stt: { device: "cpu", ready: true, reason: "available" } },
           },
+          doctor: {
+            status: "warn",
+            checks: [{ name: "frontend", status: "warn", summary: "npm missing", detail: {}, next_action: "install npm" }],
+            next_actions: ["install npm"],
+            first_run_command: 'awf run assistant-default@1.0.0 --objective "check the system"',
+          },
         }}
         onRefresh={vi.fn()}
         refreshing={false}
@@ -68,6 +74,8 @@ describe("Dashboard", () => {
     expect(screen.getByText("skills: 2")).toBeTruthy();
     expect(screen.getByText("Tokens: cuda_available")).toBeTruthy();
     expect(screen.getByText(/"gpu_vendor": "nvidia"/)).toBeTruthy();
+    expect(screen.getByText("Operator readiness")).toBeTruthy();
+    expect(screen.getByText(/frontend: npm missing/)).toBeTruthy();
   });
 
   it("shows empty-state text, not nothing, when there is no data", () => {
@@ -102,6 +110,17 @@ describe("Dashboard", () => {
             status: "SUCCEEDED",
             steps: [{ step_id: "s1", node_id: "check", status: "SUCCEEDED", attempt: 1 }],
           },
+          outcome: {
+            run_id: "run-1",
+            workflow_ref: "demo@1.0.0",
+            status: "SUCCEEDED",
+            response_text: "Workflow produced a useful result.",
+            evidence: [],
+            artifacts: [],
+            failures: [],
+            pending_approvals: [],
+            next_action: "No operator action required.",
+          },
           artifacts: [],
           timeline: {},
           improvements: [],
@@ -117,6 +136,8 @@ describe("Dashboard", () => {
 
     expect(onRunDetail).toHaveBeenCalledWith("run-1");
     expect(screen.getByText(/check: SUCCEEDED/)).toBeTruthy();
+    expect(screen.getByText("Workflow produced a useful result.")).toBeTruthy();
+    expect(screen.getByText("Next: No operator action required.")).toBeTruthy();
   });
 
   it("shows the run detail timeline and lets an operator view an artifact's content", async () => {

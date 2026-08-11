@@ -20,6 +20,7 @@ import {
   type RunStartResult,
   type RunStatus,
   type RunSummary,
+  type SystemDoctor,
   type SystemReadiness,
   type VoiceFrameType,
   type VoiceSessionResult,
@@ -308,6 +309,10 @@ export class ProtocolClient {
 
   systemReadiness(): Promise<SystemReadiness> {
     return this.call("awf/system.readiness", {});
+  }
+
+  systemDoctor(): Promise<SystemDoctor> {
+    return this.call("awf/system.doctor", {});
   }
 
   llmServers(): Promise<LlmServersReport> {

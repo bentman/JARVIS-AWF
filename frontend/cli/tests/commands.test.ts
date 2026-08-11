@@ -45,6 +45,11 @@ function makeFakeClient(overrides: Partial<CommandClient> = {}): CommandClient {
     controlSummary: vi.fn().mockResolvedValue({ runs: [], approvals: [] }),
     controlRunDetail: vi.fn().mockResolvedValue({ run: { run_id: "run-1" } }),
     systemReadiness: vi.fn().mockResolvedValue({ profile_id: "linux-x64-cpu" }),
+    systemDoctor: vi.fn().mockResolvedValue({
+      status: "warn",
+      checks: [{ name: "frontend", status: "warn", summary: "npm missing" }],
+      first_run_command: 'awf run assistant-default@1.0.0 --objective "check the system"',
+    }),
     llmServers: vi.fn().mockResolvedValue({ default_server: "llama-server" }),
     llmModels: vi.fn().mockResolvedValue({ local_models: [] }),
     llmServeStatus: vi.fn().mockResolvedValue({ state: "stopped" }),
@@ -69,14 +74,8 @@ describe("dispatchCommand", () => {
     const client = makeFakeClient();
     const result = await dispatchCommand(client, "/run demo@1.0.0", DEFAULT_SETTINGS);
     expect(client.runStart).toHaveBeenCalledWith("demo@1.0.0");
-    expect(result).toEqual({
-      kind: "json",
-      data: {
-        run_id: "run-1",
-        status: "SUCCEEDED",
-        outputs: { response_text: "Default assistant response." },
-      },
-    });
+    expect(result.kind).toBe("text");
+    if (result.kind === "text") expect(result.text).toContain("Result: Default assistant response.");
   });
 
   it("plain assistant input starts the default workflow with objective text", async () => {
@@ -86,7 +85,11 @@ describe("dispatchCommand", () => {
     expect(client.runStart).toHaveBeenCalledWith(DEFAULT_ASSISTANT_WORKFLOW_REF, {
       objective: "summarize the active run",
     });
-    expect(result).toEqual({ kind: "text", text: "Default assistant response. (run-1)" });
+    expect(result.kind).toBe("text");
+    if (result.kind === "text") {
+      expect(result.text).toContain("Run: run-1");
+      expect(result.text).toContain("Result: Default assistant response.");
+    }
   });
 
   it("plain assistant input can use the configured default workflow", async () => {
@@ -105,20 +108,23 @@ describe("dispatchCommand", () => {
 
   it("/status calls runStatus with the run id", async () => {
     const client = makeFakeClient();
-    await dispatchCommand(client, "/status run-1", DEFAULT_SETTINGS);
+    const result = await dispatchCommand(client, "/status run-1", DEFAULT_SETTINGS);
     expect(client.runStatus).toHaveBeenCalledWith("run-1");
+    expect(result.kind).toBe("text");
   });
 
   it("/runs calls runList", async () => {
     const client = makeFakeClient();
-    await dispatchCommand(client, "/runs", DEFAULT_SETTINGS);
+    const result = await dispatchCommand(client, "/runs", DEFAULT_SETTINGS);
     expect(client.runList).toHaveBeenCalled();
+    expect(result).toEqual({ kind: "text", text: "No runs." });
   });
 
   it("/resume calls runResume", async () => {
     const client = makeFakeClient();
-    await dispatchCommand(client, "/resume", DEFAULT_SETTINGS);
+    const result = await dispatchCommand(client, "/resume", DEFAULT_SETTINGS);
     expect(client.runResume).toHaveBeenCalled();
+    expect(result).toEqual({ kind: "text", text: "No incomplete runs to resume." });
   });
 
   it("/approvals calls approvalList", async () => {
@@ -264,6 +270,9 @@ describe("dispatchCommand", () => {
 
     await dispatchCommand(client, "/readiness", DEFAULT_SETTINGS);
     expect(client.systemReadiness).toHaveBeenCalled();
+
+    await dispatchCommand(client, "/doctor", DEFAULT_SETTINGS);
+    expect(client.systemDoctor).toHaveBeenCalled();
 
     await dispatchCommand(client, "/llm", DEFAULT_SETTINGS);
     expect(client.llmServers).toHaveBeenCalled();

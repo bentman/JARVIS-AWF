@@ -25,7 +25,15 @@ Set-Location <REPO_ROOT_PATH>
 git pull
 ```
 
-## Setup sequence
+## Recommended setup
+
+```powershell
+.\scripts\bootstrap.ps1
+```
+
+The wrapper creates `backend\.venv` when needed, installs AWF through the repo venv, installs the hardware-selected backend dependencies, bootstraps local state, syncs and verifies speech models, installs frontend dependencies when npm is available, runs `awf doctor`, and prints the first assistant run command. Use `-SkipSpeech` for a faster core-only setup.
+
+## Manual setup sequence
 
 ```text
 create venv -> install -> provision -> bootstrap -> acquire models -> validate
@@ -126,12 +134,16 @@ Exit codes: `0` pass, `1` fail, `2` skipped, `3` environment unsatisfied. `runti
 
 ```powershell
 .\backend\.venv\Scripts\awf run assistant-default@1.0.0 --objective "check the system"
+.\backend\.venv\Scripts\awf runs
 .\backend\.venv\Scripts\awf status <run-id>
 .\backend\.venv\Scripts\awf artifacts <run-id>
 .\backend\.venv\Scripts\awf approvals
+.\backend\.venv\Scripts\awf doctor
 ```
 
 `assistant-default@1.0.0` is the local first-run workflow. It verifies that AWF can accept a request, create a durable Run, and return response text without requiring an external coding-agent CLI. Use implementation workflows after the relevant agent CLIs are installed and authenticated.
+
+The run, status, runs, resume, approvals, artifacts, readiness, and doctor commands print operator-readable summaries by default. Add `--json` when automation needs the raw payload.
 
 Store a provider API key by name, so it never appears in a registry file:
 
@@ -169,6 +181,12 @@ Wrong ONNX Runtime installed, or providers missing:
 ```powershell
 .\backend\.venv\Scripts\awf-setup --provision
 .\backend\.venv\Scripts\awf-setup --install --verify
+```
+
+Install or setup state unclear:
+
+```powershell
+.\backend\.venv\Scripts\awf doctor
 ```
 
 Speech models missing:

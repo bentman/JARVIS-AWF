@@ -15,10 +15,18 @@ Setup is per-platform. Follow the guide for your host:
 
 Both cover the same sequence: create the backend virtual environment, install the hardware-appropriate dependency set, bootstrap local state, acquire the speech models, and validate.
 
+For the repo-local operator path, the bootstrap wrappers perform that sequence and finish with a doctor report:
+
+```bash
+bash scripts/bootstrap.sh      # Linux / WSL2
+.\scripts\bootstrap.ps1        # Windows PowerShell
+```
+
 After setup, the local first-run check is:
 
 ```bash
 awf run assistant-default@1.0.0 --objective "check the system"
+awf doctor
 ```
 
 That workflow confirms request handling and durable Run creation without requiring an external coding-agent CLI.
@@ -61,6 +69,8 @@ Every path through a node passes the Capability Guard, and every transition is r
 ## 🖥️ Interfaces
 
 One core with three surfaces. A headless command-line tool is the scriptable base and the only component that directly opens the durable database. **AWF-CLI** is a terminal UI where plain text starts the default assistant workflow and `/slash` commands expose operator actions. **AWF-GUI** is the desktop control center for chat, runs, approvals, readiness, registry actions, memory, and push-to-talk voice.
+
+Run, status, resume, approvals, artifacts, readiness, and doctor commands now lead with operator-readable outcome text and keep raw payloads available with `--json`.
 
 Both frontends are presentation layers over the same core protocol. High-risk approvals always require on-screen confirmation of the exact action.
 

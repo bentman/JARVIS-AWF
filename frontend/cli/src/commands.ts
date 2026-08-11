@@ -25,6 +25,7 @@ export type CommandClient = Pick<
   | "controlSummary"
   | "controlRunDetail"
   | "systemReadiness"
+  | "systemDoctor"
   | "llmServers"
   | "llmModels"
   | "llmServeStatus"
@@ -91,6 +92,7 @@ Plain text                            Ask the default assistant workflow
 /episodic <run-id>                    Show a Run timeline
 /control                              Control-center overview
 /readiness                            Hardware and runtime readiness
+/doctor                               Install and operator readiness checks
 /llm                                  LLM server/model status
 /agents                               Registered Agent Manifests
 /skills                               Registry Skills
@@ -116,6 +118,86 @@ function assistantResponseText(workflowRef: string, result: Record<string, unkno
   return `Workflow ${workflowRef} finished with status ${String(result.status ?? "UNKNOWN")}.`;
 }
 
+function runOutcome(result: Record<string, unknown>): Record<string, unknown> {
+  const outcome = result.outcome as Record<string, unknown> | undefined;
+  if (outcome) return outcome;
+  return {
+    run_id: result.run_id,
+    workflow_ref: result.workflow_ref,
+    status: result.status,
+    response_text: assistantResponseText(String(result.workflow_ref ?? "workflow"), result),
+    evidence: [],
+    failures: [],
+    pending_approvals: [],
+    next_action: undefined,
+  };
+}
+
+function formatOutcome(result: Record<string, unknown>): string {
+  const outcome = runOutcome(result);
+  const lines = [
+    `Run: ${String(outcome.run_id ?? result.run_id ?? "unknown")}`,
+    `Workflow: ${String(outcome.workflow_ref ?? result.workflow_ref ?? "unknown")}`,
+    `Status: ${String(outcome.status ?? result.status ?? "UNKNOWN")}`,
+    `Result: ${String(outcome.response_text ?? assistantResponseText(String(outcome.workflow_ref ?? "workflow"), result))}`,
+  ];
+  const evidence = Array.isArray(outcome.evidence) ? (outcome.evidence as Record<string, unknown>[]) : [];
+  if (evidence.length > 0) {
+    lines.push("Evidence:");
+    for (const item of evidence) lines.push(`  - ${String(item.type)}: ${String(item.path)} (${String(item.artifact_id)})`);
+  }
+  const failures = Array.isArray(outcome.failures) ? (outcome.failures as Record<string, unknown>[]) : [];
+  if (failures.length > 0) {
+    lines.push("Failures:");
+    for (const item of failures) lines.push(`  - ${String(item.node_id)} (${String(item.step_id)}): ${String(item.failure_class ?? "failed")}`);
+  }
+  const pending = Array.isArray(outcome.pending_approvals)
+    ? (outcome.pending_approvals as Record<string, unknown>[])
+    : [];
+  if (pending.length > 0) {
+    lines.push("Pending approvals:");
+    for (const item of pending) lines.push(`  - ${String(item.approval_id)} ${String(item.risk_class ?? "")}`.trimEnd());
+  }
+  if (outcome.next_action) lines.push(`Next: ${String(outcome.next_action)}`);
+  return lines.join("\n");
+}
+
+function formatRunList(runs: Record<string, unknown>[]): string {
+  if (runs.length === 0) return "No runs.";
+  return [
+    "Runs:",
+    ...runs.map((run) => {
+      const outcome = run.outcome as Record<string, unknown> | undefined;
+      return `  - ${String(run.run_id)} ${String(run.status)} ${String(run.workflow_ref)} :: ${String(outcome?.response_text ?? "")}`;
+    }),
+  ].join("\n");
+}
+
+function formatReadiness(readiness: Record<string, unknown>): string {
+  const lines = [`Profile: ${String(readiness.profile_id ?? "unknown")}`];
+  if (readiness.error) lines.push(`Error: ${String(readiness.error)}`);
+  const results = readiness.readiness as Record<string, Record<string, unknown>> | undefined;
+  for (const [name, result] of Object.entries(results ?? {})) {
+    lines.push(
+      `${name}: ${result.ready ? "ready" : "not ready"} on ${String(result.device)} - ${String(result.reason ?? "")}`,
+    );
+  }
+  const tokens = Array.isArray(readiness.tokens) ? readiness.tokens : [];
+  if (tokens.length > 0) lines.push(`Tokens: ${tokens.join(", ")}`);
+  return lines.join("\n");
+}
+
+function formatDoctor(report: Record<string, unknown>): string {
+  const lines = [`AWF doctor: ${String(report.status ?? "unknown")}`];
+  const checks = Array.isArray(report.checks) ? (report.checks as Record<string, unknown>[]) : [];
+  for (const check of checks) {
+    lines.push(`- ${String(check.name)}: ${String(check.status)} - ${String(check.summary)}`);
+    if (check.next_action) lines.push(`  next: ${String(check.next_action)}`);
+  }
+  if (report.first_run_command) lines.push(`First run: ${String(report.first_run_command)}`);
+  return lines.join("\n");
+}
+
 export async function dispatchAssistantInput(
   client: CommandClient,
   text: string,
@@ -124,8 +206,7 @@ export async function dispatchAssistantInput(
   const trimmed = text.trim();
   if (!trimmed) throw new CommandError("assistant input is empty");
   const result = (await client.runStart(workflowRef, { objective: trimmed })) as Record<string, unknown>;
-  const runId = typeof result.run_id === "string" ? ` (${result.run_id})` : "";
-  return { kind: "text", text: `${assistantResponseText(workflowRef, result)}${runId}` };
+  return { kind: "text", text: formatOutcome(result) };
 }
 
 const REGISTRY_KIND_BY_COMMAND: Record<string, string> = {
@@ -159,14 +240,22 @@ export async function dispatchCommand(
 
   if (name === "run") {
     if (!args[0]) throw new CommandError("usage: /run <workflow>@<version>");
-    return { kind: "json", data: await client.runStart(args[0]) };
+    return { kind: "text", text: formatOutcome((await client.runStart(args[0])) as Record<string, unknown>) };
   }
   if (name === "status") {
     if (!args[0]) throw new CommandError("usage: /status <run-id>");
-    return { kind: "json", data: await client.runStatus(args[0]) };
+    return { kind: "text", text: formatOutcome((await client.runStatus(args[0])) as Record<string, unknown>) };
   }
-  if (name === "runs") return { kind: "json", data: await client.runList() };
-  if (name === "resume") return { kind: "json", data: await client.runResume() };
+  if (name === "runs") {
+    return { kind: "text", text: formatRunList((await client.runList()) as unknown as Record<string, unknown>[]) };
+  }
+  if (name === "resume") {
+    const results = (await client.runResume()) as Record<string, unknown>[];
+    return {
+      kind: "text",
+      text: results.length === 0 ? "No incomplete runs to resume." : results.map(formatOutcome).join("\n\n"),
+    };
+  }
   if (name === "approvals") return { kind: "json", data: await client.approvalList() };
   if (name === "approval") {
     if (!args[0]) throw new CommandError("usage: /approval <approval-id>");
@@ -266,7 +355,12 @@ export async function dispatchCommand(
     return { kind: "json", data: await client.episodicTimeline(args[0]) };
   }
   if (name === "control") return { kind: "json", data: await client.controlSummary() };
-  if (name === "readiness") return { kind: "json", data: await client.systemReadiness() };
+  if (name === "readiness") {
+    return { kind: "text", text: formatReadiness((await client.systemReadiness()) as unknown as Record<string, unknown>) };
+  }
+  if (name === "doctor") {
+    return { kind: "text", text: formatDoctor((await client.systemDoctor()) as unknown as Record<string, unknown>) };
+  }
   if (name === "llm") {
     const [servers, models, status] = await Promise.all([
       client.llmServers(),

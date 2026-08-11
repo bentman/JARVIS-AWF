@@ -45,6 +45,7 @@ def bootstrap_repo(repo_root: Path) -> None:
         dot_env_path.write_text(content)
 
     sandbox_dir(repo_root).mkdir(parents=True, exist_ok=True)
+    (repo_root / "cache" / "temp").mkdir(parents=True, exist_ok=True)
 
     init_db(db_path(repo_root))
 

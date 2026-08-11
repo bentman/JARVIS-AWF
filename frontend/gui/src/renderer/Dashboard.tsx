@@ -9,6 +9,7 @@ export interface RunSummary {
   status: string;
   created_at: string;
   updated_at: string;
+  outcome?: RunOutcome;
 }
 
 export interface ApprovalSummary {
@@ -49,6 +50,28 @@ export interface ArtifactSummary {
   created_at: string;
 }
 
+export interface RunOutcome {
+  run_id: string;
+  workflow_ref: string;
+  status: string;
+  response_text: string;
+  evidence: { artifact_id?: string; type?: string; path?: string }[];
+  artifacts: { artifact_id?: string; type?: string; path?: string; complete?: boolean }[];
+  failures: { step_id?: string; node_id?: string; failure_class?: string | null; output?: unknown }[];
+  pending_approvals: { approval_id?: string; risk_class?: string | null; action_digest?: string }[];
+  created_at?: string;
+  updated_at?: string;
+  next_action: string;
+}
+
+export interface DoctorCheck {
+  name: string;
+  status: "ok" | "warn" | "error";
+  summary: string;
+  detail: Record<string, unknown>;
+  next_action?: string | null;
+}
+
 export interface ControlSummary {
   runs: RunSummary[];
   approvals: ApprovalSummary[];
@@ -78,6 +101,12 @@ export interface ControlSummary {
     readiness: Record<string, { device: string; ready: boolean; reason: string }>;
     error?: string;
   };
+  doctor?: {
+    status: "ok" | "warn" | "error";
+    checks: DoctorCheck[];
+    next_actions: string[];
+    first_run_command: string;
+  };
 }
 
 export interface LlmModelsReport {
@@ -94,6 +123,7 @@ export interface ControlRunDetail {
     status: string;
     steps: { step_id: string; node_id: string; status: string; attempt: number }[];
   };
+  outcome?: RunOutcome;
   artifacts: ArtifactSummary[];
   timeline: Record<string, unknown>;
   improvements: ImprovementSummary[];

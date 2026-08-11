@@ -248,6 +248,10 @@ describe("ProtocolClient", () => {
     expect(transport.lastRequest().method).toBe("awf/system.readiness");
     expect(transport.lastRequest().params).toEqual({});
 
+    void client.systemDoctor();
+    expect(transport.lastRequest().method).toBe("awf/system.doctor");
+    expect(transport.lastRequest().params).toEqual({});
+
     void client.llmServers();
     expect(transport.lastRequest().method).toBe("awf/llm.servers");
     expect(transport.lastRequest().params).toEqual({});

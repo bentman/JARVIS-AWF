@@ -30,6 +30,7 @@ export function RunsView({ runs, selectedRunDetail, onRunDetail, onArtifactRead 
               <li key={run.run_id} className="row">
                 <span>{run.workflow_ref}</span>
                 <span className={`chip ${stateClass(run.status)}`}>{run.status}</span>
+                {run.outcome?.response_text && <span className="row-reason">{run.outcome.response_text}</span>}
                 <span className="mono row-reason">{run.run_id}</span>
                 {onRunDetail && (
                   <button type="button" className="btn btn-secondary" onClick={() => onRunDetail(run.run_id)}>
@@ -48,6 +49,31 @@ export function RunsView({ runs, selectedRunDetail, onRunDetail, onArtifactRead 
             <div>
               {selectedRunDetail.run.workflow_ref} - {selectedRunDetail.run.status}
             </div>
+            {selectedRunDetail.outcome && (
+              <div aria-label="Run outcome">
+                <h3>Outcome</h3>
+                <p>{selectedRunDetail.outcome.response_text}</p>
+                <div>Next: {selectedRunDetail.outcome.next_action}</div>
+                {selectedRunDetail.outcome.evidence.length > 0 && (
+                  <ul className="list">
+                    {selectedRunDetail.outcome.evidence.map((item) => (
+                      <li key={`${item.artifact_id}-${item.path}`}>
+                        Evidence: {item.type} - {item.path} ({item.artifact_id})
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {selectedRunDetail.outcome.failures.length > 0 && (
+                  <ul className="list">
+                    {selectedRunDetail.outcome.failures.map((failure) => (
+                      <li key={`${failure.step_id}-${failure.node_id}`}>
+                        Failure: {failure.node_id} - {failure.failure_class ?? "failed"}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             <ul className="list">
               {selectedRunDetail.run.steps.map((step) => (
                 <li key={step.step_id}>

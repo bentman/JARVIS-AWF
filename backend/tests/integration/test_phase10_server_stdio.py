@@ -77,6 +77,10 @@ def test_control_center_methods_over_jsonrpc(tmp_path, monkeypatch):
         "awf.cli.core_ops.op_system_readiness",
         lambda _repo_root: {"profile_id": "linux-x64-cpu", "readiness": {}},
     )
+    monkeypatch.setattr(
+        "awf.cli.core_ops.op_system_doctor",
+        lambda _repo_root: {"status": "ok", "checks": [], "next_actions": []},
+    )
 
     summary = send(repo_root, conn, {"jsonrpc": "2.0", "id": 41, "method": "awf/control.summary", "params": {}})
     detail = send(
@@ -85,10 +89,12 @@ def test_control_center_methods_over_jsonrpc(tmp_path, monkeypatch):
         {"jsonrpc": "2.0", "id": 42, "method": "awf/control.runDetail", "params": {"runId": "run-1"}},
     )
     readiness = send(repo_root, conn, {"jsonrpc": "2.0", "id": 43, "method": "awf/system.readiness", "params": {}})
+    doctor = send(repo_root, conn, {"jsonrpc": "2.0", "id": 44, "method": "awf/system.doctor", "params": {}})
 
     assert summary["result"]["runs"][0]["run_id"] == "run-1"
     assert detail["result"]["run"]["run_id"] == "run-1"
     assert readiness["result"]["profile_id"] == "linux-x64-cpu"
+    assert doctor["result"]["status"] == "ok"
 
 
 def test_llm_status_methods_over_jsonrpc(tmp_path, monkeypatch):

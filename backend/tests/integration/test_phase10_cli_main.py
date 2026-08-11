@@ -12,7 +12,7 @@ def make_repo(tmp_path):
     return repo_root
 
 
-def test_status_command_prints_json(tmp_path, capsys):
+def test_status_command_prints_operator_summary(tmp_path, capsys):
     repo_root = make_repo(tmp_path)
     from awf.db.connection import get_connection
 
@@ -21,6 +21,20 @@ def test_status_command_prints_json(tmp_path, capsys):
     conn.close()
 
     exit_code = cli_main.run(["status", "run-1"], repo_root)
+
+    assert exit_code == 0
+    assert "Run: run-1" in capsys.readouterr().out
+
+
+def test_status_command_json_flag_preserves_machine_output(tmp_path, capsys):
+    repo_root = make_repo(tmp_path)
+    from awf.db.connection import get_connection
+
+    conn = get_connection(repo_root / "data" / "awf_db" / "awf.db")
+    create_run(conn, run_id="run-1", workflow_ref="demo@1.0.0")
+    conn.close()
+
+    exit_code = cli_main.run(["status", "run-1", "--json"], repo_root)
 
     assert exit_code == 0
     out = json.loads(capsys.readouterr().out)
@@ -64,6 +78,33 @@ def test_run_command_accepts_objective_shorthand(tmp_path, monkeypatch):
     assert exit_code == 0
     assert captured["workflow_ref"] == "assistant-default@1.0.0"
     assert captured["input_data"] == {"objective": "check the system"}
+
+
+def test_run_command_prints_operator_outcome(tmp_path, capsys, monkeypatch):
+    repo_root = make_repo(tmp_path)
+    monkeypatch.setattr(
+        cli_main.ops,
+        "op_run_start",
+        lambda repo_root, conn, *, workflow_ref, input_data: {
+            "run_id": "run-1",
+            "status": "SUCCEEDED",
+            "outcome": {
+                "run_id": "run-1",
+                "workflow_ref": workflow_ref,
+                "status": "SUCCEEDED",
+                "response_text": "Useful result.",
+                "evidence": [],
+                "failures": [],
+                "pending_approvals": [],
+                "next_action": "No operator action required.",
+            },
+        },
+    )
+
+    exit_code = cli_main.run(["run", "demo@1.0.0"], repo_root)
+
+    assert exit_code == 0
+    assert "Result: Useful result." in capsys.readouterr().out
 
 
 def test_run_command_success_exit_code(tmp_path, monkeypatch):
@@ -273,6 +314,39 @@ def test_registry_reindex_command_dispatches_to_core_ops(tmp_path, capsys, monke
     assert exit_code == 0
     out = json.loads(capsys.readouterr().out)
     assert out["capabilities"] == {"config": 1, "data": 0}
+
+
+def test_doctor_command_dispatches_to_core_ops(tmp_path, capsys, monkeypatch):
+    repo_root = make_repo(tmp_path)
+    monkeypatch.setattr(
+        cli_main.ops,
+        "op_system_doctor",
+        lambda repo_root: {
+            "status": "warn",
+            "checks": [{"name": "frontend", "status": "warn", "summary": "npm missing"}],
+            "first_run_command": 'awf run assistant-default@1.0.0 --objective "check the system"',
+        },
+    )
+
+    exit_code = cli_main.run(["doctor"], repo_root)
+
+    assert exit_code == 0
+    assert "AWF doctor: warn" in capsys.readouterr().out
+
+
+def test_readiness_command_json_flag(tmp_path, capsys, monkeypatch):
+    repo_root = make_repo(tmp_path)
+    monkeypatch.setattr(
+        cli_main.ops,
+        "op_system_readiness",
+        lambda repo_root: {"profile_id": "linux-x64-cpu", "tokens": [], "readiness": {}},
+    )
+
+    exit_code = cli_main.run(["readiness", "--json"], repo_root)
+
+    assert exit_code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["profile_id"] == "linux-x64-cpu"
 
 
 def test_registry_retire_command_dispatches_to_core_ops(tmp_path, capsys, monkeypatch):

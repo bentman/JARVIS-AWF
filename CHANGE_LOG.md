@@ -19,6 +19,27 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-11 23:36
+  - Host class(es): Windows AMD64
+  - Summary: Added installability support for repo-local operators with `awf doctor`, `awf/system.doctor`, Windows/Linux bootstrap wrappers, and setup creation of `cache/temp`.
+  - Scope: `backend/src/awf/{cli/core_ops.py,cli/main.py,server/stdio.py,setup.py}`, `scripts/bootstrap.ps1`, `scripts/bootstrap.sh`, `frontend/shared/src/{client.ts,types.ts}`, `frontend/shared/tests/client.test.ts`, setup sections in README and quickstart/operator docs.
+  - Validation: Ruff passed for touched backend source/tests; focused backend pytest passed outside the sandbox after the known Windows temp permission failure (`43 passed`); shared protocol focused test passed (`12 passed`); `awf doctor --json` returned the expected actionable report for this host.
+  - Notes: This is a repo-local bootstrap path, not packaged Windows/Linux desktop installers.
+
+- Timestamp: 2026-08-11 23:35
+  - Host class(es): Windows AMD64
+  - Summary: Made Run results outcome-oriented by persisting completed Run output, returning a compact Run Outcome summary, and rendering result/evidence/next-action text in CLI, AWF-CLI, and AWF-GUI.
+  - Scope: `backend/src/awf/cli/{core_ops.py,main.py}`, `backend/tests/integration/{test_core_ops_status_approval_artifacts.py,test_phase10_cli_main.py,test_phase10_server_stdio.py}`, `frontend/cli/src/commands.ts`, `frontend/cli/tests/commands.test.ts`, `frontend/gui/src/renderer/{Dashboard.tsx,Overview.tsx,RunsView.tsx}`, `frontend/gui/tests/Dashboard.test.tsx`.
+  - Validation: Focused backend pytest passed outside the sandbox (`43 passed`); focused frontend tests passed (`shared 12`, `cli 36`, `gui 13`); full frontend workspace tests passed (`shared 12`, `cli 43`, `gui 62`); `awf run assistant-default@1.0.0 --objective "operator smoke check"` passed outside the sandbox and `awf status <run-id> --json` returned persisted `outcome`.
+  - Notes: CLI raw payloads remain available with `--json`; default output now favors operator-readable summaries.
+
+- Timestamp: 2026-08-11 23:34
+  - Host class(es): Windows AMD64
+  - Summary: Added the repo-local operator readiness path with `awf doctor`, Windows/Linux bootstrap wrappers, durable Run Outcome summaries, human-readable CLI output with `--json` fallback, and GUI outcome/doctor display.
+  - Scope: `backend/src/awf/{cli/core_ops.py,cli/main.py,server/stdio.py,setup.py}`, `scripts/bootstrap.{ps1,sh}`, `frontend/{shared,cli,gui}`, `docs/{OperatorsGuide.md,QuickStart-windows.md,QuickStart-linux.md}`, `README.md`, focused backend/frontend tests.
+  - Validation: Ruff passed for touched backend source/tests; focused backend pytest passed outside the sandbox after the known Windows temp permission failure (`43 passed`); focused frontend tests passed (`shared 12`, `cli 36`, `gui 13`); `npm --prefix frontend run build --workspaces` passed; full frontend workspace tests passed (`shared 12`, `cli 43`, `gui 62`); `awf doctor --json` reported actionable setup state; `awf run assistant-default@1.0.0 --objective "operator smoke check"` passed outside the sandbox and returned operator-visible outcome text.
+  - Notes: `awf doctor` correctly reported missing `.env` and speech artifacts on this host; LiteLLM emitted its existing network-blocked remote cost-map warning and used the local fallback.
+
 - Timestamp: 2026-08-10 23:06
   - Host class(es): Windows AMD64
   - Summary: Reviewed the assistant usability sweep for contract drift and aligned the active AWF spec plus ADR-0025 with activity-output response rendering and the widened GUI/CLI/backend assistant path.

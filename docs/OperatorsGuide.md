@@ -13,18 +13,24 @@ This is not the technical spec — that lives in `docs/AGENTIC_WORKFLOW_FABRIC_S
 
 Do this once per machine.
 
-1. **Create a Python venv and install** (Python 3.12–3.14):
+1. **Run the repo bootstrap wrapper** (recommended):
+   - Linux/WSL: `bash scripts/bootstrap.sh`
+   - Windows: `.\scripts\bootstrap.ps1`
+   - Add `--skip-speech` on Linux/WSL or `-SkipSpeech` on Windows for a faster core-only setup.
+2. **Or create a Python venv and install manually** (Python 3.12–3.14):
    - Linux/WSL: `python3.12 -m venv backend/.venv` then `backend/.venv/bin/pip install -e .[dev]`
    - Windows: `py -m venv .\backend\.venv` then `.\backend\.venv\Scripts\pip install -e .[dev]`
-2. **Bootstrap the repo:** run `awf-setup`
+3. **Bootstrap the repo:** run `awf-setup`
    → You get a `.env` file with a generated secret key, and an empty database at `data/awf_db/awf.db`.
-3. **Match dependencies to your hardware:**
+4. **Match dependencies to your hardware:**
    - `awf-setup --provision` → tells you which hardware extra fits this machine, and the install command (doesn't install anything).
    - `awf-setup --install` → runs that install for you.
    - `awf-setup --verify` → confirms what actually got installed (runtime, providers, tooling) and that pip is healthy.
-4. **Download voice models (only if you want voice):** `awf-speech models sync`
+5. **Download voice models (only if you want voice):** `awf-speech models sync`
    → Fetches the wake-word, VAD, speech-to-text, and text-to-speech models for your hardware. `awf-speech models verify` checks them later.
-5. **Frontends (optional):** `npm --prefix frontend install` then `npm --prefix frontend run build` (Node 26+).
+6. **Frontends (optional):** `npm --prefix frontend install` then `npm --prefix frontend run build` (Node 26+).
+7. **Check the install:** `awf doctor`
+   → Reports Python/venv, local paths, registry defaults, frontend dependencies, visible agent CLIs, speech readiness, and the next operator action.
 
 You also need at least one CLI coding agent installed and logged in with your own account (Claude Code, Codex CLI, Antigravity CLI, GitHub Copilot CLI, or Cline CLI) for workflows that delegate implementation work. The default assistant workflow runs locally without those CLIs, so first-run chat and control-center checks can work before agent setup is complete.
 
@@ -52,9 +58,12 @@ In the terminal app, type a normal request to use the default assistant workflow
 Use `assistant-default@1.0.0` to confirm the app is accepting requests end-to-end. Use implementation workflows such as `produce-gate-repair-demo@1.0.0` after the relevant agent CLIs are installed and authenticated.
 
 Then:
+- `awf runs` → recent Runs with outcome summaries.
 - `awf status <run-id>` → where the Run is, step by step.
 - `awf artifacts <run-id>` → the evidence it produced (verdicts, findings, diffs).
 - `awf resume` → after a crash or reboot, picks up any unfinished Runs from the last completed step. Nothing re-runs twice.
+
+`awf run`, `awf status`, `awf runs`, `awf resume`, `awf approvals`, `awf artifacts`, `awf readiness`, and `awf doctor` print operator-readable summaries by default. Add `--json` when a script needs the raw payload.
 
 If a Run needs your permission mid-flight, it pauses and waits — see Approvals below.
 
@@ -177,6 +186,7 @@ The encryption key lives in `.env`. Keep `.env` out of backups you share; withou
 ## 12. Checking on the system
 
 - `/control` (terminal) or the GUI dashboard → one overview: active runs, pending approvals, proposals, model status.
+- `awf doctor` or `/doctor` → install and operator readiness, including missing setup steps and the first-run command.
 - `/readiness` → what hardware AWF actually verified (GPU/NPU/CPU) and whether speech and LLM are ready. AWF never assumes hardware — if it can't prove an accelerator works, it says so and uses CPU.
 - `/llm` → model server status.
 - `awf episodic timeline <run-id>` → the full audit trail for any Run. Every decision, approval, and guard check is recorded and queryable.

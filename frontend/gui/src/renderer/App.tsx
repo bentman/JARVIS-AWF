@@ -47,12 +47,19 @@ export interface VoiceSessionFns {
   ) => Promise<{ response_audio_path: string }>;
 }
 
+export interface TextSubmitResult {
+  run_id: string;
+  status: string;
+  [key: string]: unknown;
+}
+
 export interface AppProps extends VoiceSessionFns {
   initialTranscript?: TranscriptEntry[];
   pendingApproval?: PendingApproval;
   voiceConfirmed?: boolean;
   onApprove: (approvalId: string) => void;
   onReject: (approvalId: string, reason: string) => void;
+  onTextSubmit?: (text: string, workflowRef: string) => Promise<TextSubmitResult>;
   onRunList?: () => Promise<RunSummary[]>;
   onApprovalList?: () => Promise<ApprovalSummary[]>;
   onImprovementList?: () => Promise<ImprovementSummary[]>;
@@ -96,6 +103,7 @@ export function App({
   voiceConfirmed = false,
   onApprove,
   onReject,
+  onTextSubmit,
   onVoiceSessionStart,
   onVoicePushToTalkStart,
   onVoicePushToTalkStop,
@@ -134,6 +142,9 @@ export function App({
   const [selectedRunDetail, setSelectedRunDetail] = useState<ControlRunDetail | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<ViewName | undefined>(undefined);
+  const [chatWorkflowRef, setChatWorkflowRef] = useState("");
+  const [chatSubmitting, setChatSubmitting] = useState(false);
+  const [chatSubmitError, setChatSubmitError] = useState<string | null>(null);
 
   const refresh = async () => {
     if (!onControlSummary && !onRunList && !onApprovalList && !onImprovementList) return;
@@ -201,8 +212,35 @@ export function App({
     return result;
   };
 
-const handleComposerSend = (text: string) => {
-    setEntries((prev) => [...prev, { id: nextId.current++, speaker: "Operator", text }]);
+  const handleComposerSend = async (text: string) => {
+    setChatSubmitError(null);
+    if (!onTextSubmit) {
+      setEntries((prev) => [...prev, { id: nextId.current++, speaker: "Operator", text }]);
+      return;
+    }
+    if (!chatWorkflowRef.trim()) {
+      setChatSubmitError("Set a workflow before sending typed chat.");
+      return false;
+    }
+    setChatSubmitting(true);
+    try {
+      const result = await onTextSubmit(text, chatWorkflowRef.trim());
+      setEntries((prev) => [
+        ...prev,
+        { id: nextId.current++, speaker: "Operator", text },
+        {
+          id: nextId.current++,
+          speaker: "AWF",
+          text: `Workflow ${chatWorkflowRef.trim()} finished with status ${result.status} (run ${result.run_id}).`,
+        },
+      ]);
+      void refresh();
+    } catch (err) {
+      setChatSubmitError((err as Error).message);
+      return false;
+    } finally {
+      setChatSubmitting(false);
+    }
   };
   const handleApprove = (approvalId: string) => {
     onApprove(approvalId);
@@ -320,6 +358,10 @@ const handleComposerSend = (text: string) => {
               <div className="chat-frame">
                 <Transcript
                   entries={entries}
+                  workflowRef={chatWorkflowRef}
+                  onWorkflowRefChange={setChatWorkflowRef}
+                  submitting={chatSubmitting}
+                  submitError={chatSubmitError}
                   onSend={handleComposerSend}
                   onMic={voiceAvailable ? () => voiceRef.current?.togglePushToTalk() : undefined}
                 />

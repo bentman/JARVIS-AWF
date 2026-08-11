@@ -7,6 +7,7 @@ export interface IpcMainLike {
 }
 
 export const CHANNELS = {
+  runStart: "awf:runStart",
   controlSummary: "awf:controlSummary",
   controlRunDetail: "awf:controlRunDetail",
   systemReadiness: "awf:systemReadiness",
@@ -49,6 +50,9 @@ export const CHANNELS = {
  * gets direct access to the client or to Node - only these narrow, typed
  * channels via the preload's contextBridge. */
 export function registerIpcHandlers(ipcMain: IpcMainLike, client: ProtocolClient): void {
+  ipcMain.handle(CHANNELS.runStart, (_event, workflowRef, input) =>
+    client.runStart(workflowRef as string, (input as Record<string, unknown> | undefined) ?? {}),
+  );
   ipcMain.handle(CHANNELS.controlSummary, () => client.controlSummary());
   ipcMain.handle(CHANNELS.controlRunDetail, (_event, runId) => client.controlRunDetail(runId as string));
   ipcMain.handle(CHANNELS.systemReadiness, () => client.systemReadiness());

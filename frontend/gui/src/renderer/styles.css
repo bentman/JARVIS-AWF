@@ -668,6 +668,11 @@ input.mono, textarea.mono {
   min-width: 0;
 }
 
+.workflow-input {
+  flex: 0 1 190px;
+  min-width: 150px;
+}
+
 .btn-mic {
   flex: none;
   display: inline-flex;

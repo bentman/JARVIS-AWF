@@ -8,6 +8,8 @@ import { VOICE_CHANNEL, VOICE_SESSION_CHANNELS } from "../main/voicePipeline.js"
  * themselves only call the same ProtocolClient methods the CLI uses, or
  * spawn the same `awf-speech` subprocess described there. */
 contextBridge.exposeInMainWorld("awf", {
+  runStart: (workflowRef: string, input: Record<string, unknown> = {}) =>
+    ipcRenderer.invoke(CHANNELS.runStart, workflowRef, input),
   controlSummary: () => ipcRenderer.invoke(CHANNELS.controlSummary),
   controlRunDetail: (runId: string) => ipcRenderer.invoke(CHANNELS.controlRunDetail, runId),
   systemReadiness: () => ipcRenderer.invoke(CHANNELS.systemReadiness),

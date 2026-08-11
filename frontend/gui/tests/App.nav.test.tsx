@@ -192,12 +192,14 @@ describe("App first page (chat + voice, ADR-0025)", () => {
     expect(await screen.findByText("System readiness")).toBeTruthy();
   });
 
-  it("renders voice (STT/TTS) and typed chat in the same conversation stream", async () => {
+  it("renders voice (STT/TTS) and typed chat in the same governed conversation stream", async () => {
+    const onTextSubmit = vi.fn().mockResolvedValue({ run_id: "run-text-1", status: "SUCCEEDED" });
     render(
       <App
         onApprove={vi.fn()}
         onReject={vi.fn()}
         {...voiceProps()}
+        onTextSubmit={onTextSubmit}
         onVoiceSpeakText={undefined}
       />,
     );
@@ -206,7 +208,7 @@ describe("App first page (chat + voice, ADR-0025)", () => {
     // A voice round trip lands in the shared stream.
     fireEvent.click(screen.getByText("Start voice session"));
     expect(await screen.findByText(/Voice session: vs-1/)).toBeTruthy();
-    fireEvent.change(screen.getByPlaceholderText("workflow@1.0.0"), {
+    fireEvent.change(screen.getByLabelText("Default workflow"), {
       target: { value: "demo@1.0.0" },
     });
     fireEvent.change(screen.getByRole("textbox", { name: "Final recognized text" }), {
@@ -216,14 +218,32 @@ describe("App first page (chat + voice, ADR-0025)", () => {
     expect(await screen.findByText("hello")).toBeTruthy();
 
     // Typed chat lands in the very same stream.
+    fireEvent.change(screen.getByRole("textbox", { name: "Workflow" }), {
+      target: { value: "demo@1.0.0" },
+    });
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
       target: { value: "typed follow-up" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
+    await waitFor(() => expect(onTextSubmit).toHaveBeenCalledWith("typed follow-up", "demo@1.0.0"));
     expect(log.textContent).toContain("Operator (voice):");
     expect(log.textContent).toContain("hello");
-    expect(log.textContent).toContain("typed follow-up");
+    expect(await screen.findByText(/Workflow demo@1\.0\.0 finished with status SUCCEEDED/)).toBeTruthy();
+  });
+
+  it("requires a workflow before typed chat can start a durable Run", async () => {
+    const onTextSubmit = vi.fn();
+    render(<App onApprove={vi.fn()} onReject={vi.fn()} onTextSubmit={onTextSubmit} />);
+
+    const message = screen.getByRole("textbox", { name: "Message" }) as HTMLInputElement;
+    fireEvent.change(message, {
+      target: { value: "typed work" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Set a workflow/);
+    expect(onTextSubmit).not.toHaveBeenCalled();
+    expect(message.value).toBe("typed work");
   });
 });
-

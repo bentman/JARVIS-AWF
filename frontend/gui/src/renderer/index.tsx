@@ -29,6 +29,7 @@ interface VoiceRoundTripResult {
 declare global {
   interface Window {
     awf: {
+      runStart: (workflowRef: string, input?: Record<string, unknown>) => Promise<{ run_id: string; status: string }>;
       runStatus: (runId: string) => Promise<unknown>;
       controlSummary: () => Promise<ControlSummary>;
       controlRunDetail: (runId: string) => Promise<ControlRunDetail>;
@@ -98,6 +99,7 @@ if (container) {
     React.createElement(App, {
       onApprove: (approvalId: string) => void window.awf.approvalApprove(approvalId),
       onReject: (approvalId: string, reason: string) => void window.awf.approvalReject(approvalId, reason),
+      onTextSubmit: (text: string, workflowRef: string) => window.awf.runStart(workflowRef, { objective: text }),
       onVoiceSessionStart: (title?: string, wakeEnabled?: boolean) =>
         window.awf.voiceSessionStart(title, wakeEnabled),
       onVoicePushToTalkStart: (voiceSessionId: string, turnId: string) =>

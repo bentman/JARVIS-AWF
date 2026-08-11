@@ -13,6 +13,7 @@ function makeFakeIpcMain(): { ipcMain: IpcMainLike; handlers: Map<string, (...ar
 
 function makeFakeClient() {
   return {
+    runStart: vi.fn().mockResolvedValue({ run_id: "run-1", status: "SUCCEEDED" }),
     controlSummary: vi.fn().mockResolvedValue({ runs: [], approvals: [] }),
     controlRunDetail: vi.fn().mockResolvedValue({ run: { run_id: "run-1" } }),
     systemReadiness: vi.fn().mockResolvedValue({ profile_id: "linux-x64-cpu" }),
@@ -61,6 +62,9 @@ describe("registerIpcHandlers", () => {
     const client = makeFakeClient();
 
     registerIpcHandlers(ipcMain, client);
+
+    await handlers.get(CHANNELS.runStart)?.({}, "demo@1.0.0", { objective: "typed work" });
+    expect(client.runStart).toHaveBeenCalledWith("demo@1.0.0", { objective: "typed work" });
 
     await handlers.get(CHANNELS.controlSummary)?.({});
     expect(client.controlSummary).toHaveBeenCalled();

@@ -19,6 +19,12 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-10 22:06
+  - Host class(es): Windows AMD64
+  - Summary: Wired AWF-GUI typed chat to start real durable Runs through the shared `awf/run.start` protocol path instead of appending local-only transcript text.
+  - Scope: `frontend/gui/src/main/ipc.ts`, `frontend/gui/src/preload/preload.ts`, `frontend/gui/src/renderer/{App,Transcript,index}.tsx`, `frontend/gui/src/renderer/styles.css`, focused GUI tests.
+  - Validation: `npm --prefix frontend run build --workspaces` passed; `npm --prefix frontend test --workspaces` -> shared 12 passed, CLI 41 passed, GUI 58 passed; `git diff --check` passed.
+
 - Timestamp: 2026-08-10 21:00
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Implemented ADR-0025 control-center look and usability for AWF-GUI — a token-based stylesheet, a top-bar shell rendering one view at a time with chat as the landing page, shared semantic state classes, an inline icon set, and the renderer split into per-view components. No new dependency and no protocol, IPC, or authorization change.

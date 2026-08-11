@@ -8,8 +8,12 @@ export interface TranscriptEntry {
 
 export interface TranscriptProps {
   entries: TranscriptEntry[];
-  /** Appends the operator's typed text to the conversation (local, text-first). */
-  onSend?: (text: string) => void;
+  workflowRef?: string;
+  onWorkflowRefChange?: (workflowRef: string) => void;
+  submitError?: string | null;
+  submitting?: boolean;
+  /** Submits typed text to the same governed backend work path as voice. */
+  onSend?: (text: string) => boolean | void | Promise<boolean | void>;
   /** Drives the existing push-to-talk flow (mic button in the composer). */
   onMic?: () => void;
 }
@@ -41,7 +45,15 @@ function SendIcon(): React.JSX.Element {
  * Rendered as a chat-messenger window-panel (ADR-0025): a title bar, an
  * auto-scrolling bubble stream (operator right, agent left, letter avatars),
  * and a composer bar with a mic (voice) button and a Send button. */
-export function Transcript({ entries, onSend, onMic }: TranscriptProps): React.JSX.Element {
+export function Transcript({
+  entries,
+  workflowRef = "",
+  onWorkflowRefChange,
+  submitError,
+  submitting = false,
+  onSend,
+  onMic,
+}: TranscriptProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState("");
 
@@ -51,11 +63,12 @@ export function Transcript({ entries, onSend, onMic }: TranscriptProps): React.J
     if (el) el.scrollTop = el.scrollHeight;
   }, [entries]);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = draft.trim();
-    if (!text) return;
-    onSend?.(text);
+    if (!text || submitting) return;
+    const sent = await onSend?.(text);
+    if (sent === false) return;
     setDraft("");
   };
 
@@ -96,17 +109,25 @@ export function Transcript({ entries, onSend, onMic }: TranscriptProps): React.J
           <MicIcon />
         </button>
         <input
+          className="workflow-input mono"
+          value={workflowRef}
+          onChange={(e) => onWorkflowRefChange?.(e.target.value)}
+          placeholder="workflow@1.0.0"
+          aria-label="Workflow"
+        />
+        <input
           className="composer-input"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Message AWF..."
           aria-label="Message"
         />
-        <button type="submit" className="btn-send" disabled={!draft.trim()} aria-label="Send">
-          <span>Send</span>
+        <button type="submit" className="btn-send" disabled={!draft.trim() || submitting} aria-label="Send">
+          <span>{submitting ? "Sending" : "Send"}</span>
           <SendIcon />
         </button>
       </form>
+      {submitError && <div role="alert">{submitError}</div>}
     </section>
   );
 }

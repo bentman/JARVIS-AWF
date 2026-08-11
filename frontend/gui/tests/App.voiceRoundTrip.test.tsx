@@ -39,7 +39,7 @@ describe("App live voice session (text-first invariant)", () => {
     fireEvent.click(screen.getByText("Start voice session"));
     expect(await screen.findByText(/Voice session: vs-1/)).toBeTruthy();
 
-    fireEvent.change(screen.getByPlaceholderText("workflow@1.0.0"), {
+    fireEvent.change(screen.getByLabelText("Default workflow"), {
       target: { value: "voice-demo@1.0.0" },
     });
     fireEvent.change(screen.getByRole("textbox", { name: "Final recognized text" }), {

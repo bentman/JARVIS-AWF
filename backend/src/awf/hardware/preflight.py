@@ -236,6 +236,36 @@ def _opencl_platform_count() -> int:
     return 0
 
 
+def _opencl_qualcomm_platform_present() -> bool:
+    library_names = ("OpenCL.dll",) if platform.system() == "Windows" else ("libOpenCL.so.1", "libOpenCL.so")
+    for name in library_names:
+        try:
+            library = ctypes.CDLL(name)
+        except OSError:
+            continue
+        try:
+            count = ctypes.c_uint(0)
+            if library.clGetPlatformIDs(0, None, ctypes.byref(count)) != 0 or count.value <= 0:
+                continue
+            platforms = (ctypes.c_void_p * count.value)()
+            if library.clGetPlatformIDs(count.value, platforms, None) != 0:
+                continue
+            for platform_id in platforms:
+                for param in (0x0902, 0x0903):  # CL_PLATFORM_VENDOR, CL_PLATFORM_NAME
+                    size = ctypes.c_size_t(0)
+                    if library.clGetPlatformInfo(platform_id, param, 0, None, ctypes.byref(size)) != 0 or size.value <= 1:
+                        continue
+                    buffer = ctypes.create_string_buffer(size.value)
+                    if library.clGetPlatformInfo(platform_id, param, size.value, buffer, None) != 0:
+                        continue
+                    text = buffer.value.decode("utf-8", errors="ignore").lower()
+                    if any(token in text for token in ("qualcomm", "adreno", "snapdragon")):
+                        return True
+        except Exception:
+            continue
+    return False
+
+
 def _vulkan_available() -> bool:
     """Return true when the host can enumerate a Vulkan runtime.
 
@@ -291,7 +321,7 @@ def collect_preflight_tokens(inventory: "HardwareInventory", *, refresh: bool = 
     backend_path = resolve_qnn_backend_path()
     tokens.append("dll:QnnHtp" if backend_path is not None else "dll:QnnHtp:MISSING")
 
-    if _opencl_platform_count() > 0 and inventory.gpu_vendor == "qualcomm":
+    if (inventory.gpu_vendor == "qualcomm" and _opencl_platform_count() > 0) or _opencl_qualcomm_platform_present():
         tokens.append("opencl:adreno")
 
     if _vulkan_available():

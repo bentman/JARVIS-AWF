@@ -40,20 +40,34 @@ def _ct2_cuda_count(tokens: list[str]) -> int:
     return 0
 
 
+def _qnn_runtime_capable(tokens: list[str], *, require_stt_imports: bool = False) -> bool:
+    required = {f"ep:{_QNN_PROVIDER}", "dll:QnnHtp"}
+    if require_stt_imports:
+        required.update({"import:onnxruntime_qnn", "import:transformers"})
+    return required.issubset(tokens)
+
+
+def _qnn_host_capable(inventory: "HardwareInventory", tokens: list[str]) -> bool:
+    if inventory.npu_vendor == "qualcomm" and inventory.npu_available:
+        return True
+    return inventory.os_name == "linux" and inventory.arch == "arm64" and _qnn_runtime_capable(tokens)
+
+
+def _qnn_reason(inventory: "HardwareInventory", suffix: str = "") -> str:
+    if inventory.npu_vendor == "qualcomm" and inventory.npu_available:
+        base = "npu_vendor=qualcomm"
+    else:
+        base = "linux arm64 QNN runtime tokens present; NPU not exposed in inventory"
+    return f"{base}, QNNExecutionProvider available, QnnHtp present{suffix}"
+
+
 def derive_stt_readiness(inventory: "HardwareInventory", tokens: list[str]) -> Readiness:
-    qnn_capable = (
-        inventory.npu_vendor == "qualcomm"
-        and inventory.npu_available
-        and f"ep:{_QNN_PROVIDER}" in tokens
-        and "dll:QnnHtp" in tokens
-        and "import:onnxruntime_qnn" in tokens
-        and "import:transformers" in tokens
-    )
+    qnn_capable = _qnn_host_capable(inventory, tokens) and _qnn_runtime_capable(tokens, require_stt_imports=True)
     if qnn_capable:
         return Readiness(
             device="qnn",
             ready=True,
-            reason="npu_vendor=qualcomm, QNNExecutionProvider available, QnnHtp present, onnxruntime_qnn and transformers importable",
+            reason=_qnn_reason(inventory, ", onnxruntime_qnn and transformers importable"),
         )
 
     cuda_capable = inventory.gpu_vendor == "nvidia" and inventory.cuda_available and _ct2_cuda_count(tokens) > 0
@@ -81,9 +95,9 @@ def derive_tts_readiness(inventory: "HardwareInventory", tokens: list[str]) -> R
         )
     if inventory.os_name == "windows" and inventory.gpu_available and f"ep:{_DML_PROVIDER}" in tokens:
         return Readiness(device="directml", ready=True, reason="windows, gpu_available, DmlExecutionProvider available")
-    if inventory.npu_vendor == "qualcomm" and f"ep:{_QNN_PROVIDER}" in tokens and "dll:QnnHtp" in tokens:
+    if _qnn_host_capable(inventory, tokens) and _qnn_runtime_capable(tokens):
         return Readiness(
-            device="qnn", ready=True, reason="npu_vendor=qualcomm, QNNExecutionProvider available, QnnHtp present"
+            device="qnn", ready=True, reason=_qnn_reason(inventory)
         )
     return Readiness(device="cpu", ready=True, reason="no verified accelerator execution provider for ONNX Runtime")
 
@@ -162,7 +176,7 @@ def derive_llm_readiness(
     cuda_hw = inventory.gpu_vendor == "nvidia" and inventory.cuda_available
     cuda_tok = "ep:CUDAExecutionProvider" in tokens
 
-    qnn_hw = inventory.npu_vendor == "qualcomm" and inventory.npu_available
+    qnn_hw = _qnn_host_capable(inventory, tokens)
     qnn_tok = "ep:QNNExecutionProvider" in tokens and "dll:QnnHtp" in tokens
 
     adreno_hw = inventory.gpu_vendor == "qualcomm" and inventory.gpu_available
@@ -172,7 +186,7 @@ def derive_llm_readiness(
 
     rungs = [
         ("gpu.cuda", cuda_hw, cuda_tok, "gpu_vendor=nvidia, cuda_available, ep:CUDAExecutionProvider"),
-        ("npu.qnn", qnn_hw, qnn_tok, "npu_vendor=qualcomm, npu_available, ep:QNNExecutionProvider, dll:QnnHtp"),
+        ("npu.qnn", qnn_hw, qnn_tok, _qnn_reason(inventory)),
         ("gpu.opencl.adreno", adreno_hw, adreno_tok, "gpu_vendor=qualcomm, gpu_available, opencl:adreno"),
         ("gpu.vulkan", vulkan_hw, vulkan_tok, "gpu_available, vulkan:available"),
         ("cpu", True, True, "cpu floor"),

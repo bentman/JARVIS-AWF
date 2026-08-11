@@ -14,6 +14,7 @@ from awf.hardware.profiler import (
     _normalize_arch,
     _powershell,
     collect_inventory,
+    detect_gpu_info,
     detect_npu_info,
     reset_inventory_cache,
     resolve_hardware_profile_id,
@@ -183,6 +184,21 @@ def test_linux_accelerator_sysfs_can_report_qualcomm_npu(monkeypatch):
     monkeypatch.setattr(profiler, "_linux_qualcomm_accelerator_visible", lambda: True)
 
     assert detect_npu_info() == {"npu_available": True, "npu_vendor": "qualcomm"}
+
+
+def test_linux_opencl_can_report_qualcomm_gpu_without_drm_sysfs(monkeypatch):
+    import awf.hardware.profiler as profiler
+
+    monkeypatch.setattr(profiler.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(profiler, "_gpu_from_cli", lambda command, vendor_hint, source: None)
+    monkeypatch.setattr(profiler, "_gpu_from_linux_sysfs", lambda: None)
+    monkeypatch.setattr(profiler, "_opencl_qualcomm_name", lambda: "Qualcomm Adreno")
+
+    result = detect_gpu_info()
+
+    assert result["gpu_available"] is True
+    assert result["gpu_vendor"] == "qualcomm"
+    assert result["gpu_vram_source"] == "opencl-platform"
 
 
 def test_inventory_id_is_stable_for_identical_fields():

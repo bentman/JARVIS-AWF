@@ -380,6 +380,49 @@ def _gpu_from_windows_cim() -> dict | None:
 _QUALCOMM_VENDOR_IDS = {"0x17cb", "0x5143"}
 
 
+def _opencl_qualcomm_name() -> str | None:
+    library_names = ("OpenCL.dll",) if platform.system() == "Windows" else ("libOpenCL.so.1", "libOpenCL.so")
+    for name in library_names:
+        try:
+            library = ctypes.CDLL(name)
+        except OSError:
+            continue
+        try:
+            count = ctypes.c_uint(0)
+            if library.clGetPlatformIDs(0, None, ctypes.byref(count)) != 0 or count.value <= 0:
+                continue
+            platforms = (ctypes.c_void_p * count.value)()
+            if library.clGetPlatformIDs(count.value, platforms, None) != 0:
+                continue
+            for platform_id in platforms:
+                for param in (0x0902, 0x0903):  # CL_PLATFORM_VENDOR, CL_PLATFORM_NAME
+                    size = ctypes.c_size_t(0)
+                    if library.clGetPlatformInfo(platform_id, param, 0, None, ctypes.byref(size)) != 0 or size.value <= 1:
+                        continue
+                    buffer = ctypes.create_string_buffer(size.value)
+                    if library.clGetPlatformInfo(platform_id, param, size.value, buffer, None) != 0:
+                        continue
+                    text = buffer.value.decode("utf-8", errors="ignore")
+                    if _normalize_gpu_vendor(text) == "qualcomm":
+                        return text
+        except Exception:
+            continue
+    return None
+
+
+def _gpu_from_opencl() -> dict | None:
+    name = _opencl_qualcomm_name()
+    if name is None:
+        return None
+    return {
+        "gpu_available": True,
+        "gpu_name": name,
+        "gpu_vendor": "qualcomm",
+        "gpu_vram_gb": None,
+        "gpu_vram_source": "opencl-platform",
+    }
+
+
 def _gpu_from_linux_sysfs() -> dict | None:
     drm_root = Path("/sys/class/drm")
     try:
@@ -417,6 +460,10 @@ def detect_gpu_info() -> dict:
             return result
 
     result = _gpu_from_windows_cim() if platform.system() == "Windows" else _gpu_from_linux_sysfs()
+    if result is not None:
+        return result
+
+    result = _gpu_from_opencl()
     if result is not None:
         return result
 

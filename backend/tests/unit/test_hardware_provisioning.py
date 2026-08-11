@@ -33,6 +33,14 @@ def test_linux_arm64_qualcomm_npu_selects_qnn():
     assert resolve_ort_extra(inventory) == "hw-ort-qnn"
 
 
+def test_linux_arm64_without_visible_npu_installs_qnn_candidate():
+    inventory = _inventory(os_name="linux", arch="arm64")
+    extra, reason = explain_ort_extra(inventory)
+
+    assert extra == "hw-ort-qnn"
+    assert reason == "os_name=linux, arch=arm64, qnn_candidate=true"
+
+
 def test_linux_x64_qualcomm_npu_does_not_select_qnn():
     inventory = _inventory(os_name="linux", arch="x64", npu_vendor="qualcomm")
     assert resolve_ort_extra(inventory) == "hw-ort-cpu"
@@ -87,5 +95,11 @@ def test_required_extras_add_speech_and_dev_symmetrically():
 
 def test_required_extras_add_qnn_speech_and_dev_for_linux_arm64_qualcomm():
     inventory = _inventory(os_name="linux", arch="arm64", npu_vendor="qualcomm")
+
+    assert resolve_required_extras(inventory) == ["hw-ort-qnn", "speech", "wake-word", "dev"]
+
+
+def test_required_extras_add_qnn_speech_and_dev_for_linux_arm64_candidate():
+    inventory = _inventory(os_name="linux", arch="arm64")
 
     assert resolve_required_extras(inventory) == ["hw-ort-qnn", "speech", "wake-word", "dev"]

@@ -11,7 +11,7 @@ Sets up JARVIS-AWF on Linux or WSL2. Run every command from the repository root.
 
 WSL2 reports itself as Linux and resolves as a Linux host. It needs no separate handling here.
 
-Optional, for accelerated speech: an NVIDIA GPU with a working driver, or a Linux-visible Qualcomm ARM64 NPU with the QNN runtime artifacts. CPU is the guaranteed floor on every host.
+Optional, for accelerated speech: an NVIDIA GPU with a working driver, a Linux-visible Qualcomm ARM64 NPU with the QNN runtime artifacts, or a Linux-visible Qualcomm/Adreno OpenCL runtime. CPU is the guaranteed floor on every host.
 
 ## Clone
 
@@ -70,7 +70,7 @@ This probes the host and names one extra without installing anything:
 |---|---|
 | `hw-ort-cuda` | x64 with an NVIDIA GPU and a CUDA driver |
 | `hw-ort-directml` | Windows with an AMD or Intel GPU |
-| `hw-ort-qnn` | ARM64 Linux/WSL or Windows with a Qualcomm NPU |
+| `hw-ort-qnn` | Linux ARM64 as a QNN candidate, or Windows ARM64 with a Qualcomm NPU |
 | `hw-ort-cpu` | everything else |
 
 Install it, then confirm what resolution produced:
@@ -100,7 +100,7 @@ backend/.venv/bin/awf-speech models verify
 
 `sync` downloads the artifacts named in `config/voice/{stt,tts,vad,wake}.yaml` into `models/`, and warms the STT model for the host's resolved device. It is idempotent — a second run changes nothing. `verify` reports each expected artifact as `OK` or `MISSING`.
 
-On Linux/WSL x64 with CUDA, STT can use Faster Whisper when CTranslate2 reports CUDA devices. On Linux/WSL ARM64 with a Linux-visible Qualcomm NPU and QNN runtime tokens, STT can use the QNN Whisper artifact under `models/stt/whisper-qualcomm-qnn`. CPU remains the floor through ONNX Whisper. OpenWakeWord is installed using the sibling-project pattern: AWF installs its usable sibling dependencies (`requests`, `scikit-learn`, `scipy`) with the rest of the selected requirements, then installs `openwakeword` with `--no-deps` to avoid the unavailable `tflite-runtime` metadata dependency and verifies that `openwakeword` and `onnxruntime` actually import.
+On Linux/WSL x64 with CUDA, STT can use Faster Whisper when CTranslate2 reports CUDA devices. On Linux/WSL ARM64, setup installs the QNN package family as a candidate so runtime preflight can prove or reject it; STT can use the QNN Whisper artifact under `models/stt/whisper-qualcomm-qnn` only when the QNN provider/backend tokens are present. Adreno/OpenCL is tracked as a separate GPU path for LLM readiness. CPU remains the floor through ONNX Whisper. OpenWakeWord is installed using the sibling-project pattern: AWF installs its usable sibling dependencies (`requests`, `scikit-learn`, `scipy`) with the rest of the selected requirements, then installs `openwakeword` with `--no-deps` to avoid the unavailable `tflite-runtime` metadata dependency and verifies that `openwakeword` and `onnxruntime` actually import.
 
 ### 6. Validate
 

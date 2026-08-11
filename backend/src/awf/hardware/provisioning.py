@@ -29,8 +29,12 @@ def explain_ort_extra(inventory: "HardwareInventory") -> tuple[str, str]:
     """Returns `(extra, reason)`. First matching condition wins."""
     if inventory.arch == "x64" and inventory.gpu_vendor == "nvidia" and inventory.cuda_available:
         return "hw-ort-cuda", "arch=x64, gpu_vendor=nvidia, cuda_available=true"
-    if inventory.os_name in ("windows", "linux") and inventory.arch == "arm64" and inventory.npu_vendor == "qualcomm":
-        return "hw-ort-qnn", f"os_name={inventory.os_name}, arch=arm64, npu_vendor=qualcomm"
+    if inventory.os_name == "linux" and inventory.arch == "arm64":
+        if inventory.npu_vendor == "qualcomm":
+            return "hw-ort-qnn", "os_name=linux, arch=arm64, npu_vendor=qualcomm"
+        return "hw-ort-qnn", "os_name=linux, arch=arm64, qnn_candidate=true"
+    if inventory.os_name == "windows" and inventory.arch == "arm64" and inventory.npu_vendor == "qualcomm":
+        return "hw-ort-qnn", "os_name=windows, arch=arm64, npu_vendor=qualcomm"
     if inventory.os_name == "windows" and inventory.gpu_available and inventory.gpu_vendor in ("amd", "intel"):
         return "hw-ort-directml", f"os_name=windows, gpu_available=true, gpu_vendor={inventory.gpu_vendor}"
     return "hw-ort-cpu", "no accelerator condition matched - cpu floor"

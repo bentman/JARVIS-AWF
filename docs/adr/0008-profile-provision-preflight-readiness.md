@@ -44,12 +44,15 @@ Whisper reserved for CUDA when CTranslate2 reports devices.
 
 A later ARM64 cross-host pass found the QNN provisioning rule was still
 Windows-shaped even though the resolver is intended to be host-symmetric.
-The rule now selects `hw-ort-qnn` for Windows or Linux ARM64 when the
-inventory reports a Qualcomm NPU. Linux/WSL inventory remains Linux-native:
-it does not query Windows CIM/PnP through interop. QNN runtime use is still
-gated by readiness tokens (`ep:QNNExecutionProvider` and `dll:QnnHtp`), so a
-Linux host may install the QNN packages while speech continues to select CPU
-until the runtime actually proves available.
+Windows ARM64 still selects `hw-ort-qnn` from a Qualcomm NPU inventory fact.
+Linux ARM64 now selects `hw-ort-qnn` as a host-class candidate so the QNN
+package family is present before preflight tries to prove the provider.
+Linux/WSL inventory remains Linux-native: it does not query Windows CIM/PnP
+through interop. QNN runtime use is still gated by readiness tokens
+(`ep:QNNExecutionProvider` and `dll:QnnHtp`), so a Linux host may install the
+QNN packages while speech continues to select CPU until the runtime actually
+proves available. Adreno/OpenCL is treated as a separate ARM64 GPU path and
+is reported only from Linux-visible OpenCL/sysfs evidence.
 
 ## Context
 
@@ -205,7 +208,8 @@ Selection, in order, first match wins:
 | Condition on `HardwareInventory` | Extra |
 |---|---|
 | `arch == "x64"` and `gpu_vendor == "nvidia"` and `cuda_available` | `hw-ort-cuda` |
-| `os_name in {"windows", "linux"}` and `arch == "arm64"` and `npu_vendor == "qualcomm"` | `hw-ort-qnn` |
+| `os_name == "linux"` and `arch == "arm64"` | `hw-ort-qnn` |
+| `os_name == "windows"` and `arch == "arm64"` and `npu_vendor == "qualcomm"` | `hw-ort-qnn` |
 | `os_name == "windows"` and `gpu_available` and `gpu_vendor in {"amd", "intel"}` | `hw-ort-directml` |
 | otherwise | `hw-ort-cpu` |
 
@@ -238,7 +242,7 @@ environment. Tokens are the only value readiness consumes.
 | `import:<module>` / `import:<module>:MISSING` | one per module in `onnxruntime`, `ctranslate2`, `faster_whisper`, `kokoro_onnx`, `openwakeword`, `silero_vad` |
 | `ep:<provider>` | one per entry in `onnxruntime.get_available_providers()`, read after QNN activation |
 | `dll:QnnHtp` / `dll:QnnHtp:MISSING` | `resolve_qnn_backend_path()` result |
-| `opencl:adreno` | `_opencl_platform_count() > 0` and `inventory.gpu_vendor == "qualcomm"` |
+| `opencl:adreno` | a Qualcomm/Adreno OpenCL platform is visible, or an OpenCL platform exists while inventory reports `gpu_vendor == "qualcomm"` |
 | `ct2:cuda:<n>` | `ctranslate2.get_cuda_device_count()` |
 
 `ep:` is a list read: `onnxruntime.get_available_providers()` and nothing

@@ -58,6 +58,15 @@ def test_stt_resolves_qnn_when_hardware_provider_and_qnn_runtime_agree():
     assert result.ready is True
 
 
+def test_stt_resolves_qnn_on_linux_arm64_when_runtime_proves_qnn_without_npu_inventory():
+    inventory = _inventory(os_name="linux", arch="arm64", npu_vendor=None, npu_available=False)
+    tokens = ["import:onnxruntime_qnn", "import:transformers", "ep:QNNExecutionProvider", "dll:QnnHtp"]
+    result = derive_stt_readiness(inventory, tokens)
+    assert result.device == "qnn"
+    assert result.ready is True
+    assert "NPU not exposed in inventory" in result.reason
+
+
 def test_stt_cpu_ready_when_onnx_runtime_importable_without_ct2():
     inventory = _inventory()
     tokens = ["import:onnx_asr"]
@@ -95,6 +104,15 @@ def test_tts_resolves_qnn_for_qualcomm(arch):
     result = derive_tts_readiness(inventory, tokens)
     assert result.device == "qnn"
     assert result.ready is True
+
+
+def test_tts_resolves_qnn_on_linux_arm64_when_runtime_proves_qnn_without_npu_inventory():
+    inventory = _inventory(os_name="linux", arch="arm64", npu_vendor=None, npu_available=False)
+    tokens = ["import:kokoro_onnx", "ep:QNNExecutionProvider", "dll:QnnHtp"]
+    result = derive_tts_readiness(inventory, tokens)
+    assert result.device == "qnn"
+    assert result.ready is True
+    assert "NPU not exposed in inventory" in result.reason
 
 
 @pytest.mark.parametrize("arch", ["x64", "arm64"])

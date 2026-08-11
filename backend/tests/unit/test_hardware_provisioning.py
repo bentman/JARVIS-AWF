@@ -76,4 +76,4 @@ def test_explain_ort_extra_returns_a_nonempty_reason():
 def test_required_extras_add_speech_and_dev_symmetrically():
     inventory = _inventory(os_name="windows", arch="arm64", npu_vendor="qualcomm")
 
-    assert resolve_required_extras(inventory) == ["hw-ort-qnn", "speech", "dev"]
+    assert resolve_required_extras(inventory) == ["hw-ort-qnn", "speech", "wake-word", "dev"]

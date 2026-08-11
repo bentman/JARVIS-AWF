@@ -27,6 +27,19 @@ not parametrized across both architectures as Scope item 10 states, though
 `readiness.py` never reads `inventory.arch` — parametrization added for
 literal coverage.
 
+A later operator bootstrap pass found the speech dependency surface was still
+too coarse for the supported host classes. `faster-whisper`/CTranslate2 has
+no Windows ARM64 wheel, while Linux OpenWakeWord's metadata can require a
+`tflite-runtime` wheel that is not available even though OpenWakeWord works
+through its ONNX path. Provisioning now selects `speech` and `wake-word`
+alongside the `hw-ort-*` extra. On Linux, `awf-setup --install` installs the
+editable project without dependencies, installs every selected requirement
+except OpenWakeWord normally, then installs `openwakeword==0.6.0` with
+`--no-deps`; `awf-setup --verify` waives only the known `tflite-runtime`
+metadata line when `openwakeword` and `onnxruntime` actually import. STT
+readiness accepts the ONNX STT runtimes for the CPU floor, with Faster
+Whisper reserved for CUDA when CTranslate2 reports devices.
+
 ## Context
 
 `pyproject.toml` declares `onnxruntime>=1.28` among the base dependencies.
@@ -192,6 +205,15 @@ from `importlib.metadata`, `onnxruntime.get_available_providers()`, and the
 result of `python -m pip check`. Verification is a report of what resolution
 produced, since other declared requirements participate in it.
 
+The selected install command includes speech and wake by default:
+`pip install -e .[<hw-ort-extra>,speech,wake-word,dev]`. Linux installation
+uses a split sequence for OpenWakeWord: install the editable project with
+`--no-deps`, install all selected requirements except OpenWakeWord normally,
+then install OpenWakeWord with `--no-deps`. This matches the sibling
+JARVISv7 host-class approach and avoids the unavailable Linux
+`tflite-runtime` metadata dependency while still requiring the actual
+`openwakeword` import at readiness time.
+
 Re-running with an unchanged inventory selects the same extra and installs
 nothing new.
 
@@ -244,9 +266,10 @@ derive_wake_readiness(inventory, tokens, artifact_paths) -> Readiness
 ```
 
 **STT** — `cuda` when `gpu_vendor == "nvidia"` and `cuda_available` and
-`ct2:cuda:<n>` with `n > 0`; otherwise `cpu`. Ready requires
-`import:faster_whisper`. The ONNX Runtime tokens are not consulted: STT runs
-on CTranslate2.
+`ct2:cuda:<n>` with `n > 0`; otherwise `cpu`. CUDA ready requires
+`import:faster_whisper`; the CPU floor is ready when an ONNX STT runtime such
+as `onnx_asr` or `sherpa_onnx` is importable. This keeps Windows ARM64 and
+CPU-only hosts usable without the CTranslate2 wheel.
 
 **TTS** — `cuda` when `gpu_vendor == "nvidia"` and `cuda_available` and
 `ep:CUDAExecutionProvider`; else `directml` when `os_name == "windows"`

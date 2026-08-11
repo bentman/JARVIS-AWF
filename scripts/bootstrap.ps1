@@ -63,6 +63,9 @@ if (-not $SkipSpeech) {
     Invoke-Step "Verify speech models" {
         Invoke-Native $VenvAwfSpeech @("models", "verify")
     }
+} else {
+    Write-Host "==> Skip speech setup"
+    Write-Host "    Speech is part of the normal operator path; use -SkipSpeech only for dependency outage triage."
 }
 
 if (-not $SkipFrontend -and (Get-Command npm -ErrorAction SilentlyContinue)) {

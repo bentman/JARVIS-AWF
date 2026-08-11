@@ -19,6 +19,7 @@ def resolve_required_extras(inventory: "HardwareInventory", *, include_speech: b
     extras = [resolve_ort_extra(inventory)]
     if include_speech:
         extras.append("speech")
+        extras.append("wake-word")
     if include_dev:
         extras.append("dev")
     return extras

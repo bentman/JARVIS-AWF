@@ -19,6 +19,20 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-11 23:59
+  - Host class(es): Windows AMD64 validation; Linux/WSL x64 CUDA by operator output and JARVISv7 read-only reference
+  - Summary: Restored speech and wake to the normal host-selected bootstrap path, using the sibling-project Linux OpenWakeWord `--no-deps` install pattern while keeping Windows ARM64 STT on the ONNX CPU/QNN-capable path.
+  - Scope: `pyproject.toml`, `scripts/bootstrap.{sh,ps1}`, `backend/src/awf/{setup.py,hardware/provisioning.py,hardware/readiness.py,speech/wake_openwakeword.py}`, `backend/tests/unit/{test_setup_run.py,test_hardware_provisioning.py,test_hardware_readiness.py}`, `docs/{OperatorsGuide.md,QuickStart-linux.md,QuickStart-windows.md,adr/0008-profile-provision-preflight-readiness.md}`, `README.md`, `CHANGE_LOG.md`.
+  - Validation: `awf.setup --provision` reported `hw-ort-cuda,speech,wake-word,dev` on this host; Ruff passed for touched backend source/tests; focused pytest passed with repo temp workaround (`49 passed`, one known cache warning); PowerShell bootstrap parsed OK; `pyproject.toml` parsed and exposed `wake-word = ['openwakeword==0.6.0']`; `git diff --check` passed.
+  - Notes: Linux Bash syntax validation could not run in this Windows shell because WSL/Bash returned `E_ACCESSDENIED`; the Linux OpenWakeWord behavior was aligned to `..\JARVISv7\scripts\provision.py`.
+
+- Timestamp: 2026-08-11 23:52
+  - Host class(es): Linux/WSL x64 CUDA by operator output; Windows AMD64 syntax/parse validation
+  - Summary: Prevented optional voice dependencies from blocking repo bootstrap when `openwakeword` requires unavailable Linux/Python 3.12 `tflite-runtime` wheels.
+  - Scope: `pyproject.toml`, `scripts/bootstrap.{sh,ps1}`, `docs/{QuickStart-linux.md,QuickStart-windows.md,OperatorsGuide.md}`, `README.md`, `CHANGE_LOG.md`.
+  - Validation: Operator-provided Linux/WSL output showed `openwakeword==0.6.0` failing on `tflite-runtime`; local validation parsed `pyproject.toml` and `scripts/bootstrap.ps1`; `pip install -e . --no-deps --dry-run --no-build-isolation` reached `Would install awf-0.1.0`; `git diff --check` passed.
+  - Notes: Core bootstrap now skips optional speech setup by default; operators can attempt voice setup with `--with-speech` or `-WithSpeech`, and `openwakeword` is split into a separate `wake-word` extra.
+
 - Timestamp: 2026-08-11 23:44
   - Host class(es): Windows ARM64 install path by operator output; Windows AMD64 syntax/parse validation
   - Summary: Fixed repo bootstrap after Windows ARM64 dependency resolution exposed that core install was coupled to optional speech packages and PowerShell continued after native command failures.

@@ -17,12 +17,15 @@ dependencies = [
 dev = ["pytest>=8", "onnx>=1.22", "ruff>=0.15.22"]
 model-gateway = ["litellm>=1.91.5,<1.92"]
 speech = [
-  "openwakeword==0.6.0",
   "faster-whisper>=1.2; sys_platform!='win32' or platform_machine!='ARM64'",
   "kokoro-onnx>=0.5",
   "huggingface-hub>=0.22",
   "onnx-asr>=0.8",
   "sherpa-onnx>=1.13.5",
+  "numpy>=1.26,<3",
+]
+wake-word = [
+  "openwakeword==0.6.0",
 ]
 hw-ort-cpu = ["onnxruntime>=1.28"]
 hw-ort-cuda = ["onnxruntime-gpu>=1.28"]

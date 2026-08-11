@@ -31,7 +31,7 @@ git pull
 .\scripts\bootstrap.ps1
 ```
 
-The wrapper creates `backend\.venv` when needed, installs AWF through the repo venv, installs the hardware-selected backend dependencies, bootstraps local state, syncs and verifies speech models, installs frontend dependencies when npm is available, runs `awf doctor`, and prints the first assistant run command. Use `-SkipSpeech` for a faster core-only setup.
+The wrapper creates `backend\.venv` when needed, installs AWF through the repo venv, installs the hardware-selected backend dependencies, bootstraps local state, acquires and verifies speech models, installs frontend dependencies when npm is available, runs `awf doctor`, and prints the first assistant run command. Use `-SkipSpeech` only when diagnosing a dependency or model-acquisition outage.
 
 ## Manual setup sequence
 
@@ -89,13 +89,7 @@ With no flags this generates `.env` with a fresh secret key, creates `cache\sand
 
 ### 5. Acquire the speech models
 
-If you want voice on Windows x64, install the optional speech dependencies first:
-
-```powershell
-.\backend\.venv\Scripts\python -m pip install -e ".[speech]"
-```
-
-On Windows ARM64, core AWF is supported but `faster-whisper` currently depends on `ctranslate2`, which has no matching Windows ARM64 wheel. The bootstrap wrapper skips speech package installation on Windows ARM64 and `awf doctor` reports the voice readiness gap instead of blocking the core app.
+Speech packages are installed by `awf-setup --install` through the host-selected dependency extras.
 
 ```powershell
 .\backend\.venv\Scripts\awf-speech models sync
@@ -103,6 +97,8 @@ On Windows ARM64, core AWF is supported but `faster-whisper` currently depends o
 ```
 
 `sync` downloads the artifacts named in `config\voice\{stt,tts,vad,wake}.yaml` into `models\`, and warms the STT model for the host's resolved device. It is idempotent — a second run changes nothing. `verify` reports each expected artifact as `OK` or `MISSING`.
+
+Windows x64 can use Faster Whisper where CTranslate2 is available. Windows ARM64 avoids the missing CTranslate2 wheel by using the ONNX Whisper CPU floor, with QNN attempted when the QNN provider and model artifacts are present. OpenWakeWord remains part of the normal wake path.
 
 ### 6. Validate
 
@@ -171,7 +167,7 @@ Omitting `--voice-id` uses the `narrator` Voice Profile's voice. Any other voice
 
 An ARM64 host selects `hw-ort-qnn`, which installs `onnxruntime-qnn` alongside the base `onnxruntime`. The two provide different import names and coexist; the profiler registers the QNN provider library at probe time.
 
-Speech-to-text runs on CTranslate2. On Windows ARM64, `faster-whisper`/CTranslate2 currently has no matching wheel, so the repo-local bootstrap keeps core AWF usable and reports speech as not ready. Text-to-speech and the wake word run on ONNX Runtime once their optional packages and artifacts are available. `profile` reports which functions are actually ready.
+Speech-to-text uses QNN only when the provider and required model artifacts are present; otherwise it falls back to the ONNX Whisper CPU runtime. This avoids the Windows ARM64 `faster-whisper`/CTranslate2 wheel gap while keeping speech usable. Text-to-speech and VAD run on ONNX Runtime; wake uses OpenWakeWord. `profile` reports which functions are actually ready.
 
 ## Repository rules that matter
 
@@ -210,4 +206,4 @@ Accelerator detected but not selected — run `profile` and read the readiness r
 .\backend\.venv\Scripts\python scripts\validate_backend.py profile
 ```
 
-STT and TTS resolve their devices independently. STT runs on CTranslate2 and asks it directly for CUDA devices; TTS runs on ONNX Runtime and needs the matching execution provider. One reaching `cuda` while the other stays on `cpu` is a normal outcome, not an error.
+STT and TTS resolve their devices independently. STT uses Faster Whisper/CTranslate2 for verified CUDA acceleration and ONNX Whisper for the CPU floor; TTS runs on ONNX Runtime and needs the matching execution provider. One reaching `cuda` while the other stays on `cpu` is a normal outcome, not an error.

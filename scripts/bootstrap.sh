@@ -20,9 +20,6 @@ step() {
   printf '==> %s\n' "$1"
 }
 
-machine="$(uname -m)"
-system="$(uname -s)"
-
 cd "$repo_root"
 mkdir -p "$repo_root/cache/temp"
 
@@ -48,6 +45,9 @@ if [[ "$skip_speech" != true ]]; then
   "$venv_awf_speech" models sync
   step "Verify speech models"
   "$venv_awf_speech" models verify
+else
+  step "Skip speech setup"
+  printf '    Speech is part of the normal operator path; use --skip-speech only for dependency outage triage.\n'
 fi
 
 if [[ "$skip_frontend" != true ]] && command -v npm >/dev/null 2>&1; then

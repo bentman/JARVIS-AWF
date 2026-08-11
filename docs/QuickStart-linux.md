@@ -33,7 +33,7 @@ git pull
 bash scripts/bootstrap.sh
 ```
 
-The wrapper creates `backend/.venv` when needed, installs AWF through the repo venv, installs the hardware-selected backend dependencies, bootstraps local state, syncs and verifies speech models, installs frontend dependencies when npm is available, runs `awf doctor`, and prints the first assistant run command. Use `--skip-speech` for a faster core-only setup.
+The wrapper creates `backend/.venv` when needed, installs AWF through the repo venv, installs the hardware-selected backend dependencies, bootstraps local state, acquires and verifies speech models, installs frontend dependencies when npm is available, runs `awf doctor`, and prints the first assistant run command. Use `--skip-speech` only when diagnosing a dependency or model-acquisition outage.
 
 ## Manual setup sequence
 
@@ -91,11 +91,7 @@ With no flags this generates `.env` with a fresh secret key, creates `cache/sand
 
 ### 5. Acquire the speech models
 
-If you want voice, install the optional speech dependencies first:
-
-```bash
-backend/.venv/bin/python -m pip install -e ".[speech]"
-```
+Speech packages are installed by `awf-setup --install` through the host-selected dependency extras.
 
 ```bash
 backend/.venv/bin/awf-speech models sync
@@ -103,6 +99,8 @@ backend/.venv/bin/awf-speech models verify
 ```
 
 `sync` downloads the artifacts named in `config/voice/{stt,tts,vad,wake}.yaml` into `models/`, and warms the STT model for the host's resolved device. It is idempotent — a second run changes nothing. `verify` reports each expected artifact as `OK` or `MISSING`.
+
+On Linux/WSL x64 with CUDA, STT can use Faster Whisper when CTranslate2 reports CUDA devices. CPU remains the floor through ONNX Whisper. OpenWakeWord is installed using the sibling-project pattern: AWF installs the rest of the selected requirements normally, then installs `openwakeword` with `--no-deps` to avoid the unavailable `tflite-runtime` metadata dependency and verifies that `openwakeword` and `onnxruntime` actually import.
 
 ### 6. Validate
 
@@ -205,4 +203,4 @@ Accelerator detected but not selected — run `profile` and read the readiness r
 backend/.venv/bin/python scripts/validate_backend.py profile
 ```
 
-STT and TTS resolve their devices independently. STT runs on CTranslate2 and asks it directly for CUDA devices; TTS runs on ONNX Runtime and needs the matching execution provider. One reaching `cuda` while the other stays on `cpu` is a normal outcome, not an error.
+STT and TTS resolve their devices independently. STT uses Faster Whisper/CTranslate2 for verified CUDA acceleration and ONNX Whisper for the CPU floor; TTS runs on ONNX Runtime and needs the matching execution provider. One reaching `cuda` while the other stays on `cpu` is a normal outcome, not an error.

@@ -13,7 +13,7 @@ Setup is per-platform. Follow the guide for your host:
 - [`docs/QuickStart-linux.md`](docs/QuickStart-linux.md) — Linux and WSL2
 - [`docs/QuickStart-windows.md`](docs/QuickStart-windows.md) — Windows x64 and ARM64
 
-Both cover the same sequence: create the backend virtual environment, install the hardware-appropriate dependency set, bootstrap local state, optionally acquire the speech models, and validate.
+Both cover the same sequence: create the backend virtual environment, install the hardware-appropriate dependency set, bootstrap local state, acquire the speech models, and validate.
 
 For the repo-local operator path, the bootstrap wrappers perform that sequence and finish with a doctor report:
 
@@ -21,6 +21,8 @@ For the repo-local operator path, the bootstrap wrappers perform that sequence a
 bash scripts/bootstrap.sh      # Linux / WSL2
 .\scripts\bootstrap.ps1        # Windows PowerShell
 ```
+
+Speech is part of the normal operator path. The bootstrap wrappers install host-selected speech dependencies through `awf-setup --install`, then acquire and verify the voice models. Linux OpenWakeWord provisioning follows the sibling-project pattern: install the package without the unavailable `tflite-runtime` metadata dependency and verify the actual `openwakeword`/`onnxruntime` imports. Use `--skip-speech` or `-SkipSpeech` only for dependency outage triage.
 
 After setup, the local first-run check is:
 

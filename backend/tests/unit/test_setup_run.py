@@ -66,17 +66,17 @@ def test_run_all_three_flags_invokes_all_in_order(fake_repo, monkeypatch):
 
 
 def test_provision_prints_install_command_that_includes_host_symmetric_extras(fake_repo, monkeypatch, capsys):
-    monkeypatch.setattr(awf_setup, "_resolve_extras", lambda: (["hw-ort-cpu", "speech", "dev"], "test reason"))
+    monkeypatch.setattr(awf_setup, "_resolve_extras", lambda: (["hw-ort-cpu", "speech", "wake-word", "dev"], "test reason"))
 
     exit_code = awf_setup.cmd_provision(fake_repo)
 
     assert exit_code == 0
-    assert "command: pip install -e .[hw-ort-cpu,speech,dev]" in capsys.readouterr().out
+    assert "command: pip install -e .[hw-ort-cpu,speech,wake-word,dev]" in capsys.readouterr().out
 
 
 def test_install_uses_selected_hardware_speech_and_dev_extras(fake_repo, monkeypatch):
     calls = []
-    monkeypatch.setattr(awf_setup, "_resolve_extras", lambda: (["hw-ort-cpu", "speech", "dev"], "test reason"))
+    monkeypatch.setattr(awf_setup, "_resolve_extras", lambda: (["hw-ort-cpu", "speech", "wake-word", "dev"], "test reason"))
 
     def fake_run(args, **kwargs):
         calls.append((args, kwargs))
@@ -87,7 +87,31 @@ def test_install_uses_selected_hardware_speech_and_dev_extras(fake_repo, monkeyp
     exit_code = awf_setup.cmd_install(fake_repo)
 
     assert exit_code == 0
-    assert calls[0][0][-1] == ".[hw-ort-cpu,speech,dev]"
+    assert calls[0][0][-1] == ".[hw-ort-cpu,speech,wake-word,dev]"
+
+
+def test_linux_openwakeword_install_uses_no_deps_for_tflite_metadata_gap(fake_repo, monkeypatch):
+    (fake_repo / "pyproject.toml").write_text(
+        """
+[project]
+dependencies = ["PyYAML>=6"]
+
+[project.optional-dependencies]
+speech = ["onnx-asr>=0.8"]
+wake-word = ["openwakeword==0.6.0"]
+hw-ort-cpu = ["onnxruntime>=1.28"]
+dev = ["ruff>=0.15.22"]
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(awf_setup.sys, "platform", "linux")
+
+    commands = awf_setup._install_commands(fake_repo, ["hw-ort-cpu", "speech", "wake-word", "dev"])
+
+    assert commands[0][-2:] == ["-y", "openwakeword"]
+    assert commands[1][-2:] == [".[hw-ort-cpu,speech,wake-word,dev]", "--no-deps"]
+    assert "openwakeword==0.6.0" not in commands[2]
+    assert commands[3][-2:] == ["--no-deps", "openwakeword==0.6.0"]
 
 
 def test_verify_requires_ruff_dev_tooling(fake_repo, monkeypatch, capsys):

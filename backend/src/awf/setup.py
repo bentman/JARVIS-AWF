@@ -16,9 +16,11 @@ harness, including Ruff. With no flag, `awf-setup` does the original bootstrap.
 
 import argparse
 import base64
+import importlib.util
 import os
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 from awf.db.bootstrap import init_db
@@ -27,6 +29,7 @@ from awf.paths import REPO_ROOT, db_path, env_path, sandbox_dir
 PLACEHOLDER = "<your-secret-key-here>"
 
 _ORT_DISTRIBUTIONS = ("onnxruntime", "onnxruntime-gpu", "onnxruntime-directml")
+_OPENWAKEWORD_DISTRIBUTION = "openwakeword"
 
 
 def _generate_secret_key() -> str:
@@ -91,12 +94,10 @@ def cmd_install(repo_root: Path) -> int:
     print(f"extras: {','.join(extras)}")
     print(f"reason: {reason}")
 
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-e", f".[{','.join(extras)}]"],
-        cwd=repo_root,
-    )
-    if result.returncode != 0:
-        return result.returncode
+    for command in _install_commands(repo_root, extras):
+        result = subprocess.run(command, cwd=repo_root)
+        if result.returncode != 0:
+            return result.returncode
 
     target = _EXTRA_TARGET_PACKAGE[extra]
     if target is None:
@@ -142,6 +143,101 @@ def _installed_distribution_version(name: str) -> str | None:
 # complaint whenever a non-base extra is selected - expected, not a defect,
 # since `import onnxruntime` and its providers are what actually matters.
 _KNOWN_ORT_NAME_CONFLICT = "requires onnxruntime, which is not installed"
+_KNOWN_LINUX_OPENWAKEWORD_TFLITE_METADATA = "requires tflite-runtime, which is not installed"
+
+
+def _read_pyproject(repo_root: Path) -> dict:
+    return tomllib.loads((repo_root / "pyproject.toml").read_text(encoding="utf-8"))
+
+
+def _requirement_applies(requirement: str) -> bool:
+    _specifier, separator, marker = requirement.partition(";")
+    if not separator:
+        return True
+    try:
+        from packaging.markers import Marker
+    except ImportError:
+        from pip._vendor.packaging.markers import Marker
+
+    return Marker(marker.strip()).evaluate()
+
+
+def _distribution_name(requirement: str) -> str:
+    candidate = requirement.split(";", 1)[0].strip()
+    if "[" in candidate:
+        candidate = candidate.split("[", 1)[0]
+    for separator in ("<", ">", "=", "!", " "):
+        if separator in candidate:
+            candidate = candidate.split(separator, 1)[0]
+    return candidate.strip().lower().replace("_", "-")
+
+
+def _selected_requirement_specs(repo_root: Path, extras: list[str]) -> list[str]:
+    data = _read_pyproject(repo_root)
+    project = data.get("project", {})
+    optional = project.get("optional-dependencies", {})
+    requirements = [
+        *project.get("dependencies", []),
+        *(requirement for extra in extras for requirement in optional.get(extra, [])),
+    ]
+    return [str(requirement).strip() for requirement in requirements if _requirement_applies(str(requirement))]
+
+
+def _linux_openwakeword_requirement(repo_root: Path, extras: list[str]) -> str | None:
+    requirements = [
+        requirement.split(";", 1)[0].strip()
+        for requirement in _selected_requirement_specs(repo_root, extras)
+        if _distribution_name(requirement) == _OPENWAKEWORD_DISTRIBUTION
+    ]
+    if len(requirements) > 1:
+        raise ValueError("Linux OpenWakeWord provisioning requires one declared package")
+    return requirements[0] if requirements else None
+
+
+def _install_commands(repo_root: Path, extras: list[str]) -> list[list[str]]:
+    editable = [sys.executable, "-m", "pip", "install", "-e", f".[{','.join(extras)}]"]
+    if sys.platform != "linux":
+        return [editable]
+
+    openwakeword_requirement = _linux_openwakeword_requirement(repo_root, extras)
+    if openwakeword_requirement is None:
+        return [editable]
+
+    requirements = [
+        requirement
+        for requirement in _selected_requirement_specs(repo_root, extras)
+        if _distribution_name(requirement) != _OPENWAKEWORD_DISTRIBUTION
+    ]
+    return [
+        [sys.executable, "-m", "pip", "uninstall", "-y", _OPENWAKEWORD_DISTRIBUTION],
+        [*editable, "--no-deps"],
+        [sys.executable, "-m", "pip", "install", *requirements],
+        [sys.executable, "-m", "pip", "install", "--no-deps", openwakeword_requirement],
+    ]
+
+
+def _package_importable(name: str) -> bool:
+    return importlib.util.find_spec(name) is not None
+
+
+def _linux_openwakeword_tflite_waiver_applies() -> bool:
+    return (
+        sys.platform == "linux"
+        and _installed_distribution_version(_OPENWAKEWORD_DISTRIBUTION) is not None
+        and _package_importable("openwakeword")
+        and _package_importable("onnxruntime")
+    )
+
+
+def _known_pip_check_line(line: str) -> bool:
+    normalized = line.strip().lower()
+    if _KNOWN_ORT_NAME_CONFLICT in normalized:
+        return True
+    return (
+        normalized.startswith(f"{_OPENWAKEWORD_DISTRIBUTION} ")
+        and _KNOWN_LINUX_OPENWAKEWORD_TFLITE_METADATA in normalized
+        and _linux_openwakeword_tflite_waiver_applies()
+    )
 
 
 def cmd_verify(repo_root: Path) -> int:
@@ -170,12 +266,12 @@ def cmd_verify(repo_root: Path) -> int:
         text=True,
     )
     check_lines = [line for line in pip_check.stdout.splitlines() if line.strip()]
-    unexpected_lines = [line for line in check_lines if _KNOWN_ORT_NAME_CONFLICT not in line]
+    unexpected_lines = [line for line in check_lines if not _known_pip_check_line(line)]
 
     if pip_check.returncode == 0:
         print("pip_check: OK")
     elif not unexpected_lines:
-        print("pip_check: reports the onnxruntime distribution-name conflict below (expected, not a defect):")
+        print("pip_check: reports known runtime metadata conflicts below (expected, not a defect):")
         print(pip_check.stdout)
     else:
         print("pip_check: FAILED")

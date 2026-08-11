@@ -1,8 +1,8 @@
 """Per-speech-function device selection (ADR-0008).
 
-The four functions run on three different runtimes - CTranslate2 for STT,
-ONNX Runtime for TTS and VAD, openWakeWord's own loader for wake - so one
-device string cannot describe all of them. Each `derive_*_readiness`
+The four functions run on several host-selected runtimes - CTranslate2 or
+ONNX/QNN for STT, ONNX Runtime for TTS and VAD, and openWakeWord for wake -
+so one device string cannot describe all of them. Each `derive_*_readiness`
 function grants a device above `cpu` only when both the hardware fact (from
 `hardware.profiler.collect_inventory`) and the runtime token (from
 `hardware.preflight.collect_preflight_tokens`) agree; either alone floors to
@@ -128,7 +128,7 @@ def derive_wake_readiness(
     missing = sorted(name for name, path in artifact_paths.items() if not path.is_file())
     if missing:
         return Readiness(device="cpu", ready=False, reason=f"missing artifacts: {missing}")
-    return Readiness(device="cpu", ready=True, reason="all wake artifacts present")
+    return Readiness(device="cpu", ready=True, reason="all wake artifacts present; openwakeword importable")
 
 
 def derive_llm_readiness(

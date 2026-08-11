@@ -55,10 +55,20 @@ class QnnActivation:
 
 
 def _load_optional(module_name: str):
+    previous_transformers_advisory = None
+    if module_name == "transformers":
+        previous_transformers_advisory = os.environ.get("TRANSFORMERS_NO_ADVISORY_WARNINGS")
+        os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
     try:
         return importlib.import_module(module_name)
     except Exception:
         return None
+    finally:
+        if module_name == "transformers":
+            if previous_transformers_advisory is None:
+                os.environ.pop("TRANSFORMERS_NO_ADVISORY_WARNINGS", None)
+            else:
+                os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = previous_transformers_advisory
 
 
 def _available_providers() -> list[str]:

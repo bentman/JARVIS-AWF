@@ -31,7 +31,7 @@ git pull
 .\scripts\bootstrap.ps1
 ```
 
-The wrapper creates `backend\.venv` when needed, installs AWF through the repo venv, installs the hardware-selected backend dependencies, bootstraps local state, acquires and verifies speech models, installs frontend dependencies when npm is available, runs `awf doctor`, and prints the first assistant run command. Use `-SkipSpeech` only when diagnosing a dependency or model-acquisition outage.
+The wrapper creates `backend\.venv` when needed, installs AWF through the repo venv, installs the hardware-selected backend dependencies, bootstraps local state, acquires and verifies speech models, installs frontend dependencies when npm is available, runs `awf doctor`, and prints the first assistant run command. It writes the full transcript to `reports\diagnostics\<datetime>-bootstrap.txt`, including `--provision`, `--install`, `--verify`, model, and doctor output. Use `-SkipSpeech` only when diagnosing a dependency or model-acquisition outage.
 
 ## Manual setup sequence
 

@@ -20,6 +20,13 @@
 ## Change Entries
 
 - Timestamp: 2026-08-11 23:59
+  - Host class(es): Windows AMD64 syntax/provision validation
+  - Summary: Added durable bootstrap diagnostics so every wrapper run leaves a timestamped report with full setup evidence for issue reporting.
+  - Scope: `scripts/bootstrap.{ps1,sh}`, `README.md`, `docs/{OperatorsGuide.md,QuickStart-linux.md,QuickStart-windows.md,adr/0015-validation-category-reports.md}`, `CHANGE_LOG.md`.
+  - Validation: PowerShell bootstrap parsed OK; `awf.setup --provision` reported `hw-ort-cuda,speech,wake-word,dev`; docs grep confirmed the report path is documented; `git diff --check` passed.
+  - Notes: Linux Bash syntax validation could not run in this Windows shell because WSL/Bash returned `E_ACCESSDENIED`.
+
+- Timestamp: 2026-08-11 23:59
   - Host class(es): Windows AMD64 validation; Linux/WSL x64 CUDA by operator output and JARVISv7 read-only reference
   - Summary: Restored speech and wake to the normal host-selected bootstrap path, using the sibling-project Linux OpenWakeWord `--no-deps` install pattern while keeping Windows ARM64 STT on the ONNX CPU/QNN-capable path.
   - Scope: `pyproject.toml`, `scripts/bootstrap.{sh,ps1}`, `backend/src/awf/{setup.py,hardware/provisioning.py,hardware/readiness.py,speech/wake_openwakeword.py}`, `backend/tests/unit/{test_setup_run.py,test_hardware_provisioning.py,test_hardware_readiness.py}`, `docs/{OperatorsGuide.md,QuickStart-linux.md,QuickStart-windows.md,adr/0008-profile-provision-preflight-readiness.md}`, `README.md`, `CHANGE_LOG.md`.

@@ -8,6 +8,16 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $VenvPython = Join-Path $RepoRoot "backend\.venv\Scripts\python.exe"
 $VenvAwfSpeech = Join-Path $RepoRoot "backend\.venv\Scripts\awf-speech.exe"
 $VenvAwf = Join-Path $RepoRoot "backend\.venv\Scripts\awf.exe"
+$ReportsDir = Join-Path $RepoRoot "reports\diagnostics"
+$Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$ReportPath = Join-Path $ReportsDir "$Timestamp-bootstrap.txt"
+
+New-Item -ItemType Directory -Force -Path $ReportsDir | Out-Null
+Start-Transcript -Path $ReportPath -Force | Out-Null
+
+try {
+
+Write-Host "Bootstrap report: $ReportPath"
 
 function Invoke-Step {
     param(
@@ -48,6 +58,10 @@ Invoke-Step "Install AWF base package" {
     Invoke-Native $VenvPython @("-m", "pip", "install", "-e", ".[dev]")
 }
 
+Invoke-Step "Provision hardware-selected backend dependencies" {
+    Invoke-Native $VenvPython @("-m", "awf.setup", "--provision")
+}
+
 Invoke-Step "Install hardware-selected backend dependencies" {
     Invoke-Native $VenvPython @("-m", "awf.setup", "--install", "--verify")
 }
@@ -81,3 +95,9 @@ Invoke-Step "Doctor" {
 Write-Host ""
 Write-Host "Next command:"
 Write-Host '.\backend\.venv\Scripts\awf run assistant-default@1.0.0 --objective "check the system"'
+
+} finally {
+    Stop-Transcript | Out-Null
+    Write-Host ""
+    Write-Host "Bootstrap report: $ReportPath"
+}

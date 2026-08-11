@@ -15,6 +15,13 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 venv_python="$repo_root/backend/.venv/bin/python"
 venv_awf_speech="$repo_root/backend/.venv/bin/awf-speech"
 venv_awf="$repo_root/backend/.venv/bin/awf"
+reports_dir="$repo_root/reports/diagnostics"
+timestamp="$(date +%Y%m%d-%H%M%S)"
+report_path="$reports_dir/${timestamp}-bootstrap.txt"
+
+mkdir -p "$reports_dir"
+exec > >(tee -a "$report_path") 2>&1
+trap 'rc=$?; printf "\nBootstrap report: %s\n" "$report_path"; exit "$rc"' EXIT
 
 step() {
   printf '==> %s\n' "$1"
@@ -33,6 +40,9 @@ step "Upgrade pip"
 
 step "Install AWF base package"
 "$venv_python" -m pip install -e ".[dev]"
+
+step "Provision hardware-selected backend dependencies"
+"$venv_python" -m awf.setup --provision
 
 step "Install hardware-selected backend dependencies"
 "$venv_python" -m awf.setup --install --verify

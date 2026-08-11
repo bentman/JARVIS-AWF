@@ -4,6 +4,13 @@
 
 Implemented.
 
+Bootstrap wrappers also write durable diagnostic transcripts:
+`scripts/bootstrap.sh` and `scripts/bootstrap.ps1` create
+`reports/diagnostics/<datetime>-bootstrap.txt` before setup work starts and
+capture the full console output, including `awf.setup --provision`,
+`--install`, `--verify`, model sync/verify, doctor output, failures, and the
+next operator command.
+
 ## Context
 
 ADR-0006 created the backend validation harness and durable reports, but only
@@ -41,6 +48,11 @@ The `profile` diagnostic records the selected extra and its reason, followed
 by the separate runtime-readiness profile/evidence when it can be resolved.
 That distinction makes a restricted execution environment visible without
 misclassifying the host selected by the provisioning probe.
+
+The bootstrap diagnostic is intentionally wrapper-scoped rather than a new
+`awf-setup` flag: it records the complete operator path around setup, including
+venv creation, pip output, frontend install output when present, and the final
+doctor report.
 
 At the end of every harness invocation, the report root is pruned per folder:
 only the newest 35 `.txt` files in each directory under `reports/` are kept.

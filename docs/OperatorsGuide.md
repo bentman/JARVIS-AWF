@@ -17,6 +17,7 @@ Do this once per machine.
    - Linux/WSL: `bash scripts/bootstrap.sh`
    - Windows: `.\scripts\bootstrap.ps1`
    - Use `--skip-speech` on Linux/WSL or `-SkipSpeech` on Windows only when diagnosing a dependency outage.
+   - The wrapper writes `reports/diagnostics/<datetime>-bootstrap.txt`; include that report when filing setup issues.
 2. **Or create a Python venv and install manually** (Python 3.12–3.14):
    - Linux/WSL: `python3.12 -m venv backend/.venv` then `backend/.venv/bin/pip install -e .[dev]`
    - Windows: `py -m venv .\backend\.venv` then `.\backend\.venv\Scripts\pip install -e .[dev]`

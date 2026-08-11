@@ -22,6 +22,8 @@ bash scripts/bootstrap.sh      # Linux / WSL2
 .\scripts\bootstrap.ps1        # Windows PowerShell
 ```
 
+Each bootstrap run writes the full console transcript to `reports/diagnostics/<datetime>-bootstrap.txt`, including provision, install, verify, model acquisition, doctor output, and failures.
+
 Speech is part of the normal operator path. The bootstrap wrappers install host-selected speech dependencies through `awf-setup --install`, then acquire and verify the voice models. Linux OpenWakeWord provisioning follows the sibling-project pattern: install the package without the unavailable `tflite-runtime` metadata dependency and verify the actual `openwakeword`/`onnxruntime` imports. Use `--skip-speech` or `-SkipSpeech` only for dependency outage triage.
 
 After setup, the local first-run check is:

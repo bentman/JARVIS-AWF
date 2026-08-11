@@ -40,8 +40,9 @@ _IMPORT_CHECK_MODULES = (
     "openwakeword",
 )
 
-# Registered DLL directory handles must outlive the call that added them.
+# Registered native-library handles must outlive the call that added them.
 _DLL_DIRECTORY_HANDLES: list[object] = []
+_NATIVE_LIBRARY_HANDLES: list[object] = []
 _PREFLIGHT_CACHE: list[str] | None = None
 
 
@@ -101,14 +102,19 @@ def _qnn_provider_library_path(module) -> Path | None:
     root = _qnn_package_root(module)
     if root is None:
         return None
-    candidate = root / "onnxruntime_providers_qnn.dll"
-    return candidate if candidate.is_file() else None
+    names = ("onnxruntime_providers_qnn.dll",) if platform.system() == "Windows" else ("libonnxruntime_providers_qnn.so",)
+    for name in names:
+        candidate = root / name
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def resolve_qnn_backend_path() -> Path | None:
-    """Locate `QnnHtp.dll` - the QNN backend library the provider needs as an
+    """Locate the QNN HTP backend library the provider needs as an
     explicit option. Searched in the installed onnxruntime packages, then in
     an operator-supplied `QAIRT_SDK_PATH`."""
+    backend_names = ("QnnHtp.dll",) if platform.system() == "Windows" else ("libQnnHtp.so", "QnnHtp.dll")
     for module_name in ("onnxruntime_qnn", "onnxruntime"):
         module = _load_optional(module_name)
         if module is None:
@@ -125,7 +131,7 @@ def resolve_qnn_backend_path() -> Path | None:
         if root is None:
             continue
         try:
-            found = next((p for p in root.rglob("QnnHtp.dll") if p.is_file()), None)
+            found = next((p for name in backend_names for p in root.rglob(name) if p.is_file()), None)
         except OSError:
             found = None
         if found is not None:
@@ -135,9 +141,38 @@ def resolve_qnn_backend_path() -> Path | None:
     if sdk_path:
         sdk_root = Path(sdk_path)
         for directory in (sdk_root, sdk_root / "bin", sdk_root / "lib"):
-            candidate = directory / "QnnHtp.dll"
-            if candidate.is_file():
-                return candidate
+            for name in backend_names:
+                candidate = directory / name
+                if candidate.is_file():
+                    return candidate
+    return None
+
+
+def _preload_qnn_shared_libraries(*roots: Path | None) -> str | None:
+    if platform.system() == "Windows":
+        return None
+    ordered: list[Path] = []
+    seen: set[Path] = set()
+    for root in roots:
+        if root is None:
+            continue
+        for pattern in ("libQnn*.so", "libonnxruntime_providers_qnn.so"):
+            try:
+                matches = sorted(root.glob(pattern))
+            except OSError:
+                continue
+            for path in matches:
+                resolved = path.resolve()
+                if resolved not in seen and resolved.is_file():
+                    seen.add(resolved)
+                    ordered.append(resolved)
+
+    mode = getattr(os, "RTLD_GLOBAL", 0) | getattr(os, "RTLD_NOW", 0)
+    for path in ordered:
+        try:
+            _NATIVE_LIBRARY_HANDLES.append(ctypes.CDLL(str(path), mode=mode))
+        except OSError as exc:
+            return f"preload failed for {path}: {exc}"
     return None
 
 
@@ -168,6 +203,7 @@ def activate_qnn_execution_provider() -> QnnActivation:
         )
 
     dll_directory = _qnn_package_root(qnn_module)
+    backend_directory = backend_path.parent if backend_path is not None else None
     add_dll_directory = getattr(os, "add_dll_directory", None)
     if dll_directory is not None and add_dll_directory is not None:
         try:
@@ -180,6 +216,16 @@ def activate_qnn_execution_provider() -> QnnActivation:
                 backend_path=backend_str,
                 error=f"add_dll_directory failed: {exc}",
             )
+
+    preload_error = _preload_qnn_shared_libraries(dll_directory, backend_directory)
+    if preload_error is not None:
+        return QnnActivation(
+            provider_registered=False,
+            provider_library_path=str(library_path),
+            dll_directory_path=str(dll_directory) if dll_directory else None,
+            backend_path=backend_str,
+            error=preload_error,
+        )
 
     ort = _load_optional("onnxruntime")
     register = getattr(ort, "register_execution_provider_library", None) if ort else None
@@ -315,7 +361,15 @@ def collect_preflight_tokens(inventory: "HardwareInventory", *, refresh: bool = 
     # mutates what ONNX Runtime reports. Registration only loads a provider
     # library into ONNX Runtime's own registry - it builds no session, so it
     # carries none of session construction's native-crash risk.
-    activate_qnn_execution_provider()
+    qnn_activation = activate_qnn_execution_provider()
+    if qnn_activation is not None and qnn_activation.provider_library_path is not None:
+        tokens.append(f"qnn:provider_library:{qnn_activation.provider_library_path}")
+    if qnn_activation is not None and qnn_activation.backend_path is not None:
+        tokens.append(f"qnn:backend_path:{qnn_activation.backend_path}")
+    if qnn_activation is not None and qnn_activation.provider_registered:
+        tokens.append("qnn:provider_library_registered")
+    elif qnn_activation is not None and qnn_activation.error:
+        tokens.append(f"qnn:provider_activation_error:{qnn_activation.error}")
     tokens.extend(f"ep:{provider}" for provider in _available_providers())
 
     backend_path = resolve_qnn_backend_path()

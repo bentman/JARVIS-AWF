@@ -242,6 +242,10 @@ environment. Tokens are the only value readiness consumes.
 | `import:<module>` / `import:<module>:MISSING` | one per module in `onnxruntime`, `ctranslate2`, `faster_whisper`, `kokoro_onnx`, `openwakeword`, `silero_vad` |
 | `ep:<provider>` | one per entry in `onnxruntime.get_available_providers()`, read after QNN activation |
 | `dll:QnnHtp` / `dll:QnnHtp:MISSING` | `resolve_qnn_backend_path()` result |
+| `qnn:provider_library:<path>` | QNN EP plugin path discovered from `onnxruntime_qnn` |
+| `qnn:backend_path:<path>` | QNN HTP backend path discovered from `onnxruntime_qnn`, `onnxruntime`, or `QAIRT_SDK_PATH` |
+| `qnn:provider_library_registered` | QNN EP registration succeeded before provider enumeration |
+| `qnn:provider_activation_error:<reason>` | QNN EP registration failed before provider enumeration |
 | `opencl:adreno` | a Qualcomm/Adreno OpenCL platform is visible, or an OpenCL platform exists while inventory reports `gpu_vendor == "qualcomm"` |
 | `ct2:cuda:<n>` | `ctranslate2.get_cuda_device_count()` |
 

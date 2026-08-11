@@ -220,15 +220,15 @@ def _package_importable(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
 
-def _activate_optional_providers_for_verify() -> None:
+def _activate_optional_providers_for_verify():
     try:
         from awf.hardware.preflight import activate_qnn_execution_provider
     except Exception:
-        return
+        return None
     try:
-        activate_qnn_execution_provider()
+        return activate_qnn_execution_provider()
     except Exception:
-        return
+        return None
 
 
 def _linux_openwakeword_tflite_waiver_applies() -> bool:
@@ -261,7 +261,12 @@ def cmd_verify(repo_root: Path) -> int:
     print(f"ruff_version: {ruff_version}")
 
     try:
-        _activate_optional_providers_for_verify()
+        qnn_activation = _activate_optional_providers_for_verify()
+        if qnn_activation is not None:
+            print(f"qnn_provider_registered: {qnn_activation.provider_registered}")
+            print(f"qnn_provider_library_path: {qnn_activation.provider_library_path}")
+            print(f"qnn_backend_path: {qnn_activation.backend_path}")
+            print(f"qnn_activation_error: {qnn_activation.error}")
         import onnxruntime as ort
 
         providers = list(ort.get_available_providers())

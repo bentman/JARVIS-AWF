@@ -1,4 +1,5 @@
 import os
+from types import SimpleNamespace
 
 from awf.hardware import preflight
 from awf.hardware.profiler import HardwareInventory
@@ -50,3 +51,81 @@ def test_opencl_adreno_token_can_come_from_qualcomm_platform_identity(monkeypatc
     tokens = preflight.collect_preflight_tokens(HardwareInventory(os_name="linux", arch="arm64"), refresh=True)
 
     assert "opencl:adreno" in tokens
+
+
+def test_qnn_provider_and_backend_paths_use_linux_shared_library_names(monkeypatch, tmp_path):
+    qnn_root = tmp_path / "onnxruntime_qnn"
+    qnn_root.mkdir()
+    provider = qnn_root / "libonnxruntime_providers_qnn.so"
+    backend = qnn_root / "libQnnHtp.so"
+    provider.write_text("", encoding="utf-8")
+    backend.write_text("", encoding="utf-8")
+    module = SimpleNamespace(__file__=str(qnn_root / "__init__.py"))
+
+    monkeypatch.setattr(preflight.platform, "system", lambda: "Linux")
+
+    assert preflight._qnn_provider_library_path(module) == provider
+    monkeypatch.setattr(preflight, "_load_optional", lambda name: module if name == "onnxruntime_qnn" else None)
+    monkeypatch.delenv("QAIRT_SDK_PATH", raising=False)
+    assert preflight.resolve_qnn_backend_path() == backend
+
+
+def test_qnn_activation_preloads_linux_shared_libraries_before_registration(monkeypatch, tmp_path):
+    qnn_root = tmp_path / "onnxruntime_qnn"
+    qnn_root.mkdir()
+    provider = qnn_root / "libonnxruntime_providers_qnn.so"
+    backend = qnn_root / "libQnnHtp.so"
+    system = qnn_root / "libQnnSystem.so"
+    provider.write_text("", encoding="utf-8")
+    backend.write_text("", encoding="utf-8")
+    system.write_text("", encoding="utf-8")
+    providers = ["CPUExecutionProvider"]
+    loaded = []
+    registered = []
+
+    module = SimpleNamespace(
+        LIB_DIR_FULL_PATH=str(qnn_root),
+        get_library_path=lambda: str(provider),
+        get_qnn_htp_path=lambda: str(backend),
+    )
+    ort = SimpleNamespace(
+        get_available_providers=lambda: list(providers),
+        register_execution_provider_library=lambda name, path: registered.append((name, path))
+        or providers.append("QNNExecutionProvider"),
+    )
+
+    monkeypatch.setattr(preflight.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(preflight, "_load_optional", lambda name: module if name == "onnxruntime_qnn" else ort)
+    monkeypatch.setattr(preflight.ctypes, "CDLL", lambda path, mode=0: loaded.append(path) or object())
+
+    result = preflight.activate_qnn_execution_provider()
+
+    assert result.provider_registered is True
+    assert result.provider_library_path == str(provider)
+    assert result.backend_path == str(backend)
+    assert str(backend) in loaded
+    assert str(provider) in loaded
+    assert registered == [("QNNExecutionProvider", str(provider))]
+
+
+def test_preflight_reports_qnn_activation_paths_and_errors(monkeypatch):
+    activation = preflight.QnnActivation(
+        provider_registered=False,
+        provider_library_path="/tmp/libonnxruntime_providers_qnn.so",
+        backend_path="/tmp/libQnnHtp.so",
+        error="registration failed",
+    )
+    monkeypatch.setattr(preflight, "_import_tokens", lambda: ["import:onnxruntime_qnn"])
+    monkeypatch.setattr(preflight, "activate_qnn_execution_provider", lambda: activation)
+    monkeypatch.setattr(preflight, "_available_providers", lambda: ["CPUExecutionProvider"])
+    monkeypatch.setattr(preflight, "resolve_qnn_backend_path", lambda: None)
+    monkeypatch.setattr(preflight, "_opencl_platform_count", lambda: 0)
+    monkeypatch.setattr(preflight, "_opencl_qualcomm_platform_present", lambda: False)
+    monkeypatch.setattr(preflight, "_vulkan_available", lambda: False)
+    monkeypatch.setattr(preflight, "_ct2_cuda_count", lambda: 0)
+
+    tokens = preflight.collect_preflight_tokens(HardwareInventory(os_name="linux", arch="arm64"), refresh=True)
+
+    assert "qnn:provider_library:/tmp/libonnxruntime_providers_qnn.so" in tokens
+    assert "qnn:backend_path:/tmp/libQnnHtp.so" in tokens
+    assert "qnn:provider_activation_error:registration failed" in tokens

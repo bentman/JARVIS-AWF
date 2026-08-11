@@ -34,9 +34,11 @@ no Windows ARM64 wheel, while Linux OpenWakeWord's metadata can require a
 through its ONNX path. Provisioning now selects `speech` and `wake-word`
 alongside the `hw-ort-*` extra. On Linux, `awf-setup --install` installs the
 editable project without dependencies, installs every selected requirement
-except OpenWakeWord normally, then installs `openwakeword==0.6.0` with
-`--no-deps`; `awf-setup --verify` waives only the known `tflite-runtime`
-metadata line when `openwakeword` and `onnxruntime` actually import. STT
+except OpenWakeWord normally, including OpenWakeWord's usable sibling
+dependencies (`requests`, `scikit-learn`, `scipy`), then installs
+`openwakeword==0.6.0` with `--no-deps`; `awf-setup --verify` waives only the
+known `tflite-runtime` metadata line when `openwakeword` and `onnxruntime`
+actually import. STT
 readiness accepts the ONNX STT runtimes for the CPU floor, with Faster
 Whisper reserved for CUDA when CTranslate2 reports devices.
 

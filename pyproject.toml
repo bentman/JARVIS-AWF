@@ -26,6 +26,9 @@ speech = [
 ]
 wake-word = [
   "openwakeword==0.6.0",
+  "requests>=2.32",
+  "scikit-learn>=1.5",
+  "scipy>=1.11",
 ]
 hw-ort-cpu = ["onnxruntime>=1.28"]
 hw-ort-cuda = ["onnxruntime-gpu>=1.28"]

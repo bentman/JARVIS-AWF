@@ -100,7 +100,7 @@ backend/.venv/bin/awf-speech models verify
 
 `sync` downloads the artifacts named in `config/voice/{stt,tts,vad,wake}.yaml` into `models/`, and warms the STT model for the host's resolved device. It is idempotent — a second run changes nothing. `verify` reports each expected artifact as `OK` or `MISSING`.
 
-On Linux/WSL x64 with CUDA, STT can use Faster Whisper when CTranslate2 reports CUDA devices. CPU remains the floor through ONNX Whisper. OpenWakeWord is installed using the sibling-project pattern: AWF installs the rest of the selected requirements normally, then installs `openwakeword` with `--no-deps` to avoid the unavailable `tflite-runtime` metadata dependency and verifies that `openwakeword` and `onnxruntime` actually import.
+On Linux/WSL x64 with CUDA, STT can use Faster Whisper when CTranslate2 reports CUDA devices. CPU remains the floor through ONNX Whisper. OpenWakeWord is installed using the sibling-project pattern: AWF installs its usable sibling dependencies (`requests`, `scikit-learn`, `scipy`) with the rest of the selected requirements, then installs `openwakeword` with `--no-deps` to avoid the unavailable `tflite-runtime` metadata dependency and verifies that `openwakeword` and `onnxruntime` actually import.
 
 ### 6. Validate
 

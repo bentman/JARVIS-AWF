@@ -28,7 +28,7 @@ Do this once per machine.
    - `awf-setup --verify` → confirms what actually got installed (runtime, providers, tooling) and that pip is healthy.
 5. **Download voice models:** `awf-speech models sync`
    → Fetches the wake-word, VAD, speech-to-text, and text-to-speech models for your hardware. `awf-speech models verify` checks them later.
-   Speech is installed by the hardware-selected setup path. STT uses Faster Whisper where CTranslate2 wheels and CUDA are available, and an ONNX Whisper CPU floor elsewhere; Windows ARM64 QNN is attempted when the QNN provider and model artifacts are present, then falls back to ONNX CPU STT. Linux OpenWakeWord provisioning installs the package without the unavailable `tflite-runtime` metadata dependency and verifies the actual `openwakeword`/`onnxruntime` imports.
+   Speech is installed by the hardware-selected setup path. STT uses Faster Whisper where CTranslate2 wheels and CUDA are available, and an ONNX Whisper CPU floor elsewhere; Windows ARM64 QNN is attempted when the QNN provider and model artifacts are present, then falls back to ONNX CPU STT. Linux OpenWakeWord provisioning installs the usable sibling dependencies normally, installs the package without the unavailable `tflite-runtime` metadata dependency, and verifies the actual `openwakeword`/`onnxruntime` imports.
 6. **Frontends (optional):** `npm --prefix frontend install` then `npm --prefix frontend run build` (Node.js 24 LTS `>=24.15.0`).
 7. **Check the install:** `awf doctor`
    → Reports Python/venv, local paths, registry defaults, frontend dependencies, visible agent CLIs, speech readiness, and the next operator action.

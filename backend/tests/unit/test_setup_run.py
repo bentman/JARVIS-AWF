@@ -98,7 +98,7 @@ dependencies = ["PyYAML>=6"]
 
 [project.optional-dependencies]
 speech = ["onnx-asr>=0.8"]
-wake-word = ["openwakeword==0.6.0"]
+wake-word = ["openwakeword==0.6.0", "requests>=2.32", "scikit-learn>=1.5", "scipy>=1.11"]
 hw-ort-cpu = ["onnxruntime>=1.28"]
 dev = ["ruff>=0.15.22"]
 """,
@@ -111,6 +111,9 @@ dev = ["ruff>=0.15.22"]
     assert commands[0][-2:] == ["-y", "openwakeword"]
     assert commands[1][-2:] == [".[hw-ort-cpu,speech,wake-word,dev]", "--no-deps"]
     assert "openwakeword==0.6.0" not in commands[2]
+    assert "requests>=2.32" in commands[2]
+    assert "scikit-learn>=1.5" in commands[2]
+    assert "scipy>=1.11" in commands[2]
     assert commands[3][-2:] == ["--no-deps", "openwakeword==0.6.0"]
 
 
@@ -166,3 +169,64 @@ def test_verify_accepts_successful_pip_check_output(fake_repo, monkeypatch, caps
 
     assert exit_code == 0
     assert "pip_check: OK" in capsys.readouterr().out
+
+
+def test_verify_accepts_linux_openwakeword_tflite_metadata_gap(fake_repo, monkeypatch, capsys):
+    monkeypatch.setattr(awf_setup.sys, "platform", "linux")
+    monkeypatch.setattr(awf_setup, "_installed_ort_distribution", lambda: ("onnxruntime", "1.28.0"))
+    monkeypatch.setattr(awf_setup, "_installed_distribution_version", lambda name: "0.16.2")
+    monkeypatch.setattr(awf_setup, "_package_importable", lambda name: name in {"openwakeword", "onnxruntime"})
+
+    class FakeOrt:
+        @staticmethod
+        def get_available_providers():
+            return ["CPUExecutionProvider"]
+
+    monkeypatch.setitem(__import__("sys").modules, "onnxruntime", FakeOrt)
+    monkeypatch.setattr(
+        awf_setup.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args,
+            1,
+            stdout="openwakeword 0.6.0 requires tflite-runtime, which is not installed.\n",
+            stderr="",
+        ),
+    )
+
+    exit_code = awf_setup.cmd_verify(fake_repo)
+
+    assert exit_code == 0
+    assert "known runtime metadata conflicts" in capsys.readouterr().out
+
+
+def test_verify_rejects_unexpected_linux_openwakeword_dependency_gap(fake_repo, monkeypatch, capsys):
+    monkeypatch.setattr(awf_setup.sys, "platform", "linux")
+    monkeypatch.setattr(awf_setup, "_installed_ort_distribution", lambda: ("onnxruntime", "1.28.0"))
+    monkeypatch.setattr(awf_setup, "_installed_distribution_version", lambda name: "0.16.2")
+    monkeypatch.setattr(awf_setup, "_package_importable", lambda name: name in {"openwakeword", "onnxruntime"})
+
+    class FakeOrt:
+        @staticmethod
+        def get_available_providers():
+            return ["CPUExecutionProvider"]
+
+    monkeypatch.setitem(__import__("sys").modules, "onnxruntime", FakeOrt)
+    monkeypatch.setattr(
+        awf_setup.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args,
+            1,
+            stdout=(
+                "openwakeword 0.6.0 requires requests, which is not installed.\n"
+                "openwakeword 0.6.0 requires tflite-runtime, which is not installed.\n"
+            ),
+            stderr="",
+        ),
+    )
+
+    exit_code = awf_setup.cmd_verify(fake_repo)
+
+    assert exit_code == 1
+    assert "pip_check: FAILED" in capsys.readouterr().out

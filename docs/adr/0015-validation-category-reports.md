@@ -9,7 +9,8 @@ Bootstrap wrappers also write durable diagnostic transcripts:
 `reports/diagnostics/<datetime>-bootstrap.txt` before setup work starts and
 capture the full console output, including `awf.setup --provision`,
 `--install`, `--verify`, model sync/verify, doctor output, failures, and the
-next operator command.
+next operator command. Windows uses explicit `Tee-Object` capture for native
+commands because `Start-Transcript` can miss native executable stdout/stderr.
 
 ## Context
 

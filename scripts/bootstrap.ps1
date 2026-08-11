@@ -13,18 +13,30 @@ $Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $ReportPath = Join-Path $ReportsDir "$Timestamp-bootstrap.txt"
 
 New-Item -ItemType Directory -Force -Path $ReportsDir | Out-Null
-Start-Transcript -Path $ReportPath -Force | Out-Null
+Set-Content -LiteralPath $ReportPath -Value @(
+    "AWF bootstrap report"
+    "started_at=$((Get-Date).ToString('o'))"
+    "repo_root=$RepoRoot"
+    "report_path=$ReportPath"
+    ""
+)
 
 try {
 
-Write-Host "Bootstrap report: $ReportPath"
+function Write-Log {
+    param([string]$Message)
+    Write-Host $Message
+    Add-Content -LiteralPath $ReportPath -Value $Message
+}
+
+Write-Log "Bootstrap report: $ReportPath"
 
 function Invoke-Step {
     param(
         [string]$Name,
         [scriptblock]$Body
     )
-    Write-Host "==> $Name"
+    Write-Log "==> $Name"
     & $Body
 }
 
@@ -35,9 +47,11 @@ function Invoke-Native {
         [Parameter(ValueFromRemainingArguments=$true, Position=1)]
         [string[]]$Arguments
     )
-    & $Command @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Command failed ($LASTEXITCODE): $Command $($Arguments -join ' ')"
+    Write-Log "command: $Command $($Arguments -join ' ')"
+    & $Command @Arguments 2>&1 | Tee-Object -FilePath $ReportPath -Append
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "Command failed ($exitCode): $Command $($Arguments -join ' ')"
     }
 }
 
@@ -89,15 +103,14 @@ if (-not $SkipFrontend -and (Get-Command npm -ErrorAction SilentlyContinue)) {
 }
 
 Invoke-Step "Doctor" {
-    & $VenvAwf doctor
+    Invoke-Native $VenvAwf @("doctor")
 }
 
-Write-Host ""
-Write-Host "Next command:"
-Write-Host '.\backend\.venv\Scripts\awf run assistant-default@1.0.0 --objective "check the system"'
+Write-Log ""
+Write-Log "Next command:"
+Write-Log '.\backend\.venv\Scripts\awf run assistant-default@1.0.0 --objective "check the system"'
 
 } finally {
-    Stop-Transcript | Out-Null
-    Write-Host ""
-    Write-Host "Bootstrap report: $ReportPath"
+    Write-Log ""
+    Write-Log "Bootstrap report: $ReportPath"
 }

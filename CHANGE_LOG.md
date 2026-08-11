@@ -20,6 +20,13 @@
 ## Change Entries
 
 - Timestamp: 2026-08-11 23:59
+  - Host class(es): Windows AMD64 syntax and tee smoke validation
+  - Summary: Fixed Windows bootstrap reports to capture native command stdout/stderr with `Tee-Object` instead of relying on `Start-Transcript`.
+  - Scope: `scripts/bootstrap.ps1`, `docs/adr/0015-validation-category-reports.md`, `CHANGE_LOG.md`.
+  - Validation: PowerShell bootstrap parsed OK; a native Python stdout/stderr smoke piped through `Tee-Object` wrote both streams to `cache/temp/tee-smoke.txt`; `git diff --check` passed.
+  - Notes: Microsoft PowerShell docs describe `Tee-Object` as writing output to a file and the pipeline; the PowerShell team documents native command output as a `Start-Transcript` gap.
+
+- Timestamp: 2026-08-11 23:59
   - Host class(es): Windows AMD64 syntax/provision validation
   - Summary: Added durable bootstrap diagnostics so every wrapper run leaves a timestamped report with full setup evidence for issue reporting.
   - Scope: `scripts/bootstrap.{ps1,sh}`, `README.md`, `docs/{OperatorsGuide.md,QuickStart-linux.md,QuickStart-windows.md,adr/0015-validation-category-reports.md}`, `CHANGE_LOG.md`.

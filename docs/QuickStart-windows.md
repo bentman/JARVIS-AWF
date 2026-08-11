@@ -54,7 +54,7 @@ Python 3.13 or 3.14 work as well. Use `.\backend\.venv\Scripts\python` for every
 .\backend\.venv\Scripts\python -m pip install -e ".[dev]"
 ```
 
-This installs the core, the four console scripts (`awf`, `awf-setup`, `awf-secret`, `awf-speech`), and the dev tooling needed by validation, including pytest and Ruff. The ONNX Runtime build is not part of the base set — the next step selects it.
+This installs the core, the four console scripts (`awf`, `awf-setup`, `awf-secret`, `awf-speech`), and the dev tooling needed by validation, including pytest and Ruff. Speech packages and the ONNX Runtime build are not part of the base set.
 
 ### 3. Provision the hardware-appropriate ONNX Runtime
 
@@ -88,6 +88,14 @@ Install it, then confirm what resolution produced:
 With no flags this generates `.env` with a fresh secret key, creates `cache\sandbox\`, and creates `data\awf_db\awf.db`.
 
 ### 5. Acquire the speech models
+
+If you want voice on Windows x64, install the optional speech dependencies first:
+
+```powershell
+.\backend\.venv\Scripts\python -m pip install -e ".[speech]"
+```
+
+On Windows ARM64, core AWF is supported but `faster-whisper` currently depends on `ctranslate2`, which has no matching Windows ARM64 wheel. The bootstrap wrapper skips speech package installation on Windows ARM64 and `awf doctor` reports the voice readiness gap instead of blocking the core app.
 
 ```powershell
 .\backend\.venv\Scripts\awf-speech models sync
@@ -163,7 +171,7 @@ Omitting `--voice-id` uses the `narrator` Voice Profile's voice. Any other voice
 
 An ARM64 host selects `hw-ort-qnn`, which installs `onnxruntime-qnn` alongside the base `onnxruntime`. The two provide different import names and coexist; the profiler registers the QNN provider library at probe time.
 
-Speech-to-text runs on CTranslate2, whose devices are CPU and CUDA only, so STT stays on CPU on ARM64 regardless of NPU availability. Text-to-speech and the wake word run on ONNX Runtime and can reach the QNN provider when it loads. `profile` reports which of them did.
+Speech-to-text runs on CTranslate2. On Windows ARM64, `faster-whisper`/CTranslate2 currently has no matching wheel, so the repo-local bootstrap keeps core AWF usable and reports speech as not ready. Text-to-speech and the wake word run on ONNX Runtime once their optional packages and artifacts are available. `profile` reports which functions are actually ready.
 
 ## Repository rules that matter
 

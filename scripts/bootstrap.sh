@@ -21,6 +21,9 @@ step() {
   printf '==> %s\n' "$1"
 }
 
+machine="$(uname -m)"
+system="$(uname -s)"
+
 cd "$repo_root"
 mkdir -p "$repo_root/cache/temp"
 
@@ -42,10 +45,18 @@ step "Bootstrap local state"
 "$venv_awf_setup"
 
 if [[ "$skip_speech" != true ]]; then
-  step "Acquire speech models"
-  "$venv_awf_speech" models sync
-  step "Verify speech models"
-  "$venv_awf_speech" models verify
+  if [[ "$system" == MINGW* || "$system" == MSYS* || "$system" == CYGWIN* ]] && [[ "$machine" == arm64 || "$machine" == aarch64 ]]; then
+    step "Skip speech package install on Windows ARM64"
+    printf '    faster-whisper requires ctranslate2, which currently has no matching Windows ARM64 wheel.\n'
+    printf '    Core AWF remains usable; run awf doctor for the speech readiness warning.\n'
+  else
+    step "Install optional speech dependencies"
+    "$venv_python" -m pip install -e ".[speech]"
+    step "Acquire speech models"
+    "$venv_awf_speech" models sync
+    step "Verify speech models"
+    "$venv_awf_speech" models verify
+  fi
 fi
 
 if [[ "$skip_frontend" != true ]] && command -v npm >/dev/null 2>&1; then

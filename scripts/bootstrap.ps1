@@ -19,43 +19,65 @@ function Invoke-Step {
     & $Body
 }
 
+function Invoke-Native {
+    param(
+        [Parameter(Mandatory=$true, Position=0)]
+        [string]$Command,
+        [Parameter(ValueFromRemainingArguments=$true, Position=1)]
+        [string[]]$Arguments
+    )
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed ($LASTEXITCODE): $Command $($Arguments -join ' ')"
+    }
+}
+
 Set-Location $RepoRoot
 New-Item -ItemType Directory -Force -Path (Join-Path $RepoRoot "cache\temp") | Out-Null
 
 if (-not (Test-Path $VenvPython)) {
     Invoke-Step "Create backend venv" {
-        py -m venv (Join-Path $RepoRoot "backend\.venv")
+        Invoke-Native "py" @("-3.12", "-m", "venv", (Join-Path $RepoRoot "backend\.venv"))
     }
 }
 
 Invoke-Step "Upgrade pip" {
-    & $VenvPython -m pip install --upgrade pip
+    Invoke-Native $VenvPython @("-m", "pip", "install", "--upgrade", "pip")
 }
 
 Invoke-Step "Install AWF base package" {
-    & $VenvPython -m pip install -e ".[dev]"
+    Invoke-Native $VenvPython @("-m", "pip", "install", "-e", ".[dev]")
 }
 
 Invoke-Step "Install hardware-selected backend dependencies" {
-    & $VenvAwfSetup --install --verify
+    Invoke-Native $VenvAwfSetup @("--install", "--verify")
 }
 
 Invoke-Step "Bootstrap local state" {
-    & $VenvAwfSetup
+    Invoke-Native $VenvAwfSetup @()
 }
 
 if (-not $SkipSpeech) {
-    Invoke-Step "Acquire speech models" {
-        & $VenvAwfSpeech models sync
-    }
-    Invoke-Step "Verify speech models" {
-        & $VenvAwfSpeech models verify
+    if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") {
+        Write-Host "==> Skip speech package install on Windows ARM64"
+        Write-Host "    faster-whisper requires ctranslate2, which currently has no matching Windows ARM64 wheel."
+        Write-Host "    Core AWF remains usable; run awf doctor for the speech readiness warning."
+    } else {
+        Invoke-Step "Install optional speech dependencies" {
+            Invoke-Native $VenvPython @("-m", "pip", "install", "-e", ".[speech]")
+        }
+        Invoke-Step "Acquire speech models" {
+            Invoke-Native $VenvAwfSpeech @("models", "sync")
+        }
+        Invoke-Step "Verify speech models" {
+            Invoke-Native $VenvAwfSpeech @("models", "verify")
+        }
     }
 }
 
 if (-not $SkipFrontend -and (Get-Command npm -ErrorAction SilentlyContinue)) {
     Invoke-Step "Install frontend dependencies" {
-        npm --prefix frontend install
+        Invoke-Native "npm" @("--prefix", "frontend", "install")
     }
 }
 

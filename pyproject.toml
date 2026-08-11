@@ -11,15 +11,17 @@ dependencies = [
   "PyYAML>=6",
   "cryptography>=42",
   "litellm>=1.94",
-  "openwakeword>=0.4",
-  "faster-whisper>=1.2",
-  "kokoro-onnx>=0.5",
-  "silero-vad>=6",
   "jsonschema>=4.20",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "onnx>=1.22", "ruff>=0.15.22"]
+speech = [
+  "openwakeword>=0.4",
+  "faster-whisper>=1.2; sys_platform!='win32' or platform_machine!='ARM64'",
+  "kokoro-onnx>=0.5",
+  "silero-vad>=6",
+]
 hw-ort-cpu = ["onnxruntime>=1.28"]
 hw-ort-cuda = ["onnxruntime-gpu>=1.28"]
 hw-ort-directml = ["onnxruntime-directml>=1.28; sys_platform=='win32'"]

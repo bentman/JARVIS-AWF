@@ -13,7 +13,7 @@ Setup is per-platform. Follow the guide for your host:
 - [`docs/QuickStart-linux.md`](docs/QuickStart-linux.md) — Linux and WSL2
 - [`docs/QuickStart-windows.md`](docs/QuickStart-windows.md) — Windows x64 and ARM64
 
-Both cover the same sequence: create the backend virtual environment, install the hardware-appropriate dependency set, bootstrap local state, acquire the speech models, and validate.
+Both cover the same sequence: create the backend virtual environment, install the hardware-appropriate dependency set, bootstrap local state, optionally acquire the speech models, and validate.
 
 For the repo-local operator path, the bootstrap wrappers perform that sequence and finish with a doctor report:
 

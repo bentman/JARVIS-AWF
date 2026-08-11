@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-11 23:44
+  - Host class(es): Windows ARM64 install path by operator output; Windows AMD64 syntax/parse validation
+  - Summary: Fixed repo bootstrap after Windows ARM64 dependency resolution exposed that core install was coupled to optional speech packages and PowerShell continued after native command failures.
+  - Scope: `pyproject.toml`, `scripts/bootstrap.ps1`, `scripts/bootstrap.sh`, `docs/{OperatorsGuide.md,QuickStart-windows.md,QuickStart-linux.md}`, `README.md`, `CHANGE_LOG.md`.
+  - Validation: Operator-provided `pip` output showed `faster-whisper` could not resolve `ctranslate2` on Windows ARM64; local validation parsed `pyproject.toml` and `scripts/bootstrap.ps1`; `pip install -e . --no-deps --dry-run --no-build-isolation` reached `Would install awf-0.1.0`; `git diff --check` passed.
+  - Notes: Core AWF now installs without speech dependencies; speech remains optional via `.[speech]`, with `faster-whisper` excluded on Windows ARM64 and the bootstrap wrapper reporting the voice readiness gap instead of blocking core setup.
+
 - Timestamp: 2026-08-11 23:36
   - Host class(es): Windows AMD64
   - Summary: Added installability support for repo-local operators with `awf doctor`, `awf/system.doctor`, Windows/Linux bootstrap wrappers, and setup creation of `cache/temp`.

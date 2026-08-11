@@ -56,7 +56,7 @@ Python 3.13 or 3.14 work as well. Use `backend/.venv/bin/python` for every comma
 backend/.venv/bin/python -m pip install -e ".[dev]"
 ```
 
-This installs the core, the four console scripts (`awf`, `awf-setup`, `awf-secret`, `awf-speech`), and the dev tooling needed by validation, including pytest and Ruff. The ONNX Runtime build is not part of the base set — the next step selects it.
+This installs the core, the four console scripts (`awf`, `awf-setup`, `awf-secret`, `awf-speech`), and the dev tooling needed by validation, including pytest and Ruff. Speech packages and the ONNX Runtime build are not part of the base set.
 
 ### 3. Provision the hardware-appropriate ONNX Runtime
 
@@ -90,6 +90,12 @@ backend/.venv/bin/awf-setup
 With no flags this generates `.env` with a fresh secret key, creates `cache/sandbox/`, and creates `data/awf_db/awf.db`.
 
 ### 5. Acquire the speech models
+
+If you want voice, install the optional speech dependencies first:
+
+```bash
+backend/.venv/bin/python -m pip install -e ".[speech]"
+```
 
 ```bash
 backend/.venv/bin/awf-speech models sync

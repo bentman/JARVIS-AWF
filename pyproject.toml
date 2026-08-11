@@ -34,10 +34,10 @@ hw-ort-cpu = ["onnxruntime>=1.28"]
 hw-ort-cuda = ["onnxruntime-gpu>=1.28"]
 hw-ort-directml = ["onnxruntime-directml>=1.28; sys_platform=='win32'"]
 hw-ort-qnn = [
-  "onnxruntime>=1.28; platform_machine=='ARM64' and sys_platform=='win32'",
-  "onnxruntime-qnn>=2.3; platform_machine=='ARM64' and sys_platform=='win32'",
-  "onnx>=1.16; platform_machine=='ARM64' and sys_platform=='win32'",
-  "transformers>=4.40; platform_machine=='ARM64' and sys_platform=='win32'",
+  "onnxruntime>=1.28; ((platform_machine=='ARM64' or platform_machine=='arm64') and sys_platform=='win32') or ((platform_machine=='aarch64' or platform_machine=='arm64') and sys_platform=='linux')",
+  "onnxruntime-qnn>=2.3; ((platform_machine=='ARM64' or platform_machine=='arm64') and sys_platform=='win32') or ((platform_machine=='aarch64' or platform_machine=='arm64') and sys_platform=='linux')",
+  "onnx>=1.16; ((platform_machine=='ARM64' or platform_machine=='arm64') and sys_platform=='win32') or ((platform_machine=='aarch64' or platform_machine=='arm64') and sys_platform=='linux')",
+  "transformers>=4.40; ((platform_machine=='ARM64' or platform_machine=='arm64') and sys_platform=='win32') or ((platform_machine=='aarch64' or platform_machine=='arm64') and sys_platform=='linux')",
 ]
 
 [project.scripts]

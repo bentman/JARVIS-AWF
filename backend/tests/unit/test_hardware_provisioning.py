@@ -28,8 +28,13 @@ def test_windows_arm64_qualcomm_npu_selects_qnn():
     assert resolve_ort_extra(inventory) == "hw-ort-qnn"
 
 
-def test_qualcomm_npu_on_linux_does_not_select_qnn():
+def test_linux_arm64_qualcomm_npu_selects_qnn():
     inventory = _inventory(os_name="linux", arch="arm64", npu_vendor="qualcomm")
+    assert resolve_ort_extra(inventory) == "hw-ort-qnn"
+
+
+def test_linux_x64_qualcomm_npu_does_not_select_qnn():
+    inventory = _inventory(os_name="linux", arch="x64", npu_vendor="qualcomm")
     assert resolve_ort_extra(inventory) == "hw-ort-cpu"
 
 
@@ -65,6 +70,7 @@ def test_explain_ort_extra_returns_a_nonempty_reason():
     for inventory in (
         _inventory(arch="x64", gpu_vendor="nvidia", cuda_available=True),
         _inventory(os_name="windows", arch="arm64", npu_vendor="qualcomm"),
+        _inventory(os_name="linux", arch="arm64", npu_vendor="qualcomm"),
         _inventory(os_name="windows", gpu_available=True, gpu_vendor="amd"),
         _inventory(),
     ):
@@ -75,5 +81,11 @@ def test_explain_ort_extra_returns_a_nonempty_reason():
 
 def test_required_extras_add_speech_and_dev_symmetrically():
     inventory = _inventory(os_name="windows", arch="arm64", npu_vendor="qualcomm")
+
+    assert resolve_required_extras(inventory) == ["hw-ort-qnn", "speech", "wake-word", "dev"]
+
+
+def test_required_extras_add_qnn_speech_and_dev_for_linux_arm64_qualcomm():
+    inventory = _inventory(os_name="linux", arch="arm64", npu_vendor="qualcomm")
 
     assert resolve_required_extras(inventory) == ["hw-ort-qnn", "speech", "wake-word", "dev"]

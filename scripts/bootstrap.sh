@@ -47,6 +47,9 @@ step "Provision hardware-selected backend dependencies"
 step "Install hardware-selected backend dependencies"
 "$venv_python" -m awf.setup --install --verify
 
+step "Profile hardware readiness"
+"$venv_python" scripts/validate_backend.py profile
+
 step "Bootstrap local state"
 "$venv_python" -m awf.setup
 

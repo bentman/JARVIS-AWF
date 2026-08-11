@@ -344,6 +344,8 @@ def _gpu_from_cli(command: list[str], vendor_hint: str, source: str) -> dict | N
 
 
 def _gpu_from_windows_cim() -> dict | None:
+    if platform.system() != "Windows":
+        return None
     output = _powershell(
         "Get-CimInstance Win32_VideoController | Select-Object Name,AdapterRAM | ConvertTo-Json -Compress"
     )
@@ -375,13 +377,16 @@ def _gpu_from_windows_cim() -> dict | None:
     return None
 
 
+_QUALCOMM_VENDOR_IDS = {"0x17cb", "0x5143"}
+
+
 def _gpu_from_linux_sysfs() -> dict | None:
     drm_root = Path("/sys/class/drm")
     try:
         cards = sorted(p for p in drm_root.glob("card[0-9]*") if (p / "device/vendor").is_file())
     except OSError:
         return None
-    pci_vendors = {"0x10de": "nvidia", "0x1002": "amd", "0x8086": "intel", "0x5143": "qualcomm"}
+    pci_vendors = {"0x10de": "nvidia", "0x1002": "amd", "0x8086": "intel", **{v: "qualcomm" for v in _QUALCOMM_VENDOR_IDS}}
     for card in cards:
         try:
             vendor_id = (card / "device/vendor").read_text(encoding="utf-8").strip().lower()
@@ -437,6 +442,44 @@ def detect_cuda_info() -> dict:
     return {"cuda_available": False, "cuda_version": None}
 
 
+def _read_linux_cpuinfo() -> str:
+    try:
+        return Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return ""
+
+
+def _linux_qualcomm_accelerator_visible() -> bool:
+    paths: list[Path] = []
+    for root in (Path("/sys/class/accel"), Path("/sys/bus/pci/devices")):
+        try:
+            paths.extend(sorted(root.glob("*")))
+        except OSError:
+            continue
+
+    for path in paths:
+        device_path = path / "device" if (path / "device").exists() else path
+        try:
+            vendor_id = (device_path / "vendor").read_text(encoding="utf-8").strip().lower()
+        except OSError:
+            continue
+        if vendor_id not in _QUALCOMM_VENDOR_IDS:
+            continue
+
+        try:
+            pci_class = (device_path / "class").read_text(encoding="utf-8").strip().lower()
+        except OSError:
+            pci_class = ""
+        try:
+            device_id = (device_path / "device").read_text(encoding="utf-8").strip().lower()
+        except OSError:
+            device_id = ""
+
+        if path.parent.name == "accel" or pci_class.startswith("0x12") or device_id in {"0xa080", "0xa100", "0xa110"}:
+            return True
+    return False
+
+
 def detect_npu_info() -> dict:
     """NPU presence, descriptive only. A vendor match here never grants a
     `-qnn` profile on its own; only a verified `QNNExecutionProvider` does.
@@ -446,14 +489,17 @@ def detect_npu_info() -> dict:
     """
     processor = (platform.processor() or "").strip().lower()
     machine = _normalize_arch(platform.machine())
+    linux_cpuinfo = _read_linux_cpuinfo().lower() if platform.system() == "Linux" else ""
 
     npu_names = _powershell(
         "Get-CimInstance Win32_PnPEntity | "
         "Where-Object { $_.Name -match 'Neural|NPU|Hexagon|AI Boost|AI Accelerator' } | "
         "Select-Object -ExpandProperty Name"
     )
-    haystack = f"{processor} {npu_names}".lower()
+    haystack = f"{processor} {linux_cpuinfo} {npu_names}".lower()
 
+    if platform.system() == "Linux" and _linux_qualcomm_accelerator_visible():
+        return {"npu_available": True, "npu_vendor": "qualcomm"}
     if any(token in haystack for token in ("qualcomm", "hexagon", "snapdragon", "qcom")):
         return {"npu_available": True, "npu_vendor": "qualcomm"}
     if npu_names:
@@ -476,8 +522,8 @@ def _inventory_id(fields: dict) -> str:
 def collect_inventory(*, refresh: bool = False) -> HardwareInventory:
     """Run every detector, fault-isolated, into one inventory record.
 
-    Cached for the process lifetime by default: the Windows CIM/PnP queries
-    cost real seconds and this is reached on every voice round trip. Pass
+    Cached for the process lifetime by default: native Windows CIM/PnP and
+    Linux sysfs probes can cost real time, and this is reached on every voice round trip. Pass
     `refresh=True` (or call `reset_inventory_cache()`) when the host may have
     changed underneath a long-lived process.
     """

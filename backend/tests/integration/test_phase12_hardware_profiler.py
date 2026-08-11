@@ -12,7 +12,9 @@ from awf.hardware.profiler import (
     _detect_os,
     _inventory_id,
     _normalize_arch,
+    _powershell,
     collect_inventory,
+    detect_npu_info,
     reset_inventory_cache,
     resolve_hardware_profile_id,
     run_hardware_profiler,
@@ -144,6 +146,43 @@ def test_run_hardware_profiler_reuses_existing_system_run(tmp_path):
 )
 def test_normalize_arch_maps_accepted_spellings(spelling, expected):
     assert _normalize_arch(spelling) == expected
+
+
+def test_powershell_is_windows_only(monkeypatch):
+    import awf.hardware.profiler as profiler
+
+    calls = []
+    monkeypatch.setattr(profiler.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(profiler, "_run_command", lambda command, timeout=10: calls.append(command) or "unexpected")
+
+    assert _powershell("Get-Thing") == ""
+    assert calls == []
+
+
+def test_linux_cpuinfo_can_report_qualcomm_npu_without_windows_bridge(monkeypatch):
+    import awf.hardware.profiler as profiler
+
+    monkeypatch.setattr(profiler.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(profiler.platform, "machine", lambda: "aarch64")
+    monkeypatch.setattr(profiler.platform, "processor", lambda: "")
+    monkeypatch.setattr(profiler, "_powershell", lambda script: "")
+    monkeypatch.setattr(profiler, "_read_linux_cpuinfo", lambda: "Hardware\t: Qualcomm Snapdragon X Elite\n")
+    monkeypatch.setattr(profiler, "_linux_qualcomm_accelerator_visible", lambda: False)
+
+    assert detect_npu_info() == {"npu_available": True, "npu_vendor": "qualcomm"}
+
+
+def test_linux_accelerator_sysfs_can_report_qualcomm_npu(monkeypatch):
+    import awf.hardware.profiler as profiler
+
+    monkeypatch.setattr(profiler.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(profiler.platform, "machine", lambda: "aarch64")
+    monkeypatch.setattr(profiler.platform, "processor", lambda: "")
+    monkeypatch.setattr(profiler, "_powershell", lambda script: "")
+    monkeypatch.setattr(profiler, "_read_linux_cpuinfo", lambda: "")
+    monkeypatch.setattr(profiler, "_linux_qualcomm_accelerator_visible", lambda: True)
+
+    assert detect_npu_info() == {"npu_available": True, "npu_vendor": "qualcomm"}
 
 
 def test_inventory_id_is_stable_for_identical_fields():

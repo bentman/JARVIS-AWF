@@ -80,6 +80,10 @@ Invoke-Step "Install hardware-selected backend dependencies" {
     Invoke-Native $VenvPython @("-m", "awf.setup", "--install", "--verify")
 }
 
+Invoke-Step "Profile hardware readiness" {
+    Invoke-Native $VenvPython @("scripts\validate_backend.py", "profile")
+}
+
 Invoke-Step "Bootstrap local state" {
     Invoke-Native $VenvPython @("-m", "awf.setup")
 }

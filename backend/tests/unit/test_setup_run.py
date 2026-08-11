@@ -139,7 +139,9 @@ def test_verify_requires_ruff_dev_tooling(fake_repo, monkeypatch, capsys):
     exit_code = awf_setup.cmd_verify(fake_repo)
 
     assert exit_code == 1
-    assert "ruff_version: None" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "qnn_distribution_version: x" in output
+    assert "ruff_version: None" in output
     assert calls[0][1]["cwd"] == fake_repo
     assert calls[0][1]["env"]["PIP_CACHE_DIR"] == str(fake_repo / "cache" / "pip")
 
@@ -147,6 +149,8 @@ def test_verify_requires_ruff_dev_tooling(fake_repo, monkeypatch, capsys):
 def test_verify_accepts_successful_pip_check_output(fake_repo, monkeypatch, capsys):
     monkeypatch.setattr(awf_setup, "_installed_ort_distribution", lambda: ("onnxruntime", "1.28.0"))
     monkeypatch.setattr(awf_setup, "_installed_distribution_version", lambda name: "0.16.2")
+    activated = []
+    monkeypatch.setattr(awf_setup, "_activate_optional_providers_for_verify", lambda: activated.append(True))
 
     class FakeOrt:
         @staticmethod
@@ -168,6 +172,7 @@ def test_verify_accepts_successful_pip_check_output(fake_repo, monkeypatch, caps
     exit_code = awf_setup.cmd_verify(fake_repo)
 
     assert exit_code == 0
+    assert activated == [True]
     assert "pip_check: OK" in capsys.readouterr().out
 
 

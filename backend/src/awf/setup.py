@@ -220,6 +220,17 @@ def _package_importable(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
 
+def _activate_optional_providers_for_verify() -> None:
+    try:
+        from awf.hardware.preflight import activate_qnn_execution_provider
+    except Exception:
+        return
+    try:
+        activate_qnn_execution_provider()
+    except Exception:
+        return
+
+
 def _linux_openwakeword_tflite_waiver_applies() -> bool:
     return (
         sys.platform == "linux"
@@ -242,12 +253,15 @@ def _known_pip_check_line(line: str) -> bool:
 
 def cmd_verify(repo_root: Path) -> int:
     distribution_name, version = _installed_ort_distribution()
+    qnn_version = _installed_distribution_version("onnxruntime-qnn")
     ruff_version = _installed_distribution_version("ruff")
     print(f"distribution: {distribution_name}")
     print(f"version: {version}")
+    print(f"qnn_distribution_version: {qnn_version}")
     print(f"ruff_version: {ruff_version}")
 
     try:
+        _activate_optional_providers_for_verify()
         import onnxruntime as ort
 
         providers = list(ort.get_available_providers())

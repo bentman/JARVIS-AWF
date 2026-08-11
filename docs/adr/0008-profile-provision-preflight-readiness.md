@@ -42,6 +42,15 @@ actually import. STT
 readiness accepts the ONNX STT runtimes for the CPU floor, with Faster
 Whisper reserved for CUDA when CTranslate2 reports devices.
 
+A later ARM64 cross-host pass found the QNN provisioning rule was still
+Windows-shaped even though the resolver is intended to be host-symmetric.
+The rule now selects `hw-ort-qnn` for Windows or Linux ARM64 when the
+inventory reports a Qualcomm NPU. Linux/WSL inventory remains Linux-native:
+it does not query Windows CIM/PnP through interop. QNN runtime use is still
+gated by readiness tokens (`ep:QNNExecutionProvider` and `dll:QnnHtp`), so a
+Linux host may install the QNN packages while speech continues to select CPU
+until the runtime actually proves available.
+
 ## Context
 
 `pyproject.toml` declares `onnxruntime>=1.28` among the base dependencies.
@@ -177,8 +186,8 @@ hw-ort-cpu = ["onnxruntime>=1.28"]
 hw-ort-cuda = ["onnxruntime-gpu>=1.28"]
 hw-ort-directml = ["onnxruntime-directml>=1.28; sys_platform=='win32'"]
 hw-ort-qnn = [
-  "onnxruntime>=1.28; platform_machine=='ARM64' and sys_platform=='win32'",
-  "onnxruntime-qnn>=2.3; platform_machine=='ARM64' and sys_platform=='win32'",
+  "onnxruntime>=1.28; ((platform_machine=='ARM64' or platform_machine=='arm64') and sys_platform=='win32') or ((platform_machine=='aarch64' or platform_machine=='arm64') and sys_platform=='linux')",
+  "onnxruntime-qnn>=2.3; ((platform_machine=='ARM64' or platform_machine=='arm64') and sys_platform=='win32') or ((platform_machine=='aarch64' or platform_machine=='arm64') and sys_platform=='linux')",
 ]
 ```
 
@@ -196,7 +205,7 @@ Selection, in order, first match wins:
 | Condition on `HardwareInventory` | Extra |
 |---|---|
 | `arch == "x64"` and `gpu_vendor == "nvidia"` and `cuda_available` | `hw-ort-cuda` |
-| `os_name == "windows"` and `arch == "arm64"` and `npu_vendor == "qualcomm"` | `hw-ort-qnn` |
+| `os_name in {"windows", "linux"}` and `arch == "arm64"` and `npu_vendor == "qualcomm"` | `hw-ort-qnn` |
 | `os_name == "windows"` and `gpu_available` and `gpu_vendor in {"amd", "intel"}` | `hw-ort-directml` |
 | otherwise | `hw-ort-cpu` |
 

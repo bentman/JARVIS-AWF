@@ -1,208 +1,335 @@
-# ADR-0025: control-center look and usability (chat-forward, navy)
+# ADR-0025: control-center look and usability
 
 ## Status
 
-Implemented. Scope is AWF-GUI only; the CLI and TUI reach their own ADR-0024
-targets in a separate record.
+Implemented.
+
+Scope is AWF-GUI only. The CLI and TUI reach their own ADR-0024 targets in a
+separate record.
+
+This record documents the shipped renderer. It is written against
+`frontend/gui/src/renderer/`, which is the source of truth for the look and
+feel; where this record and that directory disagree, the code is correct.
 
 ## Context
 
-ADR-0024 delivered the control-center data path: `awf/control.summary`,
+ADR-0024 delivered the control-center data path. `awf/control.summary`,
 `awf/control.runDetail`, `awf/system.readiness`, and `awf/llm.*` reach the
-renderer through narrow IPC, and the panels display real protocol data —
-readiness rows, LLM state and model catalog, hardware tokens/inventory, a
-registry browse-then-act flow, an artifact/diff viewer, run timeline, and
-improvement proposals. That substance is real, implemented, and covered by
-the GUI test suite.
+renderer through narrow IPC, and the panels display real protocol data.
 
-This record resolves how the desktop window presents that substance. AWF is
-voice-first by design — every capability flows through the speech stack
-(STT/TTS/VAD/wake) — so the home surface is built around talking to the agent
-and reading its reply back as text. The intended long-term shape is a single
-conversation stream shared by both voice and typed chat; fusing them is a
-back-end concern and is explicitly out of scope here, so the renderer keeps
-one visible chat stream that both voice turns and typed messages land in,
-rendered together. The visual language follows the read-only `../JARVISvX2`
-prototype-demo — overall layout, interface sequencing, and glass surfaces —
-tuned to the navy token set: a polished chat-messenger with deep-sky-blue
-accent glows and rounded panels, with no orb and no new dependency. Two
-earlier shapes were considered and rejected: a left-side vertical rail, and
-a three-column always-visible console. A single active view with a sticky
-top header is the right shape for a compact one-operator desktop window;
-and, unlike a diagnostic-first home, the operator's most frequent surface is
-talking to the agent, so the first page is the chat + voice surface alone —
-status and diagnostics wait behind their own nav button.
+What that left was presentation. Before this record there was no stylesheet
+anywhere under `frontend/gui/`, no stylesheet link in `index.html`, and no CSS
+step in the build, so the surface rendered in the browser default stylesheet:
+Times New Roman, white background, native bullets and buttons. `App.tsx`
+rendered every panel in one scrolling column.
+
+Two later revisions of this record proposed layouts — a left navigation rail
+with one active view, then a three-column console — that the implementation
+did not adopt. What shipped is a top navigation bar over a single content
+area, with conversation as the first page.
+
+Constraints that held throughout: every panel carries `role` and `aria-label`,
+the GUI tests query by accessible role and label, `frontend/gui/package.json`
+has no CSS tooling and no UI library, and `esbuild` bundles
+`src/renderer/index.tsx` so a CSS import in that entry point emits
+`dist/renderer/index.css` with no loader configuration.
 
 ## Decision
 
-**The window is chat-forward with one active view.** `App.tsx` keeps the
-`activeView` model; a sticky top header holds brand, view navigation, and
-status. The first (default) view is **Chat** — the voice/chat surface by
-itself; system status and diagnostics render only in the **Status** view,
-opened from its own nav button.
+**A top bar over one content area.** Brand, view navigation, live status, and
+Refresh sit in a sticky `.topbar`. Below it, `.main` renders exactly one view.
+There is no left rail and no multi-column console.
 
-- **The first page is a chat window-panel.** At launch, `Transcript` renders
-  a titled chat window that fills the viewport below the top bar: an
-  auto-scrolling bubble stream that follows the newest entry (`role="log"`),
-  operator messages right-aligned with an avatar and agent messages
-  left-aligned on glass, plus a composer bar with a mic (voice) button, a
-  text input, and a Send button. Send appends the typed text to the same
-  visible stream locally (text-first); the mic button drives the existing
-  push-to-talk flow.
-- **Voice and typed chat share one stream.** Voice (STT/TTS) turns and typed
-  messages converge in the same conversation stream and render together in
-  the one chat log; unifying them into one back-end stream is deferred (see
-  Context) and is not a renderer concern. When voice handlers are absent,
-  the page renders appropriately to what is available: the chat window takes
-  the full width and the mic button is disabled.
-- **Status/diagnostics sit behind a button.** The System readiness / LLM /
-  Registry / Recent-verdicts cards never render below the chat; they live in
-  the Status view reached from its top-nav button, matching the reference
-  prototype's "talk first, inspect on demand" sequencing.
-- **Voice is a simple button — not an orb.** There is no canvas, no particle
-  visualization, no pulsing animation anywhere in the renderer.
-  `VoiceActivation` presents a plain push-to-talk button plus a status chip
-  in a compact column beside the chat window (ADR-0023's text-first invariant
-  already makes voice state legible as a chip and transcript).
-- **The control-center grammar applies app-wide.** Every view shares the
-  command-center design language: a `.view-header` (uppercase mono kicker
-  with an inline-SVG icon + a big light title), glass `.card` panels with
-  16px corners and a hover accent border, `.stat-grid` of
-  `.stat-card`s for health metrics, and refined `.chip`/`.list`/`.row`
-  surfaces. A small shared inline-SVG icon set (`icons.tsx`) is used across
-  the nav, view headers, status, and composer. No dependency is added — the
-  icons are hand-rolled stroke SVGs that inherit `currentColor`.
-- **Controls and status sit across the top** (mirroring the reference shell):
-  brand badge + a system pill left, view navigation centre, status pills
-  (profile id, readiness, LLM state, pending approvals) + Refresh right, on
-  a navy-glass `backdrop-filter: blur()` surface with soft accent glows on
-  the active nav item and primary button.
-- **Look-and-feel reference.** The read-only `../JARVISvX2` prototype-demo
-  supplies the overall layout, interface sequencing, and glass/accent
-  treatment; AWF keeps its own navy token set (deep-sky-blue `#00bfff`
-  accent, not vX2's cyan) and its own data substance.
-- **Navy palette, declared once as names.** `:root` defines the canonical
-  tokens; legacy shorthands derive from them so existing selectors are
-  untouched:
-  - `--color-bg-base: #070b12` (deep navy background)
-  - `--color-panel: #111827` (card / panel surface)
-  - `--color-elevated: #172033` (inputs, code, raised blocks)
-  - `--color-accent: #00bfff` (deep sky blue — **not** cyan `#22d3ee`)
-  - `--color-ready: #00ff99`
-  - `--color-not-ready: #e0115f` (ruby)
-  - `--color-warn: #fbbf24`
-  - text: `#e2e8f0` / `#94a3b8` / `#64748b`; Inter / JetBrains Mono.
-- **No new dependency.** The GUI keeps its existing React + plain-CSS stack;
-  there is no icon library and no animation library.
+**Conversation is the first page.** The `chat` view is always present and
+always first. Status and diagnostics live behind their own navigation button.
+
+**A navy palette on named tokens.** Canonical colours are declared once as
+`--color-*` and the working shorthands derive from them, so every selector
+reads a variable and a palette change is one edit.
+
+**Four semantic state classes.** `state-ok`, `state-warn`, `state-danger`,
+`state-idle`, produced by one exported function and applied to dots and chips.
+
+**Chat renders as a messenger window.** Title bar, auto-scrolling bubble
+stream with letter avatars, operator right and agent left, and a composer with
+a mic button and a Send button.
+
+**Inline SVG icons, no icon package.** One `makeIcon` factory over 24×24
+stroke paths.
+
+**No new dependency.**
+
+## Deviation recorded
+
+None. This record changes only `frontend/gui/src/` and the GUI build step. No
+protocol method, IPC channel, backend operation, registry object, or
+authorization path is touched.
 
 ## Mechanism
 
-- **Top bar** (`.topbar`): `position: sticky; top: 0; z-index: 10`, navy
-  translucent surface (no `backdrop-filter` — software compositors on WSLg
-  mis-render blurred surfaces), `border-bottom`, flex layout with a `.brand`
-  (accent `.brand-badge` tile + name + `.system-pill` + mono tagline),
-  `.nav-list`/`.nav-item` (the active item gets an accent-tinted fill, a
-  ring, and soft glow, plus the pending-approvals badge), and a
-  right-aligned `.status-bar` of `.chip`s and the Refresh button.
-- **Chat page** (`.chat-page`/`.chat-frame`): `.shell` is a fixed `100vh`
-  flex column and `.main` a flex column with padding removed while the chat
-  page is active, so a centered `max-width: 1152px` conversation frame with
-  hairline side edges fills the viewport under the top bar, demo-style.
-  Inside it, `.chat-window` (`flex: 1`) holds the title bar, the scrollable
-  bubble stream, and the composer; the voice action bar (`.voice-bar`) sits
-  under the composer. The Status view's diagnostics never render here.
-- **Chat window** (`.chat-window`/`.chat-title`/`.chat-scroll`): a
-  flex-column messenger with a fixed header row (ready `.chat-dot` + title),
-  a `flex:1; overflow-y:auto` bubble stream bounded by the viewport (no
-  fixed max-height), and a fixed composer bar (`.composer`) with `.btn-mic`,
-  `.composer-input`, `.btn-send`. Sender alignment and letter avatars come
-  from `.bubble-user`/`.bubble-agent`/`.avatar`. `Transcript` auto-scrolls
-  to `scrollHeight` when entries change.
-- **Voice** (`.voice-bar`, `.voice-ptt`): the existing `VoiceActivation`
-  group is restyled into a two-row action bar under the composer — status
-  chip + session id + start/push-to-talk/stop/submit/interrupt buttons on
-  the first row, workflow/profile/recognized-text fields on the second —
-  with a prominent accent push-to-talk button; all IPC wiring, session
-  flow, and accessible names are unchanged.
-- **Composer → voice**: the chat composer's mic button calls a ref-exposed
-  `togglePushToTalk()` on `VoiceActivation` to drive the same push-to-talk
-  session as the card's own button.
-- **Window chrome** (`main.ts`): `BrowserWindow` `backgroundColor` is the
-  navy base `#070b12` (a near-black navy that avoids plain `#0a0a0b`),
-  `minWidth: 960`, `minHeight: 640`.
+### Part A — tokens
 
-## Scope for implementation
+`src/renderer/styles.css` opens with the canonical palette and derived
+shorthands:
 
-1. `src/renderer/styles.css` — canonical `--color-*` tokens; viewport-height
-   `.shell`/`.main` flex column (`.main:has(.chat-page)` padding-free);
-   centered demo-style `.chat-page`/`.chat-frame` column with hairline side
-   edges; `.chat-window` flex-fills the frame; `.voice-bar` action rows;
-   `.brand-badge`/`.brand-text`/`.brand-tag` and `.chat-dot`; navy `.topbar`
-   with soft shadow; body cyber-grid + radial glows; card/panel surfaces
-   with hover accent; `.view-header`/`.view-kicker`/`.view-title`;
-   `.stat-grid`/`.stat-card`; refined `.list`, `.row`, `.btn-*`,
-   `.pre-scroll`, `.chip`; `.system-pill`, `.chat-title`/`.chat-scroll`,
-   `.voice-ptt`, `.bubble*`, `.composer`, `.btn-mic`/`.btn-send`.
-2. `src/renderer/icons.tsx` — inline stroke-SVG icon set (nav, view
-   headers, status, composer) with no dependency; `ChatIcon` marks the
-   first-page nav item.
-3. `src/renderer/App.tsx` — brand badge + name/pill + tagline; nav items
-   carry an icon; the views list always leads with Chat, followed by Status
-   when status data is available; the Chat arm renders the centered
-   conversation frame (chat window + voice action bar when voice handlers
-   exist); the Status arm renders the `.view-header` ("Control center")
-   above the Overview diagnostics.
-4. `src/renderer/Overview.tsx` — System readiness rendered as `.stat-grid` of
-   `.stat-card`s (device value, ready/not-ready with the ruby/green tokens).
-5. `src/renderer/Transcript.tsx` — chat-messenger: bubble stream with
-   avatars/sender alignment, empty state, ready `.chat-dot` in the title,
-   and a composer bar (mic + input + Send); `onSend` appends locally,
-   `onMic` drives the push-to-talk flow; voice turns and typed messages
-   render in the same bubble log.
-6. `src/renderer/VoiceActivation.tsx` — a `voice-ptt` class and a
-   ref-exposed `togglePushToTalk()` for the composer's mic; rendered as the
-   chat page's voice action bar, buttons only.
-7. `src/main/main.ts` — `backgroundColor` `#070b12`.
-8. Tests — `tests/App.rail.test.tsx` renamed to `tests/App.nav.test.tsx`;
-   first-page tests (launch on Chat, diagnostics hidden until the Status
-   button, voice + typed in one shared stream, composer); Transcript
-   bubble/composer/mic/Send tests; `role="log"`, voice flow, and the
-   no-orb/canvas invariant maintained.
+```css
+:root {
+  --color-bg-base:   #070b12;  /* deep navy base */
+  --color-panel:     #111827;  /* card / panel surface */
+  --color-elevated:  #172033;  /* inputs, code, raised blocks */
+  --color-accent:    #00bfff;  /* deep sky blue */
+  --color-ready:     #00ff99;  /* ready / ok green */
+  --color-not-ready: #e0115f;  /* ruby red for not-ready / danger */
+  --color-warn:      #fbbf24;  /* amber */
+
+  --bg:             var(--color-bg-base);
+  --surface:        rgba(17, 24, 39, 0.7);
+  --surface-raised: rgba(23, 32, 51, 0.7);
+  --border:         rgba(255, 255, 255, 0.08);
+  --border-strong:  rgba(255, 255, 255, 0.16);
+
+  --text:       #e2e8f0;
+  --text-dim:   #94a3b8;
+  --text-faint: #64748b;
+
+  --accent: var(--color-accent);
+  --ok:     var(--color-ready);
+  --warn:   var(--color-warn);
+  --danger: var(--color-not-ready);
+
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+  --space-4: 16px; --space-5: 24px; --space-6: 32px;
+
+  --radius: 8px;  --radius-lg: 12px;
+}
+```
+
+The page background is layered: a 56px grid from two 1px linear gradients at
+`rgba(30,41,59,0.14)`, an accent radial glow at 78%/−12%, a ready-green radial
+glow at −12%/112%, over `--bg`.
+
+### Part B — shell and top bar
+
+```css
+.shell { display: flex; flex-direction: column; height: 100vh; }
+.main  { display: flex; flex-direction: column; padding: var(--space-5);
+         overflow-y: auto; flex: 1; min-height: 0; }
+.main:has(.chat-page) { padding: 0; }
+```
+
+`.topbar` is `position: sticky; top: 0; z-index: 10`, a wrapping flex row over
+`rgba(17,24,39,0.6)` with a bottom border and a soft drop shadow. It holds, in
+order: `.brand`, the `Views` nav, `.status-bar` pushed right with
+`margin-left: auto`, and the Refresh button.
+
+The top bar uses a flat translucent background rather than `backdrop-filter`.
+Software compositors under WSLg mis-render blurred surfaces and their
+children, so the blur is omitted deliberately.
+
+`.brand` is a 40px `.brand-badge` — monospace `A`, accent on
+`rgba(0,191,255,0.12)` with a ring and an 18px glow — beside a two-line
+`.brand-text`: `AWF` in monospace with a `System active` pill, and
+`Agentic Workflow Fabric` as a 10px uppercase `.brand-tag`.
+
+Navigation is a horizontal `.nav-list` of `.nav-item` buttons. The active item
+carries `aria-current="page"` and renders `rgba(0,191,255,0.15)` with accent
+text and an accent ring. A view with a pending count renders a `.rail-badge`
+pill in `--danger`.
+
+`.status-bar` shows the profile ID in monospace, then three chips: overall
+readiness, LLM state, and the pending-approval count.
+
+### Part C — state classes
+
+`src/renderer/state.ts` exports `stateClass(value: string): string` over three
+sets:
+
+| Class | Members |
+|---|---|
+| `state-ok` | `SUCCEEDED`, `ready`, `running`, `adopted`, `approved`, `trusted` |
+| `state-warn` | `WAITING_APPROVAL`, `WAITING_INPUT`, `pending`, `draft`, `degraded`, `quarantined` |
+| `state-danger` | `FAILED`, `CANCELED`, `not ready`, `denied`, `blocked`, `rejected`, `R3` |
+| `state-idle` | anything else |
+
+`.dot` and `.chip` each carry a rule per class. A chip sets colour, a matching
+50%-alpha ring, and a 10%-alpha fill.
+
+`VoiceActivation` keeps a local `voiceStateClass` over its own session
+vocabulary: `speaking` is ok; `listening`, `transcribing`, `submitting`, and
+`recovering` are warn; everything else idle.
+
+### Part D — views
+
+`App.tsx` holds `view` state over
+`chat | status | runs | approvals | proposals | memory | registry`. `chat` is
+unconditional and first; every other view is included only when its callbacks
+are present. `activeView` falls back to the first available view.
+
+| View | Renders |
+|---|---|
+| Chat | `Transcript` and, when voice callbacks exist, `VoiceActivation` |
+| Status | a `.view-header` with kicker `Resident Mind` and title `Control center`, then `Overview` |
+| Runs | `RunsView` |
+| Approvals | `ApprovalsView` |
+| Proposals | `ProposalReview` and `ImprovementProposals` |
+| Memory | `MemoryPanel` |
+| Registry | `RegistryActions` |
+
+`ApprovalConfirmation` renders outside `.main`, so a pending approval is
+present in every view.
+
+### Part E — cards, stats, lists
+
+`.card` is `--surface-raised` at 16px radius with a 24px pad and a 24px bottom
+margin; hover lifts the border to `rgba(0,191,255,0.22)`. A card's `<h2>` is a
+monospace 11px uppercase eyebrow at `0.12em` tracking with a bottom rule.
+
+`.view-header` is a flex row with a monospace accent `.view-kicker` above a
+26px `.view-title` at weight 300, over a bottom rule.
+
+`.stat-grid` is `repeat(auto-fill, minmax(190px, 1fr))`. A `.stat-card` holds a
+`.stat-label` (10px uppercase monospace, with a state dot), a `.stat-value`
+(22px monospace), and a `.stat-sub` (12px faint). Readiness renders one stat
+card per function: dot from `result.ready`, device as the value, and
+`ready`/`not ready` plus the reason as the sub-line.
+
+`.list` is a gapped flex column of `--surface` rows with a hairline ring.
+
+`.pre-scroll` caps a scrollable block at 320px with an inset shadow, used for
+approval previews, artifact content, and the readiness inventory.
+
+### Part F — chat page
+
+```css
+.chat-page  { flex: 1; min-height: 0; display: flex; }
+.chat-frame { width: 100%; max-width: 1152px; margin: 0 auto;
+              display: flex; flex-direction: column; min-height: 0;
+              background: rgba(10, 14, 22, 0.55);
+              box-shadow: -1px 0 0 var(--border), 1px 0 0 var(--border); }
+```
+
+`Transcript` renders `.chat-window`: a `.chat-title` bar with a glowing green
+`.chat-dot`, a `.chat-scroll` log that follows its newest entry through a
+`useEffect` on `entries`, and a `.composer` form.
+
+A message is a `.bubble` at `max-width: 82%`. Speaker matching `/^operator/i`
+gets `.bubble-user` — `align-self: flex-end`, `flex-direction: row-reverse`,
+ready-green avatar and tint. Everything else gets `.bubble-agent` — accent
+avatar and `--surface-raised` body. Each bubble carries a 28px `.avatar` (`U`
+or `A`), a 10px uppercase `.bubble-speaker`, and 14px `.bubble-text` at 1.5
+line height.
+
+The composer is a flex row: a 36px `.btn-mic` labelled `Push to talk`, a
+`.composer-input` labelled `Message`, and a `.btn-send` labelled `Send`,
+disabled until the draft is non-empty.
+
+`VoiceActivation` renders `.voice-bar` beneath the composer: a first
+`.voice-row` with the session-state chip, the session id, and the five session
+buttons; a second `.voice-row` with the workflow, voice-profile, and
+recognized-text controls at fixed widths, plus the partial transcript and any
+error.
+
+### Part G — buttons and inputs
+
+`.btn` is 8px radius at 13px sans. `.btn-primary` is accent on `#04121a` with
+a 20px glow that brightens on hover. `.btn-secondary` is `--surface-raised`
+with a hairline ring that turns accent-tinted on hover. `.btn-danger` is
+`--danger` on `#250509`. Disabled drops to 0.45 opacity with
+`cursor: not-allowed`.
+
+Inputs are borderless over `--surface-raised` with a `box-shadow` ring that
+becomes accent on focus. `.mono` switches an input or textarea to the
+monospace stack.
+
+Focus is a 2px accent outline at 2px offset on buttons, links, inputs,
+textareas, and anything with `tabindex`.
+
+Scrollbars are 6px with a `--border` thumb that turns accent on hover, plus
+`scrollbar-width: thin` for non-WebKit.
+
+### Part H — icons
+
+`src/renderer/icons.tsx` exports a `makeIcon` factory producing 24×24
+`currentColor` stroke icons at `strokeWidth={2}`, all `aria-hidden`:
+`SparkleIcon`, `ChatIcon`, `PlayIcon`, `ShieldIcon`, `ZapIcon`, `ArchiveIcon`,
+`DatabaseIcon`, `RefreshIcon`, `MicIcon`, `SendIcon`, `CpuIcon`,
+`TerminalIcon`, `CheckIcon`. Navigation items render theirs at 13px; the view
+kicker at 12px.
+
+### Part I — empty states
+
+`.empty` is faint, italic, centred. Every panel that can be empty renders one:
+`No readiness data.`, `No LLM status.`, `No registry counts.`,
+`No recent verdicts.`, and the chat page's
+`No conversation yet — type a message or use voice to start.`
+
+## Layout delta
+
+```text
+frontend/gui/src/renderer/
+  styles.css              (the whole visual system)
+  state.ts                (stateClass)
+  icons.tsx               (makeIcon and the icon set)
+  App.tsx                 (shell, top bar, nav, status bar, view switch)
+  Overview.tsx            (readiness stat grid, LLM status, registry, verdicts)
+  RunsView.tsx
+  ApprovalsView.tsx
+  Dashboard.tsx           (shared types and ImprovementProposals)
+  Transcript.tsx          (chat window, bubbles, composer)
+  VoiceActivation.tsx     (voice bar)
+  ApprovalConfirmation.tsx
+  ProposalReview.tsx
+  MemoryPanel.tsx
+  RegistryActions.tsx
+```
+
+## The tradeoffs accepted
+
+- One view at a time. Readiness is not visible while reading the chat page;
+  the top bar's status chips carry overall readiness, LLM state, and the
+  pending-approval count into every view, and `ApprovalConfirmation` renders
+  outside the view switch.
+- Hand-authored CSS with no utility classes and no design-system upgrades, in
+  exchange for no build dependency, no purge step, and one file to read.
+- Dark only. A light theme doubles the token block for a surface with one
+  operator.
+- No `backdrop-filter` on the top bar, because software compositors under
+  WSLg mis-render blurred surfaces and their children.
+- The readiness inventory still renders as a `.pre-scroll` JSON block rather
+  than a field list. It is bounded at 320px and scrolls, so it no longer
+  dominates the view.
 
 ## Acceptance
 
+- `dist/renderer/index.css` exists after a build and is linked from
+  `dist/renderer/index.html`.
+- The window renders dark navy with the sans stack; no default serif, no
+  native bullets, no unstyled buttons.
+- The chat view is the landing page and is present regardless of which
+  callbacks are supplied.
+- Every colour outside the `:root` block is a `var(--…)` reference.
+- Readiness dots, run status, approval risk class, and LLM state all derive
+  their class from `stateClass`, and each also renders its state as text.
+- The active navigation item carries `aria-current="page"`.
+- A pending approval raises a `.rail-badge` count on the Approvals nav item.
+- Every interactive element shows a visible accent focus ring on keyboard
+  traversal.
+- The chat log scrolls to its newest entry when entries change.
+- No new entry in `frontend/gui/package.json` `dependencies` or
+  `devDependencies`.
 - `npm --prefix frontend run build --workspaces` and
-  `npm --prefix frontend test --workspaces` pass (GUI: 13 files, 57 tests;
-  shared: 1 file, 12 tests; CLI: 3 files, 41 tests).
-- `grep` on the renderer confirms no `orb|pulse|canvas|@keyframes|particle`.
-- The window shows a sticky top bar with brand badge + system pill,
-  horizontal nav, and status pills — no rail, no three-column console.
-- The default view at launch is Chat: a centered full-height conversation
-  column (scrollable stream, composer, voice action bar) and nothing else.
-  The System readiness / LLM / Registry / Recent-verdicts cards render only
-  after clicking the Status nav button.
-- Voice turns and typed messages render together in the same chat log; when
-  voice handlers are absent, the chat window takes the full width and the
-  mic button is disabled.
-- The chat window is a scrollable bubble stream that auto-follows new
-  entries, with a composer (mic + input + Send); voice is a push-to-talk
-  button with a status chip; there is no orb/canvas.
-- The control-center grammar is applied across all views: `.view-header`
-  (kicker + title), glass `rounded-2xl` cards with hover accent borders, and
-  `.stat-grid`/`.stat-card` for health metrics; icons are inline SVGs (no
-  dependency added).
-- Exactly one view renders at a time, switched by a top nav button.
-- No new entry in `frontend/gui/package.json` dependencies or devDependencies.
+  `npm --prefix frontend test --workspaces` both pass.
 
 ## Consequences
 
-- The desktop surface keeps ADR-0024's full data substance and the
-  one-active-view model, re-sequenced like the reference prototype: the
-  operator talks to the agent immediately on launch, and status/diagnostics
-  wait one button away.
-- The navy token set is a single named source of truth (`--color-*`), so a
-  future theme change is one block in `:root` rather than a scatter of hex
-  values.
-- Voice and typed chat intentionally share one visible stream today; fusing
-  them into a single back-end conversation is deferred and out of this
-  record's scope.
+- The desktop surface leads with conversation and keeps system state one
+  click away, with the top bar carrying readiness, LLM state, and pending
+  approvals continuously.
+- One token block governs the whole surface, so a colour or spacing change is
+  a single edit.
+- The GUI gains no dependency and no build configuration.
+- The CLI and TUI remain at their current level; their alignment to ADR-0024
+  is recorded separately.

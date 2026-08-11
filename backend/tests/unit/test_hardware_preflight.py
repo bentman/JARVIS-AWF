@@ -70,7 +70,7 @@ def test_qnn_provider_and_backend_paths_use_linux_shared_library_names(monkeypat
     assert preflight.resolve_qnn_backend_path() == backend
 
 
-def test_qnn_activation_preloads_linux_shared_libraries_before_registration(monkeypatch, tmp_path):
+def test_qnn_activation_registers_linux_provider_without_preloading_qnn_skel_libraries(monkeypatch, tmp_path):
     qnn_root = tmp_path / "onnxruntime_qnn"
     qnn_root.mkdir()
     provider = qnn_root / "libonnxruntime_providers_qnn.so"
@@ -80,7 +80,6 @@ def test_qnn_activation_preloads_linux_shared_libraries_before_registration(monk
     backend.write_text("", encoding="utf-8")
     system.write_text("", encoding="utf-8")
     providers = ["CPUExecutionProvider"]
-    loaded = []
     registered = []
 
     module = SimpleNamespace(
@@ -96,15 +95,17 @@ def test_qnn_activation_preloads_linux_shared_libraries_before_registration(monk
 
     monkeypatch.setattr(preflight.platform, "system", lambda: "Linux")
     monkeypatch.setattr(preflight, "_load_optional", lambda name: module if name == "onnxruntime_qnn" else ort)
-    monkeypatch.setattr(preflight.ctypes, "CDLL", lambda path, mode=0: loaded.append(path) or object())
+
+    def fail_if_preloaded(path, mode=0):
+        raise AssertionError(f"QNN activation should not preload Linux shared libraries: {path}")
+
+    monkeypatch.setattr(preflight.ctypes, "CDLL", fail_if_preloaded)
 
     result = preflight.activate_qnn_execution_provider()
 
     assert result.provider_registered is True
     assert result.provider_library_path == str(provider)
     assert result.backend_path == str(backend)
-    assert str(backend) in loaded
-    assert str(provider) in loaded
     assert registered == [("QNNExecutionProvider", str(provider))]
 
 

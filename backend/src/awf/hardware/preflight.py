@@ -40,9 +40,8 @@ _IMPORT_CHECK_MODULES = (
     "openwakeword",
 )
 
-# Registered native-library handles must outlive the call that added them.
+# Registered DLL directory handles must outlive the call that added them.
 _DLL_DIRECTORY_HANDLES: list[object] = []
-_NATIVE_LIBRARY_HANDLES: list[object] = []
 _PREFLIGHT_CACHE: list[str] | None = None
 
 
@@ -148,34 +147,6 @@ def resolve_qnn_backend_path() -> Path | None:
     return None
 
 
-def _preload_qnn_shared_libraries(*roots: Path | None) -> str | None:
-    if platform.system() == "Windows":
-        return None
-    ordered: list[Path] = []
-    seen: set[Path] = set()
-    for root in roots:
-        if root is None:
-            continue
-        for pattern in ("libQnn*.so", "libonnxruntime_providers_qnn.so"):
-            try:
-                matches = sorted(root.glob(pattern))
-            except OSError:
-                continue
-            for path in matches:
-                resolved = path.resolve()
-                if resolved not in seen and resolved.is_file():
-                    seen.add(resolved)
-                    ordered.append(resolved)
-
-    mode = getattr(os, "RTLD_GLOBAL", 0) | getattr(os, "RTLD_NOW", 0)
-    for path in ordered:
-        try:
-            _NATIVE_LIBRARY_HANDLES.append(ctypes.CDLL(str(path), mode=mode))
-        except OSError as exc:
-            return f"preload failed for {path}: {exc}"
-    return None
-
-
 def activate_qnn_execution_provider() -> QnnActivation:
     """Register the QNN execution provider library if ONNX Runtime hasn't
     already exposed it.
@@ -203,7 +174,6 @@ def activate_qnn_execution_provider() -> QnnActivation:
         )
 
     dll_directory = _qnn_package_root(qnn_module)
-    backend_directory = backend_path.parent if backend_path is not None else None
     add_dll_directory = getattr(os, "add_dll_directory", None)
     if dll_directory is not None and add_dll_directory is not None:
         try:
@@ -216,16 +186,6 @@ def activate_qnn_execution_provider() -> QnnActivation:
                 backend_path=backend_str,
                 error=f"add_dll_directory failed: {exc}",
             )
-
-    preload_error = _preload_qnn_shared_libraries(dll_directory, backend_directory)
-    if preload_error is not None:
-        return QnnActivation(
-            provider_registered=False,
-            provider_library_path=str(library_path),
-            dll_directory_path=str(dll_directory) if dll_directory else None,
-            backend_path=backend_str,
-            error=preload_error,
-        )
 
     ort = _load_optional("onnxruntime")
     register = getattr(ort, "register_execution_provider_library", None) if ort else None

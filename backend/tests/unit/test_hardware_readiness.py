@@ -47,7 +47,23 @@ def test_stt_not_ready_when_faster_whisper_missing():
     tokens = ["import:faster_whisper:MISSING", "ct2:cuda:1"]
     result = derive_stt_readiness(inventory, tokens)
     assert result.ready is False
-    assert "faster_whisper" in result.reason
+    assert "STT runtime" in result.reason
+
+
+def test_stt_resolves_qnn_when_hardware_provider_and_qnn_runtime_agree():
+    inventory = _inventory(npu_vendor="qualcomm", npu_available=True)
+    tokens = ["import:onnxruntime_qnn", "import:transformers", "ep:QNNExecutionProvider", "dll:QnnHtp"]
+    result = derive_stt_readiness(inventory, tokens)
+    assert result.device == "qnn"
+    assert result.ready is True
+
+
+def test_stt_cpu_ready_when_onnx_runtime_importable_without_ct2():
+    inventory = _inventory()
+    tokens = ["import:onnx_asr"]
+    result = derive_stt_readiness(inventory, tokens)
+    assert result.device == "cpu"
+    assert result.ready is True
 
 
 # --- TTS -------------------------------------------------------------------

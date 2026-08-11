@@ -1,7 +1,7 @@
 import pytest
 
 from awf.hardware.profiler import HardwareInventory
-from awf.hardware.provisioning import ORT_EXTRAS, explain_ort_extra, resolve_ort_extra
+from awf.hardware.provisioning import ORT_EXTRAS, explain_ort_extra, resolve_ort_extra, resolve_required_extras
 
 
 def _inventory(**overrides) -> HardwareInventory:
@@ -71,3 +71,9 @@ def test_explain_ort_extra_returns_a_nonempty_reason():
         extra, reason = explain_ort_extra(inventory)
         assert extra in ORT_EXTRAS
         assert reason
+
+
+def test_required_extras_add_speech_and_dev_symmetrically():
+    inventory = _inventory(os_name="windows", arch="arm64", npu_vendor="qualcomm")
+
+    assert resolve_required_extras(inventory) == ["hw-ort-qnn", "speech", "dev"]

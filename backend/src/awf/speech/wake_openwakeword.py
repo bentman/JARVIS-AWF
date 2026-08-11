@@ -46,11 +46,18 @@ def detect_wake_word(
     `awf-speech models sync`/`verify` govern what's actually loaded."""
     from openwakeword.model import Model
 
-    model = Model(
-        wakeword_model_paths=[str(model_path)],
-        melspec_onnx_model_path=str(melspec_model_path),
-        embedding_onnx_model_path=str(embedding_model_path),
-    )
+    try:
+        model = Model(
+            wakeword_models=[str(model_path)],
+            melspec_model_path=str(melspec_model_path),
+            embedding_model_path=str(embedding_model_path),
+        )
+    except TypeError:
+        model = Model(
+            wakeword_model_paths=[str(model_path)],
+            melspec_onnx_model_path=str(melspec_model_path),
+            embedding_onnx_model_path=str(embedding_model_path),
+        )
     audio = _read_wav_int16(audio_path)
 
     max_score = 0.0

@@ -41,13 +41,32 @@ def _ct2_cuda_count(tokens: list[str]) -> int:
 
 
 def derive_stt_readiness(inventory: "HardwareInventory", tokens: list[str]) -> Readiness:
+    qnn_capable = (
+        inventory.npu_vendor == "qualcomm"
+        and inventory.npu_available
+        and f"ep:{_QNN_PROVIDER}" in tokens
+        and "dll:QnnHtp" in tokens
+        and "import:onnxruntime_qnn" in tokens
+        and "import:transformers" in tokens
+    )
+    if qnn_capable:
+        return Readiness(
+            device="qnn",
+            ready=True,
+            reason="npu_vendor=qualcomm, QNNExecutionProvider available, QnnHtp present, onnxruntime_qnn and transformers importable",
+        )
+
     cuda_capable = inventory.gpu_vendor == "nvidia" and inventory.cuda_available and _ct2_cuda_count(tokens) > 0
     device = "cuda" if cuda_capable else "cpu"
-    ready = "import:faster_whisper" in tokens
+    ready = "import:faster_whisper" in tokens or "import:onnx_asr" in tokens or "import:sherpa_onnx" in tokens
     if not ready:
-        return Readiness(device="cpu", ready=False, reason="faster_whisper not importable")
+        return Readiness(device="cpu", ready=False, reason="no STT runtime importable")
     if device == "cuda":
+        if "import:faster_whisper" not in tokens:
+            return Readiness(device="cpu", ready=True, reason="CUDA STT requires faster_whisper; ONNX STT CPU ready")
         return Readiness(device="cuda", ready=True, reason="gpu_vendor=nvidia, cuda_available, ct2 cuda device present")
+    if "import:onnx_asr" in tokens or "import:sherpa_onnx" in tokens:
+        return Readiness(device="cpu", ready=True, reason="ONNX STT runtime importable")
     return Readiness(device="cpu", ready=True, reason="no verified CUDA device for CTranslate2")
 
 
@@ -84,14 +103,20 @@ def derive_vad_readiness(inventory: "HardwareInventory", tokens: list[str], arti
     except Exception as exc:
         return Readiness(device="cpu", ready=False, reason=f"session construction failed: {exc}")
 
-    required = {"input", "sr", "h", "c"}
-    if not required.issubset(input_names):
+    old_contract = {"input", "sr", "h", "c"}
+    new_contract = {"input", "sr", "state"}
+    if old_contract.issubset(input_names) or new_contract.issubset(input_names):
+        return Readiness(device="cpu", ready=True, reason="artifact present and input names match")
+    if not old_contract.issubset(input_names):
         return Readiness(
             device="cpu",
             ready=False,
-            reason=f"artifact input names {sorted(input_names)} do not cover {sorted(required)}",
+            reason=(
+                f"artifact input names {sorted(input_names)} do not cover "
+                f"{sorted(old_contract)} or {sorted(new_contract)}"
+            ),
         )
-    return Readiness(device="cpu", ready=True, reason="artifact present and input names match")
+    raise AssertionError("unreachable VAD readiness state")
 
 
 def derive_wake_readiness(

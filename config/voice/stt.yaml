@@ -1,10 +1,26 @@
 function: stt
 classes:
   cpu:
-    model: small
+    runtime: onnx_whisper
+    model: onnx-community/whisper-small
+    local_path: whisper-small-onnx
     device: cpu
     compute_type: int8
+  qnn:
+    runtime: qnn_whisper
+    model: whisper-qualcomm-qnn
+    local_path: whisper-qualcomm-qnn
+    device: qnn
+    compute_type: qnn
   cuda:
+    runtime: faster_whisper
     model: deepdml/faster-whisper-large-v3-turbo-ct2
+    local_path: deepdml/faster-whisper-large-v3-turbo-ct2
     device: cuda
     compute_type: float16
+  ct2-cpu:
+    runtime: faster_whisper
+    model: small
+    local_path: small
+    device: cpu
+    compute_type: int8

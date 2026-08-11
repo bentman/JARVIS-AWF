@@ -12,7 +12,6 @@ import urllib.parse
 from pathlib import Path
 
 import jsonschema
-import litellm
 
 from awf.cognition.envelope import PromptEnvelope
 from awf.cognition.render import render_chat
@@ -27,6 +26,14 @@ LLM_COMPLETE_CAPABILITY_REF = "llm_complete@1.0.0"
 
 class GatewayError(RuntimeError):
     pass
+
+
+def _litellm_completion(**kwargs):
+    try:
+        import litellm
+    except ImportError as exc:
+        raise GatewayError("model gateway requires the optional `model-gateway` dependency extra") from exc
+    return litellm.completion(**kwargs)
 
 
 def _load_llm_complete_capability(repo_root: Path = REPO_ROOT):
@@ -136,7 +143,7 @@ def complete(
         kwargs["messages"] = messages
 
         try:
-            response = litellm.completion(**kwargs)
+            response = _litellm_completion(**kwargs)
             return response.choices[0].message.content
         except Exception as exc:
             last_error = exc
@@ -181,7 +188,7 @@ def complete_structured(
         }
 
         try:
-            response = litellm.completion(**kwargs)
+            response = _litellm_completion(**kwargs)
             content = response.choices[0].message.content
             if not isinstance(content, str) or not content.strip():
                 raise GatewayError("structured completion returned empty content")

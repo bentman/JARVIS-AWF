@@ -1,8 +1,10 @@
-"""Selects exactly one mutually-exclusive ONNX Runtime distribution to
-install, from hardware facts alone (ADR-0008). `onnxruntime`,
-`onnxruntime-gpu`, and `onnxruntime-directml` all provide the same
-`onnxruntime` import name, so only one may ever be installed; `onnxruntime-qnn`
-provides a distinct import name and installs alongside the base package.
+"""Select host-symmetric dependency extras from hardware facts (ADR-0008).
+
+`onnxruntime`, `onnxruntime-gpu`, and `onnxruntime-directml` all provide the
+same `onnxruntime` import name, so only one may ever be installed;
+`onnxruntime-qnn` provides a distinct import name and installs alongside the
+base package. Speech/runtime extras are selected through the same mechanism on
+every host class so ARM64 does not need a one-off bootstrap path.
 """
 
 from typing import TYPE_CHECKING
@@ -11,6 +13,15 @@ if TYPE_CHECKING:
     from awf.hardware.profiler import HardwareInventory
 
 ORT_EXTRAS = ("hw-ort-cpu", "hw-ort-cuda", "hw-ort-directml", "hw-ort-qnn")
+
+
+def resolve_required_extras(inventory: "HardwareInventory", *, include_speech: bool = True, include_dev: bool = True) -> list[str]:
+    extras = [resolve_ort_extra(inventory)]
+    if include_speech:
+        extras.append("speech")
+    if include_dev:
+        extras.append("dev")
+    return extras
 
 
 def explain_ort_extra(inventory: "HardwareInventory") -> tuple[str, str]:

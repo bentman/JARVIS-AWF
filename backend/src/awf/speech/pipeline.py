@@ -34,7 +34,7 @@ from awf.hardware.readiness import (
     derive_wake_readiness,
 )
 from awf.speech.models import artifact_paths, stt_runtime, verify_models
-from awf.speech.stt_whisper import transcribe
+from awf.speech.stt_onnx import transcribe
 from awf.speech.tts_kokoro import synthesize
 from awf.speech.vad_silero import speech_segments
 from awf.speech.wake_openwakeword import detect_wake_word
@@ -118,7 +118,6 @@ def run_voice_round_trip(
     }
 
     runtime = stt_runtime(repo_root, readiness["stt"].device)
-    stt_download_root = repo_root / "models" / "stt"
 
     _verify_and_log_pinned_models(conn, repo_root, hardware_profile_id, readiness)
 
@@ -138,10 +137,8 @@ def run_voice_round_trip(
 
     stt_result = transcribe(
         command_audio_path,
-        model_size=runtime.model,
-        device=runtime.device,
-        compute_type=runtime.compute_type,
-        download_root=stt_download_root,
+        repo_root=repo_root,
+        runtime=runtime,
     )
     command_text = stt_result["text"]
     if not command_text.strip():

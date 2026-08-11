@@ -6,9 +6,9 @@ each a `name` under `models/<function>/` sourced from a `url` or an
 installed `package`. `stt` declares `classes` instead: one entry per
 acceleration class (the final segment of a canonical Hardware Profiler
 profile ID - `cpu`, `gpu`, `cuda`, `qnn`) naming the `model`/`device`/
-`compute_type` `WhisperModel` runs with on that class. A class with no entry
-resolves to the `cpu` entry, which is `awf.speech.models.stt_runtime`'s job,
-not this module's.
+`runtime`/`model`/`device`/`compute_type` the selected adapter runs with on
+that class. A class with no entry resolves to the `cpu` entry, which is
+`awf.speech.models.stt_runtime`'s job, not this module's.
 """
 
 from dataclasses import dataclass, field
@@ -35,7 +35,9 @@ class ArtifactFile:
 
 @dataclass(frozen=True)
 class SttClass:
+    runtime: str
     model: str
+    local_path: str | None
     device: str
     compute_type: str
 
@@ -65,7 +67,9 @@ def _parse_file(raw: dict) -> ArtifactFile:
 
 def _parse_class(class_name: str, raw: dict) -> SttClass:
     return SttClass(
+        runtime=str(raw.get("runtime", "faster_whisper")),
         model=_require(raw, "model", f"stt class '{class_name}'"),
+        local_path=str(raw["local_path"]) if raw.get("local_path") is not None else None,
         device=_require(raw, "device", f"stt class '{class_name}'"),
         compute_type=_require(raw, "compute_type", f"stt class '{class_name}'"),
     )

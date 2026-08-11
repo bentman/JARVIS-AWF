@@ -13,6 +13,7 @@ import onnxruntime as ort
 SAMPLE_RATE = 16000
 CHUNK_SIZE = 512  # Silero VAD's expected window size at 16kHz
 DEFAULT_THRESHOLD = 0.5
+ENERGY_FALLBACK_THRESHOLD = 0.01
 
 
 class VadAdapterError(RuntimeError):
@@ -35,16 +36,23 @@ def speech_probabilities(audio_path: Path, model_path: Path) -> list[float]:
     """Per-chunk speech probability across the whole file, in chunk order."""
     session = ort.InferenceSession(str(model_path))
     audio = _read_wav_float32(audio_path)
-
-    h = np.zeros((2, 1, 64), dtype=np.float32)
-    c = np.zeros((2, 1, 64), dtype=np.float32)
+    input_names = {item.name for item in session.get_inputs()}
     sr = np.array(SAMPLE_RATE, dtype=np.int64)
 
     probs = []
-    for start in range(0, len(audio) - CHUNK_SIZE + 1, CHUNK_SIZE):
-        chunk = audio[start : start + CHUNK_SIZE].reshape(1, -1)
-        output, h, c = session.run(None, {"input": chunk, "sr": sr, "h": h, "c": c})
-        probs.append(float(output[0][0]))
+    if "state" in input_names:
+        state = np.zeros((2, 1, 128), dtype=np.float32)
+        for start in range(0, len(audio) - CHUNK_SIZE + 1, CHUNK_SIZE):
+            chunk = audio[start : start + CHUNK_SIZE].reshape(1, -1)
+            output, state = session.run(None, {"input": chunk, "sr": sr, "state": state})
+            probs.append(float(output[0][0]))
+    else:
+        h = np.zeros((2, 1, 64), dtype=np.float32)
+        c = np.zeros((2, 1, 64), dtype=np.float32)
+        for start in range(0, len(audio) - CHUNK_SIZE + 1, CHUNK_SIZE):
+            chunk = audio[start : start + CHUNK_SIZE].reshape(1, -1)
+            output, h, c = session.run(None, {"input": chunk, "sr": sr, "h": h, "c": c})
+            probs.append(float(output[0][0]))
     return probs
 
 
@@ -68,4 +76,16 @@ def speech_segments(
             segments.append((start, t))
     if in_speech:
         segments.append((start, len(probs) * chunk_seconds))
+    if not segments:
+        audio = _read_wav_float32(audio_path)
+        for start_sample in range(0, len(audio) - CHUNK_SIZE + 1, CHUNK_SIZE):
+            chunk = audio[start_sample : start_sample + CHUNK_SIZE]
+            rms = float(np.sqrt(np.mean(np.square(chunk)))) if chunk.size else 0.0
+            if rms >= ENERGY_FALLBACK_THRESHOLD:
+                start_seconds = start_sample / SAMPLE_RATE
+                end_seconds = (start_sample + CHUNK_SIZE) / SAMPLE_RATE
+                if segments and start_seconds <= segments[-1][1] + chunk_seconds:
+                    segments[-1] = (segments[-1][0], end_seconds)
+                else:
+                    segments.append((start_seconds, end_seconds))
     return segments

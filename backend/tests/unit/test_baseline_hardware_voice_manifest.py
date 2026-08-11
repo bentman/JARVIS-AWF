@@ -1,5 +1,7 @@
 import shutil
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -84,21 +86,28 @@ def test_every_file_function_resolves_to_a_nonempty_artifact_set(repo_root):
 
 def test_cpu_device_resolves_to_the_cpu_entry(repo_root):
     runtime = stt_runtime(repo_root, "cpu")
-    assert runtime.model == "small"
+    assert runtime.runtime == "onnx_whisper"
+    assert runtime.model == "onnx-community/whisper-small"
     assert runtime.device == "cpu"
     assert runtime.compute_type == "int8"
 
 
-def test_gpu_and_qnn_devices_resolve_to_the_cpu_entry(repo_root):
+def test_gpu_device_resolves_to_the_cpu_entry(repo_root):
     cpu_runtime = stt_runtime(repo_root, "cpu")
     gpu_runtime = stt_runtime(repo_root, "gpu")
-    qnn_runtime = stt_runtime(repo_root, "qnn")
     assert gpu_runtime == cpu_runtime
-    assert qnn_runtime == cpu_runtime
+
+
+def test_qnn_device_resolves_to_the_qnn_entry(repo_root):
+    runtime = stt_runtime(repo_root, "qnn")
+    assert runtime.runtime == "qnn_whisper"
+    assert runtime.model == "whisper-qualcomm-qnn"
+    assert runtime.device == "qnn"
 
 
 def test_cuda_device_resolves_to_the_cuda_entry(repo_root):
     runtime = stt_runtime(repo_root, "cuda")
+    assert runtime.runtime == "faster_whisper"
     assert runtime.model == "deepdml/faster-whisper-large-v3-turbo-ct2"
     assert runtime.device == "cuda"
     assert runtime.compute_type == "float16"
@@ -144,7 +153,7 @@ def test_sync_reconciles_config_obsolete_file_artifacts_and_reports_removals(tmp
             (Path(download_root) / models._stt_cache_name(model)).mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(models, "_acquire_file", acquire)
-    monkeypatch.setattr("faster_whisper.WhisperModel", FakeWhisperModel)
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
 
     results = models.sync_models(tmp_path, "cuda")
 
@@ -164,7 +173,7 @@ def test_sync_leaves_existing_models_untouched_when_acquisition_fails(tmp_path, 
     )
 
     with pytest.raises(RuntimeError, match="download failed"):
-        models.sync_models(tmp_path, "cpu")
+        models.sync_models(tmp_path, "cuda")
 
     assert stale_tts.is_file()
 

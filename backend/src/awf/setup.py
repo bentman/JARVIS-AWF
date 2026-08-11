@@ -5,9 +5,9 @@ produces a valid empty data/awf_db/awf.db and a populated .env.
 
 `--provision`/`--install`/`--verify` (ADR-0008) are the hardware-selected
 dependency step `awf-setup` previously had no command for: `--provision`
-names the `hw-ort-*` extra `hardware.provisioning.explain_ort_extra` selects
-for this host and the reason, without installing anything; `--install` runs
-the `pip install -e .[<extra>,dev]` command `--provision` prints; `--verify`
+names the extras `hardware.provisioning.resolve_required_extras` selects for
+this host and the reason, without installing anything; `--install` runs the
+matching `pip install -e .[...]` command; `--verify`
 reports what resolution actually produced - the installed ONNX Runtime
 distribution name and version, its available execution providers, and
 `pip check`; it also verifies the dev-tooling floor needed by the validation
@@ -50,18 +50,20 @@ def bootstrap_repo(repo_root: Path) -> None:
     init_db(db_path(repo_root))
 
 
-def _resolve_extra() -> tuple[str, str]:
+def _resolve_extras() -> tuple[list[str], str]:
     from awf.hardware.profiler import collect_inventory
-    from awf.hardware.provisioning import explain_ort_extra
+    from awf.hardware.provisioning import explain_ort_extra, resolve_required_extras
 
-    return explain_ort_extra(collect_inventory())
+    inventory = collect_inventory()
+    _extra, reason = explain_ort_extra(inventory)
+    return resolve_required_extras(inventory), reason
 
 
 def cmd_provision(_repo_root: Path) -> int:
-    extra, reason = _resolve_extra()
-    print(f"extra: {extra}")
+    extras, reason = _resolve_extras()
+    print(f"extras: {','.join(extras)}")
     print(f"reason: {reason}")
-    print(f"command: pip install -e .[{extra},dev]")
+    print(f"command: pip install -e .[{','.join(extras)}]")
     return 0
 
 
@@ -84,12 +86,13 @@ _EXTRA_TARGET_PACKAGE = {
 
 
 def cmd_install(repo_root: Path) -> int:
-    extra, reason = _resolve_extra()
-    print(f"extra: {extra}")
+    extras, reason = _resolve_extras()
+    extra = next(item for item in extras if item in _EXTRA_TARGET_PACKAGE)
+    print(f"extras: {','.join(extras)}")
     print(f"reason: {reason}")
 
     result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-e", f".[{extra},dev]"],
+        [sys.executable, "-m", "pip", "install", "-e", f".[{','.join(extras)}]"],
         cwd=repo_root,
     )
     if result.returncode != 0:

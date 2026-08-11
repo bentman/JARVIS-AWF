@@ -9,18 +9,20 @@ description = "Agentic Workflow Fabric core"
 requires-python = ">=3.12,<3.15"
 dependencies = [
   "PyYAML>=6",
-  "cryptography>=42",
-  "litellm>=1.94",
+  "cryptography>=42,<=46.0.3",
   "jsonschema>=4.20",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "onnx>=1.22", "ruff>=0.15.22"]
+model-gateway = ["litellm>=1.91.5,<1.92"]
 speech = [
-  "openwakeword>=0.4",
+  "openwakeword==0.6.0",
   "faster-whisper>=1.2; sys_platform!='win32' or platform_machine!='ARM64'",
   "kokoro-onnx>=0.5",
-  "silero-vad>=6",
+  "huggingface-hub>=0.22",
+  "onnx-asr>=0.8",
+  "sherpa-onnx>=1.13.5",
 ]
 hw-ort-cpu = ["onnxruntime>=1.28"]
 hw-ort-cuda = ["onnxruntime-gpu>=1.28"]
@@ -28,6 +30,8 @@ hw-ort-directml = ["onnxruntime-directml>=1.28; sys_platform=='win32'"]
 hw-ort-qnn = [
   "onnxruntime>=1.28; platform_machine=='ARM64' and sys_platform=='win32'",
   "onnxruntime-qnn>=2.3; platform_machine=='ARM64' and sys_platform=='win32'",
+  "onnx>=1.16; platform_machine=='ARM64' and sys_platform=='win32'",
+  "transformers>=4.40; platform_machine=='ARM64' and sys_platform=='win32'",
 ]
 
 [project.scripts]

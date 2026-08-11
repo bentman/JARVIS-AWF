@@ -6,7 +6,6 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $VenvPython = Join-Path $RepoRoot "backend\.venv\Scripts\python.exe"
-$VenvAwfSetup = Join-Path $RepoRoot "backend\.venv\Scripts\awf-setup.exe"
 $VenvAwfSpeech = Join-Path $RepoRoot "backend\.venv\Scripts\awf-speech.exe"
 $VenvAwf = Join-Path $RepoRoot "backend\.venv\Scripts\awf.exe"
 
@@ -50,28 +49,19 @@ Invoke-Step "Install AWF base package" {
 }
 
 Invoke-Step "Install hardware-selected backend dependencies" {
-    Invoke-Native $VenvAwfSetup @("--install", "--verify")
+    Invoke-Native $VenvPython @("-m", "awf.setup", "--install", "--verify")
 }
 
 Invoke-Step "Bootstrap local state" {
-    Invoke-Native $VenvAwfSetup @()
+    Invoke-Native $VenvPython @("-m", "awf.setup")
 }
 
 if (-not $SkipSpeech) {
-    if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") {
-        Write-Host "==> Skip speech package install on Windows ARM64"
-        Write-Host "    faster-whisper requires ctranslate2, which currently has no matching Windows ARM64 wheel."
-        Write-Host "    Core AWF remains usable; run awf doctor for the speech readiness warning."
-    } else {
-        Invoke-Step "Install optional speech dependencies" {
-            Invoke-Native $VenvPython @("-m", "pip", "install", "-e", ".[speech]")
-        }
-        Invoke-Step "Acquire speech models" {
-            Invoke-Native $VenvAwfSpeech @("models", "sync")
-        }
-        Invoke-Step "Verify speech models" {
-            Invoke-Native $VenvAwfSpeech @("models", "verify")
-        }
+    Invoke-Step "Acquire speech models" {
+        Invoke-Native $VenvAwfSpeech @("models", "sync")
+    }
+    Invoke-Step "Verify speech models" {
+        Invoke-Native $VenvAwfSpeech @("models", "verify")
     }
 }
 

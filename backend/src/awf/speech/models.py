@@ -32,7 +32,9 @@ _KEEP_STT_NAMES = _KEEP_FILE_NAMES | {".locks", "CACHEDIR.TAG"}
 
 @dataclass(frozen=True)
 class SttRuntime:
+    runtime: str
     model: str
+    local_path: str
     device: str
     compute_type: str
 
@@ -44,7 +46,13 @@ def load_voice_manifest(repo_root: Path, function: str) -> HardwareVoiceManifest
 def stt_runtime(repo_root: Path, device: str) -> SttRuntime:
     manifest = load_voice_manifest(repo_root, "stt")
     stt_class = manifest.classes.get(device, manifest.classes["cpu"])
-    return SttRuntime(model=stt_class.model, device=stt_class.device, compute_type=stt_class.compute_type)
+    return SttRuntime(
+        runtime=stt_class.runtime,
+        model=stt_class.model,
+        local_path=stt_class.local_path or stt_class.model.replace("/", "--"),
+        device=stt_class.device,
+        compute_type=stt_class.compute_type,
+    )
 
 
 def _import_name_for_package(package: str) -> str:
@@ -101,10 +109,55 @@ def _reconcile_file_directory(function: str, target_dir: Path, expected_names: s
 
 
 def _stt_cache_name(model: str) -> str:
-    from faster_whisper.utils import _MODELS
+    try:
+        from faster_whisper.utils import _MODELS
+    except ImportError:
+        _MODELS = {}
 
-    repository_id = _MODELS.get(model, model)
+    repository_id = _MODELS.get(model, model if "/" in model else f"Systran/faster-whisper-{model}")
     return f"models--{repository_id.replace('/', '--')}"
+
+
+def _onnx_whisper_required_files() -> tuple[str, ...]:
+    return (
+        "config.json",
+        "generation_config.json",
+        "preprocessor_config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "special_tokens_map.json",
+        "vocab.json",
+        "merges.txt",
+        "normalizer.json",
+        "added_tokens.json",
+    )
+
+
+def _qnn_whisper_required_files() -> tuple[str, ...]:
+    return (
+        "encoder/model.onnx",
+        "encoder/model.bin",
+        "decoder/model.onnx",
+        "decoder/model.bin",
+    )
+
+
+def stt_model_path(repo_root: Path, runtime: SttRuntime) -> Path:
+    return models_dir(repo_root, "stt") / runtime.local_path
+
+
+def qnn_whisper_available(repo_root: Path, runtime: SttRuntime | None = None) -> bool:
+    runtime = runtime or stt_runtime(repo_root, "qnn")
+    target = stt_model_path(repo_root, runtime)
+    return all((target / relative).is_file() for relative in _qnn_whisper_required_files())
+
+
+def _onnx_whisper_available(target: Path) -> bool:
+    return (
+        all((target / filename).is_file() for filename in _onnx_whisper_required_files())
+        and any(target.glob("**/encoder_model.onnx"))
+        and any(target.glob("**/decoder_model_merged.onnx"))
+    )
 
 
 def _reconcile_stt_directory(target_dir: Path, model: str) -> list[dict]:
@@ -127,16 +180,52 @@ def _reconcile_stt_directory(target_dir: Path, model: str) -> list[dict]:
     return removed
 
 
-def _reconcile_models(repo_root: Path, stt_model: str) -> list[dict]:
-    """Reconcile config-owned model directories only after acquisition completes."""
+def _reconcile_file_models(repo_root: Path) -> list[dict]:
+    """Reconcile config-owned file artifact directories only after acquisition completes."""
     removed = []
     for function in _FILE_FUNCTIONS:
         manifest = load_voice_manifest(repo_root, function)
         removed.extend(
             _reconcile_file_directory(function, models_dir(repo_root, function), {file.name for file in manifest.files})
         )
+    return removed
+
+
+def _reconcile_models(repo_root: Path, stt_model: str) -> list[dict]:
+    """Reconcile config-owned model directories only after acquisition completes."""
+    removed = _reconcile_file_models(repo_root)
     removed.extend(_reconcile_stt_directory(models_dir(repo_root, "stt"), stt_model))
     return removed
+
+
+def _sync_onnx_whisper(repo_root: Path, runtime: SttRuntime) -> dict:
+    import onnx_asr
+    from huggingface_hub import snapshot_download
+
+    target = stt_model_path(repo_root, runtime)
+    target.mkdir(parents=True, exist_ok=True)
+    if not _onnx_whisper_available(target):
+        snapshot_download(
+            runtime.model,
+            local_dir=target,
+            allow_patterns=[
+                "config.json",
+                "generation_config.json",
+                "preprocessor_config.json",
+                "tokenizer.json",
+                "tokenizer_config.json",
+                "special_tokens_map.json",
+                "vocab.json",
+                "merges.txt",
+                "normalizer.json",
+                "added_tokens.json",
+                "onnx/encoder_model.onnx",
+                "onnx/decoder_model_merged.onnx",
+            ],
+        )
+    onnx_asr.load_model(runtime.model, path=target, providers=["CPUExecutionProvider"])
+    status = "PRESENT" if _onnx_whisper_available(target) else "SYNCED"
+    return {"function": "stt", "name": runtime.model, "path": str(target), "runtime": runtime.runtime, "status": status}
 
 
 def sync_models(repo_root: Path, stt_device: str) -> list[dict]:
@@ -152,14 +241,46 @@ def sync_models(repo_root: Path, stt_device: str) -> list[dict]:
             _acquire_file(file, target)
             results.append({"function": function, "name": file.name, "path": str(target), "status": "SYNCED"})
 
-    from faster_whisper import WhisperModel
-
     runtime = stt_runtime(repo_root, stt_device)
     download_root = models_dir(repo_root, "stt")
     download_root.mkdir(parents=True, exist_ok=True)
-    WhisperModel(runtime.model, download_root=str(download_root))
-    results.append({"function": "stt", "name": runtime.model, "path": str(download_root), "status": "SYNCED"})
-    results.extend(_reconcile_models(repo_root, runtime.model))
+    if runtime.runtime == "faster_whisper":
+        from faster_whisper import WhisperModel
+
+        WhisperModel(runtime.model, download_root=str(download_root))
+        results.append({"function": "stt", "name": runtime.model, "path": str(download_root), "status": "SYNCED"})
+        results.extend(_reconcile_models(repo_root, runtime.model))
+    elif runtime.runtime == "onnx_whisper":
+        results.append(_sync_onnx_whisper(repo_root, runtime))
+        results.extend(_reconcile_file_models(repo_root))
+    elif runtime.runtime == "qnn_whisper" and qnn_whisper_available(repo_root, runtime):
+        results.append(
+            {
+                "function": "stt",
+                "name": runtime.model,
+                "path": str(stt_model_path(repo_root, runtime)),
+                "runtime": runtime.runtime,
+                "status": "PRESENT",
+            }
+        )
+    else:
+        fallback = stt_runtime(repo_root, "cpu")
+        results.append(
+            {
+                "function": "stt",
+                "name": runtime.model,
+                "path": str(stt_model_path(repo_root, runtime)),
+                "runtime": runtime.runtime,
+                "status": "MISSING",
+            }
+        )
+        results.append(
+            {
+                **_sync_onnx_whisper(repo_root, fallback),
+                "fallback_for": runtime.runtime,
+            }
+        )
+        results.extend(_reconcile_file_models(repo_root))
 
     return results
 

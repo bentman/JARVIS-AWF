@@ -28,7 +28,17 @@ if TYPE_CHECKING:
 
 _QNN_PROVIDER = "QNNExecutionProvider"
 
-_IMPORT_CHECK_MODULES = ("onnxruntime", "ctranslate2", "faster_whisper", "kokoro_onnx", "openwakeword", "silero_vad")
+_IMPORT_CHECK_MODULES = (
+    "onnxruntime",
+    "onnxruntime_qnn",
+    "onnx_asr",
+    "sherpa_onnx",
+    "transformers",
+    "ctranslate2",
+    "faster_whisper",
+    "kokoro_onnx",
+    "openwakeword",
+)
 
 # Registered DLL directory handles must outlive the call that added them.
 _DLL_DIRECTORY_HANDLES: list[object] = []

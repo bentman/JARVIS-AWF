@@ -267,6 +267,12 @@ def cmd_verify(repo_root: Path) -> int:
             print(f"qnn_provider_library_path: {qnn_activation.provider_library_path}")
             print(f"qnn_backend_path: {qnn_activation.backend_path}")
             print(f"qnn_activation_error: {qnn_activation.error}")
+            try:
+                from awf.hardware.preflight import _qnn_ep_device_names
+
+                print(f"qnn_ep_devices: {_qnn_ep_device_names()}")
+            except Exception as exc:
+                print(f"qnn_ep_devices_error: {exc}")
         import onnxruntime as ort
 
         providers = list(ort.get_available_providers())

@@ -109,6 +109,35 @@ def test_qnn_activation_registers_linux_provider_without_preloading_qnn_skel_lib
     assert registered == [("QNNExecutionProvider", str(provider))]
 
 
+def test_qnn_activation_accepts_plugin_ep_device_when_provider_list_stays_legacy(monkeypatch, tmp_path):
+    qnn_root = tmp_path / "onnxruntime_qnn"
+    qnn_root.mkdir()
+    provider = qnn_root / "libonnxruntime_providers_qnn.so"
+    backend = qnn_root / "libQnnHtp.so"
+    provider.write_text("", encoding="utf-8")
+    backend.write_text("", encoding="utf-8")
+    ep_device = SimpleNamespace(ep_name="QNNExecutionProvider")
+
+    module = SimpleNamespace(
+        LIB_DIR_FULL_PATH=str(qnn_root),
+        get_library_path=lambda: str(provider),
+        get_qnn_htp_path=lambda: str(backend),
+    )
+    ort = SimpleNamespace(
+        get_available_providers=lambda: ["AzureExecutionProvider", "CPUExecutionProvider"],
+        get_ep_devices=lambda: [ep_device],
+        register_execution_provider_library=lambda name, path: None,
+    )
+
+    monkeypatch.setattr(preflight.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(preflight, "_load_optional", lambda name: module if name == "onnxruntime_qnn" else ort)
+
+    result = preflight.activate_qnn_execution_provider()
+
+    assert result.provider_registered is True
+    assert result.error is None
+
+
 def test_preflight_reports_qnn_activation_paths_and_errors(monkeypatch):
     activation = preflight.QnnActivation(
         provider_registered=False,
@@ -130,3 +159,21 @@ def test_preflight_reports_qnn_activation_paths_and_errors(monkeypatch):
     assert "qnn:provider_library:/tmp/libonnxruntime_providers_qnn.so" in tokens
     assert "qnn:backend_path:/tmp/libQnnHtp.so" in tokens
     assert "qnn:provider_activation_error:registration failed" in tokens
+
+
+def test_preflight_emits_qnn_ep_token_from_plugin_ep_device(monkeypatch):
+    activation = preflight.QnnActivation(provider_registered=True)
+    monkeypatch.setattr(preflight, "_import_tokens", lambda: ["import:onnxruntime_qnn"])
+    monkeypatch.setattr(preflight, "activate_qnn_execution_provider", lambda: activation)
+    monkeypatch.setattr(preflight, "_available_providers", lambda: ["CPUExecutionProvider"])
+    monkeypatch.setattr(preflight, "_qnn_ep_device_names", lambda: ["QNNExecutionProvider"])
+    monkeypatch.setattr(preflight, "resolve_qnn_backend_path", lambda: None)
+    monkeypatch.setattr(preflight, "_opencl_platform_count", lambda: 0)
+    monkeypatch.setattr(preflight, "_opencl_qualcomm_platform_present", lambda: False)
+    monkeypatch.setattr(preflight, "_vulkan_available", lambda: False)
+    monkeypatch.setattr(preflight, "_ct2_cuda_count", lambda: 0)
+
+    tokens = preflight.collect_preflight_tokens(HardwareInventory(os_name="linux", arch="arm64"), refresh=True)
+
+    assert "ep:QNNExecutionProvider" in tokens
+    assert "ep_device:QNNExecutionProvider" in tokens

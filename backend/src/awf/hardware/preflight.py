@@ -81,6 +81,17 @@ def _available_providers() -> list[str]:
         return []
 
 
+def _qnn_ep_device_names() -> list[str]:
+    ort = _load_optional("onnxruntime")
+    get_ep_devices = getattr(ort, "get_ep_devices", None) if ort else None
+    if not callable(get_ep_devices):
+        return []
+    try:
+        return [str(getattr(device, "ep_name", "")) for device in get_ep_devices()]
+    except Exception:
+        return []
+
+
 def _qnn_package_root(module) -> Path | None:
     lib_dir = getattr(module, "LIB_DIR_FULL_PATH", None)
     if lib_dir:
@@ -158,7 +169,7 @@ def activate_qnn_execution_provider() -> QnnActivation:
     backend_path = resolve_qnn_backend_path()
     backend_str = str(backend_path) if backend_path else None
 
-    if _QNN_PROVIDER in _available_providers():
+    if _QNN_PROVIDER in _available_providers() or _QNN_PROVIDER in _qnn_ep_device_names():
         return QnnActivation(provider_registered=True, backend_path=backend_str)
 
     qnn_module = _load_optional("onnxruntime_qnn")
@@ -209,7 +220,7 @@ def activate_qnn_execution_provider() -> QnnActivation:
             error=f"{_QNN_PROVIDER} registration failed: {exc}",
         )
 
-    registered = _QNN_PROVIDER in _available_providers()
+    registered = _QNN_PROVIDER in _available_providers() or _QNN_PROVIDER in _qnn_ep_device_names()
     return QnnActivation(
         provider_registered=registered,
         provider_library_path=str(library_path),
@@ -328,8 +339,10 @@ def collect_preflight_tokens(inventory: "HardwareInventory", *, refresh: bool = 
         tokens.append(f"qnn:backend_path:{qnn_activation.backend_path}")
     if qnn_activation is not None and qnn_activation.provider_registered:
         tokens.append("qnn:provider_library_registered")
+        tokens.append(f"ep:{_QNN_PROVIDER}")
     elif qnn_activation is not None and qnn_activation.error:
         tokens.append(f"qnn:provider_activation_error:{qnn_activation.error}")
+    tokens.extend(f"ep_device:{name}" for name in _qnn_ep_device_names() if name)
     tokens.extend(f"ep:{provider}" for provider in _available_providers())
 
     backend_path = resolve_qnn_backend_path()

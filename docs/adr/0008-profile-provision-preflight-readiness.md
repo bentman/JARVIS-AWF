@@ -240,7 +240,8 @@ environment. Tokens are the only value readiness consumes.
 | Token | Meaning |
 |---|---|
 | `import:<module>` / `import:<module>:MISSING` | one per module in `onnxruntime`, `ctranslate2`, `faster_whisper`, `kokoro_onnx`, `openwakeword`, `silero_vad` |
-| `ep:<provider>` | one per entry in `onnxruntime.get_available_providers()`, read after QNN activation |
+| `ep:<provider>` | one per entry in `onnxruntime.get_available_providers()`, plus QNN plugin EP success from `onnxruntime.get_ep_devices()` after registration |
+| `ep_device:<provider>` | one per plugin EP device name from `onnxruntime.get_ep_devices()` after QNN activation |
 | `dll:QnnHtp` / `dll:QnnHtp:MISSING` | `resolve_qnn_backend_path()` result |
 | `qnn:provider_library:<path>` | QNN EP plugin path discovered from `onnxruntime_qnn` |
 | `qnn:backend_path:<path>` | QNN HTP backend path discovered from `onnxruntime_qnn`, `onnxruntime`, or `QAIRT_SDK_PATH` |

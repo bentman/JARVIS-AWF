@@ -6,7 +6,7 @@ Sets up JARVIS-AWF on Linux or WSL2. Run every command from the repository root.
 
 - Bash and Git
 - Python `>=3.12,<3.15` with `venv` support
-- Node.js 26+ and npm, for the frontends
+- Node.js 24 LTS `>=24.15.0` and npm, for the frontends
 - Internet access for dependency and model acquisition
 
 WSL2 reports itself as Linux and resolves as a Linux host. It needs no separate handling here.

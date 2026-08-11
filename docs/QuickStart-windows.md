@@ -6,7 +6,7 @@ Sets up JARVIS-AWF on Windows x64 or ARM64. Run every command from PowerShell at
 
 - Windows PowerShell and Git
 - Python `>=3.12,<3.15` through the Windows `py` launcher
-- Node.js 26+ and npm, for the frontends
+- Node.js 24 LTS `>=24.15.0` and npm, for the frontends
 - Internet access for dependency and model acquisition
 
 Optional, for accelerated speech: an NVIDIA GPU with a working driver (x64), an AMD or Intel GPU for DirectML, or a Qualcomm NPU on ARM64. CPU is the guaranteed floor on every host.

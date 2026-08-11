@@ -29,7 +29,7 @@ Do this once per machine.
 5. **Install speech packages and download voice models (only if you want voice):** `pip install -e .[speech]` then `awf-speech models sync`
    → Fetches the wake-word, VAD, speech-to-text, and text-to-speech models for your hardware. `awf-speech models verify` checks them later.
    On Windows ARM64, core AWF remains supported but the bootstrap wrapper skips speech package installation because `faster-whisper` depends on `ctranslate2`, which currently has no matching Windows ARM64 wheel.
-6. **Frontends (optional):** `npm --prefix frontend install` then `npm --prefix frontend run build` (Node 26+).
+6. **Frontends (optional):** `npm --prefix frontend install` then `npm --prefix frontend run build` (Node.js 24 LTS `>=24.15.0`).
 7. **Check the install:** `awf doctor`
    → Reports Python/venv, local paths, registry defaults, frontend dependencies, visible agent CLIs, speech readiness, and the next operator action.
 

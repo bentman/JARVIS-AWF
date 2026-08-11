@@ -486,4 +486,4 @@ git diff --check
 ```
 
 Frontend commands were validated in the current shell with Node v22.19.0. The
-repo policy remains Node >=26.
+repo policy remains Node.js 24 LTS `>=24.15.0`.

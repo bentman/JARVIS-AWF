@@ -65,7 +65,7 @@ describe("App dashboard wiring (runList/approvalList IPC channels)", () => {
     expect(screen.queryByRole("region", { name: "Dashboard" })).toBeNull();
   });
 
-  it("renders registry actions when registry handlers are supplied", () => {
+  it("renders registry actions behind the Registry nav button when registry handlers are supplied", () => {
     render(
       <App
         onApprove={vi.fn()}
@@ -78,6 +78,8 @@ describe("App dashboard wiring (runList/approvalList IPC channels)", () => {
       />,
     );
 
+    // The first page is always chat; registry actions open via their button.
+    fireEvent.click(screen.getByRole("button", { name: "Registry" }));
     expect(screen.getByRole("region", { name: "Registry actions" })).toBeTruthy();
   });
 
@@ -95,6 +97,8 @@ describe("App dashboard wiring (runList/approvalList IPC channels)", () => {
     render(<App onApprove={vi.fn()} onReject={vi.fn()} onControlSummary={onControlSummary} />);
 
     await waitFor(() => expect(onControlSummary).toHaveBeenCalled());
+    // Diagnostics live behind the Status nav button; the launch page is chat.
+    fireEvent.click(screen.getByRole("button", { name: "Status" }));
     expect(await screen.findByText("State: running")).toBeTruthy();
     expect(screen.getByText("skills: 1")).toBeTruthy();
   });

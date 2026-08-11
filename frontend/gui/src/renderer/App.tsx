@@ -17,8 +17,9 @@ import { ProposalReview, type ProposalSummary } from "./ProposalReview.js";
 import { RegistryActions, type RegistryEntry } from "./RegistryActions.js";
 import { RunsView } from "./RunsView.js";
 import { stateClass } from "./state.js";
+import { ArchiveIcon, ChatIcon, DatabaseIcon, PlayIcon, ShieldIcon, SparkleIcon, ZapIcon, type IconProps } from "./icons.js";
 import { Transcript, type TranscriptEntry } from "./Transcript.js";
-import { VoiceActivation, type VoiceSessionResult, type VoiceSubmitTextResult } from "./VoiceActivation.js";
+import { VoiceActivation, type VoiceActivationHandle, type VoiceSessionResult, type VoiceSubmitTextResult } from "./VoiceActivation.js";
 import type { RiskClass } from "../voiceApproval.js";
 
 export interface PendingApproval {
@@ -75,7 +76,7 @@ export interface AppProps extends VoiceSessionFns {
   onMemoryReject?: (proposalId: string, reason?: string) => Promise<unknown>;
 }
 
-type ViewName = "overview" | "runs" | "approvals" | "proposals" | "memory" | "registry" | "voice";
+type ViewName = "chat" | "status" | "runs" | "approvals" | "proposals" | "memory" | "registry";
 
 // An approval whose node never declared `riskClass` (Section 12.2) has no
 // real value to show - treated as R2 here too, the same safe-never-R0/R1
@@ -125,6 +126,7 @@ export function App({
 }: AppProps): React.JSX.Element {
   const [entries, setEntries] = useState<TranscriptEntry[]>(initialTranscript);
   const nextId = useRef(initialTranscript.length);
+  const voiceRef = useRef<VoiceActivationHandle | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [approvals, setApprovals] = useState<ApprovalSummary[]>([]);
   const [improvements, setImprovements] = useState<ImprovementSummary[]>([]);
@@ -199,6 +201,9 @@ export function App({
     return result;
   };
 
+const handleComposerSend = (text: string) => {
+    setEntries((prev) => [...prev, { id: nextId.current++, speaker: "Operator", text }]);
+  };
   const handleApprove = (approvalId: string) => {
     onApprove(approvalId);
     void refresh();
@@ -214,9 +219,9 @@ export function App({
   // list is what the operator actually sees and can act on.
   const effectivePendingApproval = pendingApproval ?? (approvals.length > 0 ? toPendingApproval(approvals[0]) : undefined);
 
-  const overviewAvailable = !!(onControlSummary || onRunList || onApprovalList || onImprovementList);
-  const runsAvailable = overviewAvailable;
-  const approvalsAvailable = overviewAvailable;
+  const statusAvailable = !!(onControlSummary || onRunList || onApprovalList || onImprovementList);
+  const runsAvailable = statusAvailable;
+  const approvalsAvailable = statusAvailable;
   const proposalsAvailable = !!(onProposalGet && onProposalPublish && onProposalReject);
   const memoryAvailable = !!(onMemorySearch && onMemoryBlock && onMemoryPublish && onMemoryReject);
   const registryAvailable = !!(
@@ -234,18 +239,28 @@ export function App({
     onVoiceSubmitText
   );
 
-  const views: { name: ViewName; label: string; badge?: number }[] = [
-    ...(overviewAvailable ? [{ name: "overview" as const, label: "Overview" }] : []),
-    ...(runsAvailable ? [{ name: "runs" as const, label: "Runs" }] : []),
+  const views: { name: ViewName; label: string; badge?: number; icon: React.FC<IconProps> }[] = [
+    // The first page is always the chat + voice surface (ADR-0025): a
+    // scrollable conversation window that voice and typed chat share.
+    // Status/diagnostics live behind their own nav button, never below it.
+    { name: "chat" as const, label: "Chat", icon: ChatIcon },
+    ...(statusAvailable ? [{ name: "status" as const, label: "Status", icon: SparkleIcon }] : []),
+    ...(runsAvailable ? [{ name: "runs" as const, label: "Runs", icon: PlayIcon }] : []),
     ...(approvalsAvailable
-      ? [{ name: "approvals" as const, label: "Approvals", badge: approvals.length || undefined }]
+      ? [{ name: "approvals" as const, label: "Approvals", icon: ShieldIcon, badge: approvals.length || undefined }]
       : []),
     ...(proposalsAvailable
-      ? [{ name: "proposals" as const, label: "Proposals", badge: improvements.length || undefined }]
+      ? [
+          {
+            name: "proposals" as const,
+            label: "Proposals",
+            icon: ZapIcon,
+            badge: improvements.length || undefined,
+          },
+        ]
       : []),
-    ...(memoryAvailable ? [{ name: "memory" as const, label: "Memory" }] : []),
-    ...(registryAvailable ? [{ name: "registry" as const, label: "Registry" }] : []),
-    ...(voiceAvailable ? [{ name: "voice" as const, label: "Voice" }] : []),
+    ...(memoryAvailable ? [{ name: "memory" as const, label: "Memory", icon: ArchiveIcon }] : []),
+    ...(registryAvailable ? [{ name: "registry" as const, label: "Registry", icon: DatabaseIcon }] : []),
   ];
   const activeView = view && views.some((v) => v.name === view) ? view : views[0]?.name;
 
@@ -257,9 +272,20 @@ export function App({
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brand mono">AWF</div>
+        <div className="brand">
+          <span className="brand-badge" aria-hidden="true">
+            A
+          </span>
+          <span className="brand-text">
+            <span className="brand-line">
+              <span className="mono">AWF</span>
+              <span className="system-pill">System active</span>
+            </span>
+            <span className="brand-tag">Agentic Workflow Fabric</span>
+          </span>
+        </div>
         <nav aria-label="Views">
-          <ul className="nav-list list">
+          <ul className="nav-list">
             {views.map((v) => (
               <li key={v.name}>
                 <button
@@ -268,6 +294,7 @@ export function App({
                   aria-current={v.name === activeView ? "page" : undefined}
                   onClick={() => setView(v.name)}
                 >
+                  {v.icon && <v.icon size={13} className="nav-icon" />}
                   {v.label}
                   {v.badge !== undefined && <span className="rail-badge">{v.badge}</span>}
                 </button>
@@ -288,7 +315,41 @@ export function App({
         </button>
       </header>
       <main className="main">
-          {activeView === "overview" && <Overview controlSummary={controlSummary} onLlmModels={onLlmModels} />}
+          {activeView === "chat" && (
+            <div className="chat-page">
+              <div className="chat-frame">
+                <Transcript
+                  entries={entries}
+                  onSend={handleComposerSend}
+                  onMic={voiceAvailable ? () => voiceRef.current?.togglePushToTalk() : undefined}
+                />
+                {voiceAvailable && (
+                  <VoiceActivation
+                    ref={voiceRef}
+                    onSessionStart={onVoiceSessionStart!}
+                    onPushToTalkStart={onVoicePushToTalkStart!}
+                    onPushToTalkStop={onVoicePushToTalkStop!}
+                    onInterrupt={onVoiceInterrupt!}
+                    onSubmitText={handleVoiceSubmit}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+          {activeView === "status" && statusAvailable && (
+            <>
+              <div className="view-header">
+                <div>
+                  <div className="view-kicker">
+                    <SparkleIcon size={12} />
+                    Resident Mind
+                  </div>
+                  <h1 className="view-title">Control center</h1>
+                </div>
+              </div>
+              <Overview controlSummary={controlSummary} onLlmModels={onLlmModels} />
+            </>
+          )}
           {activeView === "runs" && (
             <RunsView
               runs={runs}
@@ -334,23 +395,7 @@ export function App({
                 onRegistryGet={onRegistryGet}
               />
             )}
-          {activeView === "voice" &&
-            onVoiceSessionStart &&
-            onVoicePushToTalkStart &&
-            onVoicePushToTalkStop &&
-            onVoiceInterrupt &&
-            onVoiceSubmitText && (
-              <>
-                <VoiceActivation
-                  onSessionStart={onVoiceSessionStart}
-                  onPushToTalkStart={onVoicePushToTalkStart}
-                  onPushToTalkStop={onVoicePushToTalkStop}
-                  onInterrupt={onVoiceInterrupt}
-                  onSubmitText={handleVoiceSubmit}
-                />
-                <Transcript entries={entries} />
-              </>
-            )}
+
       </main>
       {effectivePendingApproval && (
         <ApprovalConfirmation

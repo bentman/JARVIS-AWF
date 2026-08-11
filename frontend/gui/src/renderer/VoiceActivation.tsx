@@ -53,13 +53,20 @@ function voiceStateClass(state: VoiceSessionState): string {
   return "state-idle";
 }
 
-export function VoiceActivation({
-  onSessionStart,
-  onPushToTalkStart,
-  onPushToTalkStop,
-  onInterrupt,
-  onSubmitText,
-}: VoiceActivationProps): React.JSX.Element {
+export interface VoiceActivationHandle {
+  /** Drives the existing push-to-talk flow from an external control (e.g. the
+   * chat composer's mic button). No-op while no voice session is started. */
+  togglePushToTalk: () => void;
+}
+
+export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActivationProps>(
+  function VoiceActivation({
+    onSessionStart,
+    onPushToTalkStart,
+    onPushToTalkStop,
+    onInterrupt,
+    onSubmitText,
+  }: VoiceActivationProps, ref): React.JSX.Element {
   const [voiceSessionId, setVoiceSessionId] = useState<string | null>(null);
   const [turnId, setTurnId] = useState<string>(nextTurnId());
   const [state, setState] = useState<VoiceSessionState>("idle");
@@ -138,42 +145,27 @@ export function VoiceActivation({
       updateFrom(await onInterrupt(voiceSessionId, turnId));
     });
 
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      togglePushToTalk: () => {
+        if (state === "listening") void stopPushToTalk();
+        else void startPushToTalk();
+      },
+    }),
+    [state, startPushToTalk, stopPushToTalk],
+  );
+
   return (
-    <div role="group" aria-label="Voice session" className="card">
-      <p>
-        Status: <span className={`chip ${voiceStateClass(state)}`}>{state}</span>
-      </p>
-      {voiceSessionId && <p>Voice session: {voiceSessionId}</p>}
-      <label>
-        Default workflow
-        <input
-          type="text"
-          value={workflowRef}
-          onChange={(e) => setWorkflowRef(e.target.value)}
-          placeholder="workflow@1.0.0"
-        />
-      </label>
-      <label>
-        Voice profile
-        <input
-          type="text"
-          className="mono"
-          value={voiceProfileRef}
-          onChange={(e) => setVoiceProfileRef(e.target.value)}
-          placeholder="narrator@1.0.0"
-        />
-      </label>
-      <label>
-        Final recognized text
-        <textarea value={recognizedText} onChange={(e) => setRecognizedText(e.target.value)} />
-      </label>
-      {partialText && <p aria-label="Partial transcript">Partial: {partialText}</p>}
-      <div className="row">
+    <div role="group" aria-label="Voice session" className="voice-bar">
+      <div className="voice-row">
+        <span className={`chip ${voiceStateClass(state)}`}>{state}</span>
+        {voiceSessionId && <span className="voice-session mono">Voice session: {voiceSessionId}</span>}
         <button className="btn btn-primary" onClick={startSession} disabled={busy || state === "closed"}>
           Start voice session
         </button>
         <button
-          className="btn btn-secondary"
+          className="btn btn-secondary voice-ptt"
           onClick={startPushToTalk}
           disabled={busy || !voiceSessionId || state === "listening"}
         >
@@ -197,7 +189,33 @@ export function VoiceActivation({
           Interrupt
         </button>
       </div>
-      {error && <p role="alert">{error}</p>}
+      <div className="voice-row">
+        <label>
+          Default workflow
+          <input
+            type="text"
+            value={workflowRef}
+            onChange={(e) => setWorkflowRef(e.target.value)}
+            placeholder="workflow@1.0.0"
+          />
+        </label>
+        <label>
+          Voice profile
+          <input
+            type="text"
+            className="mono"
+            value={voiceProfileRef}
+            onChange={(e) => setVoiceProfileRef(e.target.value)}
+            placeholder="narrator@1.0.0"
+          />
+        </label>
+        <label>
+          Final recognized text
+          <textarea value={recognizedText} onChange={(e) => setRecognizedText(e.target.value)} />
+        </label>
+        {partialText && <span aria-label="Partial transcript">Partial: {partialText}</span>}
+        {error && <span role="alert">{error}</span>}
+      </div>
     </div>
   );
-}
+});

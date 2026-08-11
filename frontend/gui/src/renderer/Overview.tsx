@@ -27,17 +27,21 @@ export function Overview({ controlSummary, onLlmModels }: OverviewProps): React.
           <>
             <div>Profile: {readiness.profile_id ?? "unknown"}</div>
             {readiness.error && <div>Readiness error: {readiness.error}</div>}
-            <ul className="list">
+            <div className="stat-grid">
               {Object.entries(readiness.readiness).map(([name, result]) => (
-                <li key={name} className="row">
-                  <span className={`dot ${result.ready ? "state-ok" : "state-danger"}`} />
-                  <span>{name}</span>
-                  <span className="row-device">{result.device}</span>
-                  <span>{result.ready ? "ready" : "not ready"}</span>
-                  <span className="row-reason">({result.reason})</span>
-                </li>
+                <div key={name} className="stat-card">
+                  <div className="stat-label">
+                    <span className={`dot ${result.ready ? "state-ok" : "state-danger"}`} />
+                    {name}
+                  </div>
+                  <div className="stat-value">{result.device}</div>
+                  <div className="stat-sub">
+                    {result.ready ? "ready" : "not ready"}
+                    {result.reason ? ` — ${result.reason}` : ""}
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
             {readiness.tokens.length > 0 && <div>Tokens: {readiness.tokens.join(", ")}</div>}
             {readiness.inventory && <pre className="pre-scroll">{JSON.stringify(readiness.inventory, null, 2)}</pre>}
           </>

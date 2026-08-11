@@ -19,6 +19,28 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-10 21:00
+  - Host class(es): Linux/WSL2, AMD64
+  - Summary: Implemented ADR-0025 control-center look and usability for AWF-GUI — a token-based stylesheet, a top-bar shell rendering one view at a time with chat as the landing page, shared semantic state classes, an inline icon set, and the renderer split into per-view components. No new dependency and no protocol, IPC, or authorization change.
+  - Scope:
+    - `frontend/gui/src/renderer/styles.css`, `css.d.ts`, `index.tsx` (CSS import on the esbuild entry point), `index.html` (`./index.css` link)
+    - `frontend/gui/src/renderer/App.tsx` (shell, sticky top bar, `Views` nav with `aria-current`/pending badge, status bar, seven-view switch)
+    - `frontend/gui/src/renderer/{Overview,RunsView,ApprovalsView,ProposalReview,MemoryPanel,RegistryActions,ApprovalConfirmation,Dashboard}.tsx`
+    - `frontend/gui/src/renderer/Transcript.tsx` (chat window: title bar, auto-scrolling bubble stream, composer with mic + Send), `VoiceActivation.tsx` (voice bar)
+    - `frontend/gui/src/renderer/state.ts` (`stateClass` over ok/warn/danger/idle), `icons.tsx` (`makeIcon` 24×24 stroke set)
+    - `frontend/gui/src/main/main.ts` (window `backgroundColor: #070b12`, `minWidth`/`minHeight`), `src/main/ipc.ts`, `src/preload/preload.ts`
+    - `frontend/gui/tests/{App.nav.test.tsx,App.dashboard.test.tsx,Transcript.test.tsx,Dashboard.test.tsx,ipc.test.ts,RegistryActions.test.tsx}`
+    - `docs/adr/0025-control-center-look-usability.md`
+  - Validation:
+    - `npm --prefix frontend run build --workspaces` -> <fill>
+    - `npm --prefix frontend test --workspaces` -> shared <n>, CLI <n>, GUI <n>
+    - `dist/renderer/index.css` emitted and linked from `dist/renderer/index.html` -> <fill>
+    - manual launch: dark navy surface, chat as landing page, Status/Registry views mutually exclusive, accent focus ring on keyboard traversal -> <fill>
+  - Notes:
+    - `frontend/gui/package.json` gained no `dependencies`/`devDependencies` entry; the CSS ships through the existing esbuild renderer bundle with no loader configuration.
+    - The composer's Send appends the operator's text to the local transcript only — typed input does not submit a workflow turn; `VoiceActivation`/`onVoiceSubmitText` remains the only path that reaches the backend.
+    - Dark theme only; no `backdrop-filter` on the top bar (WSLg software compositors mis-render blurred surfaces); the readiness inventory still renders as a bounded `.pre-scroll` JSON block.
+
 - Timestamp: 2026-08-10 00:17
   - Host class(es): Linux/WSL2, AMD64
   - Summary: Fixed AWF-GUI backend spawn failure (`spawn awf ENOENT`) by resolving the `awf`/`awf-speech` venv binaries from the compiled main-process file location instead of `process.cwd()`, which npm workspace scripts leave pointed at `frontend/gui` rather than the repo root.

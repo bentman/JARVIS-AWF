@@ -27,9 +27,9 @@ function createClient(repoRoot: string): ProtocolClient {
 
 function createWindow(client: ProtocolClient, repoRoot: string): void {
   const win = new BrowserWindow({
-    width: 1000,
-    height: 700,
-    minWidth: 960,
+    width: 1360,
+    height: 820,
+    minWidth: 1180,
     minHeight: 640,
     backgroundColor: "#070b12",
     webPreferences: {

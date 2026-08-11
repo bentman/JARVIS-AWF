@@ -338,6 +338,12 @@ For a high-assurance Gate, the reviewer/adversary role's Model Profile SHOULD re
 
 A Workflow's `spec` MUST contain `inputSchema`, `outputSchema`, `budgets`, `nodes`, and `outputs`. The registry envelope MUST include `apiVersion`, `kind`, and `metadata` with `name`, `version`, and `digest` fields.
 
+Workflow `outputs` are rendered after successful execution from deterministic
+engine context. Built-in context keys include repair count, handoff hop count,
+and the last Verdict artifact id; successful node structured outputs MAY also
+be exposed as deterministic context keys for workflow outputs. A Run MUST fail
+if rendered outputs do not satisfy `outputSchema`.
+
 ### 12.2 Node types
 
 Eight node types, exactly:

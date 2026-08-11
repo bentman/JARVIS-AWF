@@ -9,6 +9,7 @@ export interface TranscriptEntry {
 export interface TranscriptProps {
   entries: TranscriptEntry[];
   workflowRef?: string;
+  workflowOptions?: string[];
   onWorkflowRefChange?: (workflowRef: string) => void;
   submitError?: string | null;
   submitting?: boolean;
@@ -48,6 +49,7 @@ function SendIcon(): React.JSX.Element {
 export function Transcript({
   entries,
   workflowRef = "",
+  workflowOptions = [],
   onWorkflowRefChange,
   submitError,
   submitting = false,
@@ -114,7 +116,15 @@ export function Transcript({
           onChange={(e) => onWorkflowRefChange?.(e.target.value)}
           placeholder="workflow@1.0.0"
           aria-label="Workflow"
+          list={workflowOptions.length > 0 ? "chat-workflow-options" : undefined}
         />
+        {workflowOptions.length > 0 && (
+          <datalist id="chat-workflow-options">
+            {workflowOptions.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+        )}
         <input
           className="composer-input"
           value={draft}

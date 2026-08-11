@@ -28,7 +28,7 @@ def _root_path(repo_root: Path, worktree: Path, run_id: str, root: str) -> Path:
         return worktree.resolve(strict=False)
     if root == "scratch":
         return scratch_path(repo_root, run_id).resolve(strict=False)
-    if root.startswith("/"):
+    if Path(root).is_absolute():
         return Path(root).resolve(strict=False)
     raise MachinePolicyError(f"unsupported root {root!r}")
 

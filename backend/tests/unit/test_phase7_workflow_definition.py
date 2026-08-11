@@ -80,3 +80,19 @@ def test_load_real_example_workflow(repo_root):
     assert workflow.ref == "produce-gate-repair-demo@1.0.0"
     assert [n["id"] for n in workflow.nodes] == ["produce", "check", "repair"]
     assert workflow.budgets["maxRepairIterations"] == 3
+
+
+def test_load_default_assistant_workflow(repo_root):
+    workflow_path = repo_root / "config" / "app_registry" / "workflows" / "assistant-default" / "1.0.0.yaml"
+    workflow = load_workflow(workflow_path)
+    assert workflow.ref == "assistant-default@1.0.0"
+    assert list(workflow.nodes) == [
+        {
+            "id": "reply",
+            "type": "activity",
+            "function": "assistant_reply",
+            "args": {"objective": "{{ input.objective }}"},
+            "next": None,
+        }
+    ]
+    assert workflow.outputs["response_text"] == "{{ engine.reply_response_text }}"

@@ -20,10 +20,13 @@ export interface VoiceSubmitTextResult {
   recognized_text: string;
   response_text: string;
   state: VoiceSessionState;
+  run?: { run_id: string };
   voice?: { voice_profile_ref: string; voice_id: string };
 }
 
 export interface VoiceActivationProps {
+  defaultWorkflowRef?: string;
+  workflowOptions?: string[];
   onSessionStart: (title?: string, wakeEnabled?: boolean) => Promise<VoiceSessionResult>;
   onPushToTalkStart: (voiceSessionId: string, turnId: string) => Promise<VoiceSessionResult>;
   onPushToTalkStop: (voiceSessionId: string, turnId: string) => Promise<VoiceSessionResult>;
@@ -61,6 +64,8 @@ export interface VoiceActivationHandle {
 
 export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActivationProps>(
   function VoiceActivation({
+    defaultWorkflowRef = "",
+    workflowOptions = [],
     onSessionStart,
     onPushToTalkStart,
     onPushToTalkStop,
@@ -70,7 +75,7 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
   const [voiceSessionId, setVoiceSessionId] = useState<string | null>(null);
   const [turnId, setTurnId] = useState<string>(nextTurnId());
   const [state, setState] = useState<VoiceSessionState>("idle");
-  const [workflowRef, setWorkflowRef] = useState("");
+  const [workflowRef, setWorkflowRef] = useState(defaultWorkflowRef);
   const [recognizedText, setRecognizedText] = useState("");
   const [voiceProfileRef, setVoiceProfileRef] = useState("narrator@1.0.0");
   const [partialText, setPartialText] = useState("");
@@ -197,7 +202,15 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
             value={workflowRef}
             onChange={(e) => setWorkflowRef(e.target.value)}
             placeholder="workflow@1.0.0"
+            list={workflowOptions.length > 0 ? "voice-workflow-options" : undefined}
           />
+          {workflowOptions.length > 0 && (
+            <datalist id="voice-workflow-options">
+              {workflowOptions.map((option) => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
+          )}
         </label>
         <label>
           Voice profile

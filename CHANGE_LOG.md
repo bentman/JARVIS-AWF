@@ -19,6 +19,72 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-10 23:06
+  - Host class(es): Windows AMD64
+  - Summary: Reviewed the assistant usability sweep for contract drift and aligned the active AWF spec plus ADR-0025 with activity-output response rendering and the widened GUI/CLI/backend assistant path.
+  - Scope: `docs/AGENTIC_WORKFLOW_FABRIC_SPEC.md`, `docs/adr/0025-control-center-look-usability.md`, `backend/tests/unit/test_baseline_io_schema.py`, `CHANGE_LOG.md`.
+  - Validation: `backend\.venv\Scripts\python.exe -m ruff check backend\tests\unit\test_baseline_io_schema.py` passed; `backend\.venv\Scripts\python.exe -m pytest backend\tests\unit\test_baseline_io_schema.py backend\tests\unit\test_phase7_workflow_definition.py -q -o cache_dir=cache/temp/pytest-cache` -> 17 passed outside the sandbox after the known Windows temp permission issue; registry validation still passed for `assistant-default@1.0.0` and `assistant_reply@1.0.0`; `git diff --check` passed; `git check-attr` showed `text: auto` and `eol: lf` for touched docs/test files.
+
+- Timestamp: 2026-08-10 23:03
+  - Host class(es): Windows AMD64
+  - Summary: Made the default assistant path first-run usable by adding a local `assistant-default@1.0.0` workflow, a deterministic `assistant_reply` activity, activity-output response rendering, and `awf run --objective` for quick core CLI use.
+  - Scope: `backend/src/awf/{cli/main.py,cli/core_ops.py,workflow/activities.py,workflow/engine.py,workflow/io_schema.py}`, `config/app_registry/{capabilities/assistant_reply/1.0.0.yaml,workflows/assistant-default/1.0.0.yaml}`, `backend/tests/{integration/test_baseline_activity_node.py,integration/test_core_ops_run_start.py,integration/test_phase10_cli_main.py,unit/test_phase7_workflow_definition.py}`, `frontend/cli/src/commands.ts`, `frontend/gui/src/renderer/App.tsx`, `frontend/gui/tests/{App.nav.test.tsx,App.voiceRoundTrip.test.tsx}`, `docs/{OperatorsGuide.md,adr/0025-control-center-look-usability.md}`.
+  - Validation: `backend\.venv\Scripts\python.exe -m ruff check ...` passed for touched backend source/tests; focused backend pytest sets passed outside the sandbox after the known Windows temp permission failure (`18 passed`, `25 passed`); `npm --prefix frontend run build --workspaces` passed; `npm --prefix frontend test --workspaces` -> shared 12 passed, CLI 43 passed, GUI 62 passed; registry validation passed for `assistant-default@1.0.0` and `assistant_reply@1.0.0`; `git diff --check` passed.
+
+- Timestamp: 2026-08-10 22:57
+  - Host class(es): Windows AMD64
+  - Summary: Added repo-level LF normalization, made CLI plain-assistant requests honor `settings.defaultWorkflow`, and preselected submitted GUI Run details for faster operator inspection.
+  - Scope: `.gitattributes`, `frontend/cli/src/App.tsx`, `frontend/cli/tests/commands.test.ts`, `frontend/gui/src/renderer/{App,VoiceActivation}.tsx`, `frontend/gui/tests/{App.nav.test.tsx,App.voiceRoundTrip.test.tsx}`, `docs/adr/0025-control-center-look-usability.md`.
+  - Validation: `git check-attr text eol -- frontend\cli\src\App.tsx frontend\gui\src\renderer\App.tsx backend\src\awf\cli\core_ops.py CHANGE_LOG.md .gitattributes` showed `text: auto` and `eol: lf`; `npm --prefix frontend --workspace awf-cli test -- commands.test.ts App.test.tsx` -> 37 passed; `npm --prefix frontend --workspace awf-gui test -- App.nav.test.tsx App.voiceRoundTrip.test.tsx` -> 14 passed; `npm --prefix frontend run build --workspaces` passed; `npm --prefix frontend test --workspaces` -> shared 12 passed, CLI 43 passed, GUI 62 passed.
+
+- Timestamp: 2026-08-10 22:52
+  - Host class(es): Windows AMD64
+  - Summary: Made regular assistant use work end-to-end by letting CLI plain text start the default workflow and by adapting voice/assistant metadata for strict single-string workflow schemas.
+  - Scope: `backend/src/awf/cli/core_ops.py`, `backend/tests/integration/test_core_ops_run_start.py`, `frontend/cli/src/{App,commands}.ts(x)`, `frontend/cli/tests/{App.test.tsx,commands.test.ts}`, `docs/adr/0025-control-center-look-usability.md`.
+  - Validation: `backend\.venv\Scripts\python.exe -m ruff check backend\src\awf\cli\core_ops.py backend\tests\integration\test_core_ops_run_start.py` passed; `backend\.venv\Scripts\python.exe -m pytest backend\tests\integration\test_core_ops_run_start.py -q -o cache_dir=cache/temp/pytest-cache` -> 9 passed outside the sandbox after the known Windows temp permission failure; `npm --prefix frontend --workspace awf-cli test -- commands.test.ts App.test.tsx` -> 36 passed; `npm --prefix frontend run build --workspace awf-cli` passed.
+
+- Timestamp: 2026-08-10 22:45
+  - Host class(es): Windows AMD64
+  - Summary: Made chat and voice workflow selection practical by sharing the default workflow, offering registry-backed workflow suggestions, and adapting chat `objective` input to single-string workflow schemas such as `topic`.
+  - Scope: `backend/src/awf/cli/core_ops.py`, `backend/tests/integration/test_core_ops_run_start.py`, `frontend/gui/src/renderer/{App,Transcript,VoiceActivation}.tsx`, `frontend/gui/tests/{App.nav.test.tsx,App.voiceRoundTrip.test.tsx,setup.ts}`, `docs/adr/0025-control-center-look-usability.md`.
+  - Validation: `backend\.venv\Scripts\python.exe -m ruff check backend\src\awf\cli\core_ops.py backend\tests\integration\test_core_ops_run_start.py` passed; `backend\.venv\Scripts\python.exe -m pytest backend\tests\integration\test_core_ops_run_start.py -q -o cache_dir=cache/temp/pytest-cache` -> 8 passed; `npm --prefix frontend --workspace awf-gui test -- App.nav.test.tsx App.voiceRoundTrip.test.tsx Transcript.test.tsx` -> 19 passed; `npm --prefix frontend run build --workspace awf-gui` passed; `npm --prefix frontend test --workspaces` -> shared 12 passed, CLI 41 passed, GUI 62 passed.
+
+- Timestamp: 2026-08-10 22:41
+  - Host class(es): Windows AMD64
+  - Summary: Added a core `outputs.response_text` fallback for Run results so GUI/voice surfaces receive useful transcript text even when a workflow does not declare a response output.
+  - Scope: `backend/src/awf/cli/core_ops.py`, `backend/tests/integration/test_core_ops_run_start.py`, `docs/adr/0025-control-center-look-usability.md`.
+  - Validation: `backend\.venv\Scripts\python.exe -m ruff check backend\src\awf\cli\core_ops.py backend\tests\integration\test_core_ops_run_start.py` passed; `backend\.venv\Scripts\python.exe -m pytest backend\tests\integration\test_core_ops_run_start.py -q -o cache_dir=cache/temp/pytest-cache` -> 7 passed; `npm --prefix frontend --workspace awf-gui test -- App.nav.test.tsx` -> 10 passed.
+
+- Timestamp: 2026-08-10 22:37
+  - Host class(es): Windows AMD64
+  - Summary: Gave AWF-GUI typed chat a runnable shipped default workflow (`produce-gate-repair-demo@1.0.0`) while preserving manual workflow override and the cleared-field error path.
+  - Scope: `frontend/gui/src/renderer/App.tsx`, `frontend/gui/tests/App.nav.test.tsx`, `docs/adr/0025-control-center-look-usability.md`.
+  - Validation: `npm --prefix frontend --workspace awf-gui test -- App.nav.test.tsx Transcript.test.tsx` -> 15 passed; `npm --prefix frontend run build --workspace awf-gui` passed; `npm --prefix frontend test --workspaces` -> shared 12 passed, CLI 41 passed, GUI 61 passed.
+
+- Timestamp: 2026-08-10 22:35
+  - Host class(es): Windows AMD64
+  - Summary: Swept backend cross-platform execution policy so shipped Python gate commands and governed `command_run` activities resolve through the repo venv/current interpreter, and platform-native absolute allowed roots work on Windows and Linux.
+  - Scope: `backend/src/awf/cli/core_ops.py`, `backend/src/awf/machine/{activities,policy}.py`, `backend/tests/{integration/test_core_ops_run_start.py,integration/test_machine_activities.py,unit/test_machine_policy.py}`, `docs/adr/0021-governed-reach-into-the-machine.md`.
+  - Validation: `backend\.venv\Scripts\python.exe -m ruff check backend\src\awf\cli\core_ops.py backend\src\awf\machine\activities.py backend\src\awf\machine\policy.py backend\tests\integration\test_core_ops_run_start.py backend\tests\integration\test_machine_activities.py backend\tests\unit\test_machine_policy.py` passed; `backend\.venv\Scripts\python.exe -m pytest backend\tests\integration\test_core_ops_run_start.py backend\tests\integration\test_machine_activities.py backend\tests\unit\test_machine_policy.py -q -o cache_dir=cache/temp/pytest-cache` -> 18 passed; `git diff --check` passed.
+
+- Timestamp: 2026-08-10 22:29
+  - Host class(es): Windows AMD64
+  - Summary: Moved AWF-GUI live voice response audio output path selection from the renderer to the Electron main process, using the host temp directory for Windows/Linux compatibility.
+  - Scope: `frontend/gui/src/main/voicePipeline.ts`, `frontend/gui/src/preload/preload.ts`, `frontend/gui/src/renderer/{App,index}.tsx`, `frontend/gui/tests/{voicePipeline.test.ts,App.voiceRoundTrip.test.tsx,setup.ts}`.
+  - Validation: `npm --prefix frontend --workspace awf-gui test -- voicePipeline.test.ts App.voiceRoundTrip.test.tsx` -> 13 passed; `npm --prefix frontend run build --workspace awf-gui` passed; `npm --prefix frontend test --workspaces` -> shared 12 passed, CLI 41 passed, GUI 61 passed.
+
+- Timestamp: 2026-08-10 22:23
+  - Host class(es): Windows AMD64
+  - Summary: Updated AWF-GUI typed chat to show workflow response text or failure details in the shared transcript instead of only a generic run status.
+  - Scope: `frontend/gui/src/renderer/App.tsx`, `frontend/gui/tests/App.nav.test.tsx`.
+  - Validation: `npm --prefix frontend --workspace awf-gui test -- App.nav.test.tsx Transcript.test.tsx` -> 15 passed; `npm --prefix frontend run build --workspace awf-gui` passed; `npm --prefix frontend test --workspaces` -> shared 12 passed, CLI 41 passed, GUI 59 passed.
+
+- Timestamp: 2026-08-10 22:19
+  - Host class(es): Windows AMD64
+  - Summary: Made gate check execution work across Windows and Linux repo venv layouts with explicit platform markers, and auto-escalated risky gate checks to the high-risk Trifecta tier with an audit event.
+  - Scope: `backend/src/awf/cli/core_ops.py`, `backend/src/awf/gates/gate_node.py`, `backend/tests/integration/test_core_ops_run_start.py`.
+  - Validation: `backend\.venv\Scripts\python.exe -m ruff check backend\src\awf\cli\core_ops.py backend\src\awf\gates\gate_node.py backend\tests\integration\test_core_ops_run_start.py` passed; `backend\.venv\Scripts\python.exe -m pytest backend\tests\integration\test_core_ops_run_start.py backend\tests\integration\test_phase8_gate_node.py -q -o cache_dir=cache/temp/pytest-cache` -> 12 passed; `git diff --check` passed.
+
 - Timestamp: 2026-08-10 22:06
   - Host class(es): Windows AMD64
   - Summary: Wired AWF-GUI typed chat to start real durable Runs through the shared `awf/run.start` protocol path instead of appending local-only transcript text.

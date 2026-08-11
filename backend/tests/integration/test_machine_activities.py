@@ -182,6 +182,39 @@ def test_command_run_executes_approved_absolute_command_and_captures_output(conn
 
     assert output == {"returncode": 0, "stdout": "ok\n", "stderr": ""}
 
+    create_step(conn, step_id="step-command-python-alias", run_id="run-1", node_id="command-python-alias")
+    alias_capability = _capability(
+        "command_run",
+        "execute",
+        "R1",
+        "never",
+        {
+            "command": {
+                "executable": "python3.12",
+                "allowedArgs": [["-c", "*"]],
+                "cwdRoot": "worktree",
+                "timeoutSeconds": 5,
+                "maxOutputBytes": 1024,
+            }
+        },
+    )
+
+    alias_output = run_machine_activity(
+        conn,
+        repo_root=repo_root,
+        worktree_path=worktree,
+        run_id="run-1",
+        step_id="step-command-python-alias",
+        node={
+            "id": "command-python-alias",
+            "function": "command_run",
+            "args": {"argv": ["python3.12", "-c", "print('alias-ok')"]},
+        },
+        capability=alias_capability,
+    )
+
+    assert alias_output == {"returncode": 0, "stdout": "alias-ok\n", "stderr": ""}
+
 
 def test_network_fetch_validates_policy_and_can_retain_body_artifact(conn, machine_root, monkeypatch):
     repo_root, worktree = machine_root

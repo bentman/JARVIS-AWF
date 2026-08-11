@@ -26,22 +26,27 @@ function liveVoiceProps() {
       state: "speaking",
       recognized_text: "Hello world.",
       response_text: "Workflow voice-demo@1.0.0 finished with status SUCCEEDED.",
+      run: { run_id: "run-voice-1" },
       voice: { voice_profile_ref: "narrator@1.0.0", voice_id: "bf_isabella" },
     }),
+    onVoiceSpeakText: vi.fn().mockResolvedValue({ response_audio_path: "host-temp/awf-gui-live-response.wav" }),
   };
 }
 
 describe("App live voice session (text-first invariant)", () => {
   it("renders recognized voice text and response text in the visible transcript", async () => {
     const props = liveVoiceProps();
-    render(<App onApprove={vi.fn()} onReject={vi.fn()} {...props} />);
+    const onControlRunDetail = vi.fn().mockResolvedValue({
+      run: { run_id: "run-voice-1", workflow_ref: "voice-demo@1.0.0", status: "SUCCEEDED", steps: [] },
+      artifacts: [],
+      verdicts: [],
+      timeline: {},
+    });
+    render(<App onApprove={vi.fn()} onReject={vi.fn()} {...props} onControlRunDetail={onControlRunDetail} />);
 
     fireEvent.click(screen.getByText("Start voice session"));
     expect(await screen.findByText(/Voice session: vs-1/)).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("Default workflow"), {
-      target: { value: "voice-demo@1.0.0" },
-    });
     fireEvent.change(screen.getByRole("textbox", { name: "Final recognized text" }), {
       target: { value: "Hello world." },
     });
@@ -50,12 +55,17 @@ describe("App live voice session (text-first invariant)", () => {
     expect(props.onVoiceSubmitText).toHaveBeenCalledWith(
       "vs-1",
       "Hello world.",
-      "voice-demo@1.0.0",
+      "assistant-default@1.0.0",
       "narrator@1.0.0",
       expect.stringMatching(/^turn-/),
     );
     expect(await screen.findByText(/Operator \(voice\):/)).toBeTruthy();
     expect(screen.getByText(/Workflow voice-demo@1\.0\.0 finished/)).toBeTruthy();
+    expect(props.onVoiceSpeakText).toHaveBeenCalledWith(
+      "Workflow voice-demo@1.0.0 finished with status SUCCEEDED.",
+      "bf_isabella",
+    );
+    expect(onControlRunDetail).toHaveBeenCalledWith("run-voice-1");
   });
 
   it("shows a clear error when no default workflow is supplied", async () => {
@@ -64,6 +74,9 @@ describe("App live voice session (text-first invariant)", () => {
 
     fireEvent.click(screen.getByText("Start voice session"));
     expect(await screen.findByText(/Voice session: vs-1/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Default workflow"), {
+      target: { value: "" },
+    });
     fireEvent.change(screen.getByRole("textbox", { name: "Final recognized text" }), {
       target: { value: "Hello world." },
     });

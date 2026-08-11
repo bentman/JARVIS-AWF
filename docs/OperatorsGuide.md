@@ -3,7 +3,7 @@
 A plain-language guide to using JARVIS-AWF day to day.
 This is not the technical spec — that lives in `docs/AGENTIC_WORKFLOW_FABRIC_SPEC.md` and `docs/adr/`.
 
-**What AWF is, in one sentence:** you describe work, AWF runs AI coding agents against it in a safe sandbox, records everything, verifies the result, and asks *you* before anything risky or permanent happens.
+**What AWF is, in one sentence:** you describe work, AWF starts a durable workflow for it, records everything, verifies the result, and asks *you* before anything risky or permanent happens.
 
 **The one rule to remember:** AWF proposes, you approve. Nothing gets published, merged, or run with elevated risk without your explicit sign-off.
 
@@ -26,7 +26,7 @@ Do this once per machine.
    → Fetches the wake-word, VAD, speech-to-text, and text-to-speech models for your hardware. `awf-speech models verify` checks them later.
 5. **Frontends (optional):** `npm --prefix frontend install` then `npm --prefix frontend run build` (Node 26+).
 
-You also need at least one CLI coding agent installed and logged in with your own account (Claude Code, Codex CLI, Antigravity CLI, GitHub Copilot CLI, or Cline CLI). AWF drives them; it does not provide accounts for them.
+You also need at least one CLI coding agent installed and logged in with your own account (Claude Code, Codex CLI, Antigravity CLI, GitHub Copilot CLI, or Cline CLI) for workflows that delegate implementation work. The default assistant workflow runs locally without those CLIs, so first-run chat and control-center checks can work before agent setup is complete.
 
 ---
 
@@ -37,17 +37,19 @@ All three talk to the same core. Nothing one can do that another can't.
 | Surface | Start it with | Best for |
 |---|---|---|
 | **Core CLI** (`awf ...`) | already installed by setup | scripting, quick one-off commands |
-| **Terminal app** (AWF-CLI) | `node frontend/cli/dist/cli.js` | day-to-day driving with `/slash` commands |
+| **Terminal app** (AWF-CLI) | `node frontend/cli/dist/cli.js` | day-to-day assistant use with plain text plus `/slash` commands |
 | **Desktop app** (AWF-GUI) | `npm --prefix frontend run dev` | the control center: dashboard, approvals, voice, memory |
 
-In the terminal app, type `/help` to see every command.
+In the terminal app, type a normal request to use the default assistant workflow, or type `/help` to see every command.
 
 ---
 
 ## 3. Running work
 
-**Do:** `awf run <workflow>@<version>` (e.g. `awf run produce-gate-repair-demo@1.0.0`)
+**Do:** `awf run <workflow>@<version>` (e.g. `awf run assistant-default@1.0.0 --objective "check the system"`)
 **Get:** a Run. The agent works in its own isolated copy of the repo (a Git worktree), so your working files are never touched. Every step is saved as it completes.
+
+Use `assistant-default@1.0.0` to confirm the app is accepting requests end-to-end. Use implementation workflows such as `produce-gate-repair-demo@1.0.0` after the relevant agent CLIs are installed and authenticated.
 
 Then:
 - `awf status <run-id>` → where the Run is, step by step.
@@ -125,7 +127,7 @@ Corrections are new versions — history isn't silently rewritten.
 
 AWF can propose changes to its own repository, but **it can never merge them itself.**
 
-1. Run the self-improvement workflow (e.g. `awf run self-improvement@1.0.0` with your objective as input). The change is made in an isolated worktree and reviewed by a gate.
+1. Run the self-improvement workflow (e.g. `awf run self-improvement@1.0.0 --objective "describe the fix"`). The change is made in an isolated worktree and reviewed by a gate.
 2. `awf improvement prepare <run-id>` → turns the Run's diff into an Improvement Proposal.
 3. `awf improvement show <id>` → see the exact diff, verdict, and evidence.
 4. `awf improvement request-merge <id>` → creates a merge approval for that exact diff.

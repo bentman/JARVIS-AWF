@@ -34,6 +34,23 @@ def test_hardware_probe_activity_runs_for_real_and_persists_the_step(conn):
     assert resolved_event is not None
 
 
+def test_assistant_reply_activity_returns_operator_visible_text(conn):
+    create_step(conn, step_id="step-1", run_id="run-1", node_id="reply")
+    executor = make_activity_node_executor()
+
+    output = executor(
+        conn,
+        "run-1",
+        "step-1",
+        {"id": "reply", "type": "activity", "function": "assistant_reply", "args": {"objective": "triage runs"}},
+    )
+
+    assert "triage runs" in output["response_text"]
+    row = conn.execute("SELECT status, output_json FROM steps WHERE step_id = 'step-1'").fetchone()
+    assert row["status"] == "SUCCEEDED"
+    assert "triage runs" in row["output_json"]
+
+
 def test_unknown_activity_name_raises_with_invalid_input_failure_class(conn):
     create_step(conn, step_id="step-1", run_id="run-1", node_id="bad")
     executor = make_activity_node_executor()

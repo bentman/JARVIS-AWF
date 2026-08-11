@@ -1,12 +1,14 @@
 """Enforces a WorkflowDefinition's `inputSchema`/`outputSchema` (Section 12.1)
 against real values.
 
-`outputs` templates are `{{ engine.<name> }}` strings referencing the small,
-fixed set of values `workflow/engine.py` tracks across a Run
-(`repairs_used`, `hops_used`, `verdict_artifact_id`); rendering happens once,
-at Run completion, against whatever the engine actually accumulated - an
-unreferenced name renders `None`, which `outputSchema` then either accepts
-or correctly rejects, same as any other value.
+`outputs` templates are `{{ engine.<name> }}` strings referencing values
+`workflow/engine.py` tracks across a Run. Built-in engine keys include
+`repairs_used`, `hops_used`, and `verdict_artifact_id`; node outputs are also
+available as `<node_id>_<output_key>` with non-word characters normalized to
+underscores. Rendering happens once, at Run completion, against whatever the
+engine actually accumulated - an unreferenced name renders `None`, which
+`outputSchema` then either accepts or correctly rejects, same as any other
+value.
 """
 
 import re

@@ -1,10 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
-import { CommandError, dispatchCommand, type CommandClient } from "../src/commands.js";
+import {
+  DEFAULT_ASSISTANT_WORKFLOW_REF,
+  CommandError,
+  dispatchAssistantInput,
+  dispatchCommand,
+  type CommandClient,
+} from "../src/commands.js";
 import { DEFAULT_SETTINGS } from "../src/settings.js";
 
 function makeFakeClient(overrides: Partial<CommandClient> = {}): CommandClient {
   return {
-    runStart: vi.fn().mockResolvedValue({ run_id: "run-1", status: "SUCCEEDED" }),
+    runStart: vi.fn().mockResolvedValue({
+      run_id: "run-1",
+      status: "SUCCEEDED",
+      outputs: { response_text: "Default assistant response." },
+    }),
     runStatus: vi.fn().mockResolvedValue({ run_id: "run-1", status: "SUCCEEDED", steps: [] }),
     runList: vi.fn().mockResolvedValue([]),
     runResume: vi.fn().mockResolvedValue([]),
@@ -59,7 +69,33 @@ describe("dispatchCommand", () => {
     const client = makeFakeClient();
     const result = await dispatchCommand(client, "/run demo@1.0.0", DEFAULT_SETTINGS);
     expect(client.runStart).toHaveBeenCalledWith("demo@1.0.0");
-    expect(result).toEqual({ kind: "json", data: { run_id: "run-1", status: "SUCCEEDED" } });
+    expect(result).toEqual({
+      kind: "json",
+      data: {
+        run_id: "run-1",
+        status: "SUCCEEDED",
+        outputs: { response_text: "Default assistant response." },
+      },
+    });
+  });
+
+  it("plain assistant input starts the default workflow with objective text", async () => {
+    const client = makeFakeClient();
+    const result = await dispatchAssistantInput(client, "summarize the active run", DEFAULT_ASSISTANT_WORKFLOW_REF);
+
+    expect(client.runStart).toHaveBeenCalledWith(DEFAULT_ASSISTANT_WORKFLOW_REF, {
+      objective: "summarize the active run",
+    });
+    expect(result).toEqual({ kind: "text", text: "Default assistant response. (run-1)" });
+  });
+
+  it("plain assistant input can use the configured default workflow", async () => {
+    const client = makeFakeClient();
+    await dispatchAssistantInput(client, "summarize the active run", "operator-default@2.0.0");
+
+    expect(client.runStart).toHaveBeenCalledWith("operator-default@2.0.0", {
+      objective: "summarize the active run",
+    });
   });
 
   it("/run without an argument raises CommandError", async () => {

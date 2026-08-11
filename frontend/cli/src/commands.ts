@@ -55,7 +55,10 @@ export type CommandResult =
 
 export class CommandError extends Error {}
 
+export const DEFAULT_ASSISTANT_WORKFLOW_REF = "assistant-default@1.0.0";
+
 export const HELP_TEXT = `
+Plain text                            Ask the default assistant workflow
 /help                                 List commands and keybindings
 /run <workflow>@<version>             Start a Run
 /status <run-id>                      Run state, step progress, budgets
@@ -104,6 +107,26 @@ export const HELP_TEXT = `
 /clear                                Clear the scrollback
 /quit                                 Exit
 `.trim();
+
+function assistantResponseText(workflowRef: string, result: Record<string, unknown>): string {
+  const outputs = result.outputs as Record<string, unknown> | undefined;
+  if (typeof outputs?.response_text === "string") return outputs.response_text;
+  if (typeof result.reason === "string") return result.reason;
+  if (typeof result.error === "string") return result.error;
+  return `Workflow ${workflowRef} finished with status ${String(result.status ?? "UNKNOWN")}.`;
+}
+
+export async function dispatchAssistantInput(
+  client: CommandClient,
+  text: string,
+  workflowRef = DEFAULT_ASSISTANT_WORKFLOW_REF,
+): Promise<CommandResult> {
+  const trimmed = text.trim();
+  if (!trimmed) throw new CommandError("assistant input is empty");
+  const result = (await client.runStart(workflowRef, { objective: trimmed })) as Record<string, unknown>;
+  const runId = typeof result.run_id === "string" ? ` (${result.run_id})` : "";
+  return { kind: "text", text: `${assistantResponseText(workflowRef, result)}${runId}` };
+}
 
 const REGISTRY_KIND_BY_COMMAND: Record<string, string> = {
   agents: "agents",

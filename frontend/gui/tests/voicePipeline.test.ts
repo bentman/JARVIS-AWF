@@ -1,4 +1,6 @@
 import { EventEmitter } from "node:events";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const spawnMock = vi.fn();
@@ -185,6 +187,35 @@ describe("runVoiceSpeakText", () => {
       response_audio_path: "/tmp/live.wav",
     });
   });
+
+  it("defaults response speech output to the host temp directory", async () => {
+    const { runVoiceSpeakText } = await import("../src/main/voicePipeline.js");
+    const child = makeFakeChild();
+    spawnMock.mockReturnValue(child);
+    const expectedPath = join(tmpdir(), "awf-gui-live-response.wav");
+
+    const promise = runVoiceSpeakText({
+      cwd: "/repo",
+      text: "Hello world.",
+      voiceId: "bf_isabella",
+    });
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      "awf-speech",
+      ["synthesize", "Hello world.", "--voice-id", "bf_isabella", "--response-audio-out", expectedPath],
+      { cwd: "/repo" },
+    );
+
+    child.stdout.emit(
+      "data",
+      Buffer.from(
+        JSON.stringify({ response_text: "Hello world.", voice_id: "bf_isabella", response_audio_path: expectedPath }),
+      ),
+    );
+    child.emit("close", 0);
+
+    await promise;
+  });
 });
 
 describe("registerVoiceIpcHandler", () => {
@@ -310,6 +341,35 @@ describe("registerVoiceSpeakIpcHandler", () => {
     child.stdout.emit(
       "data",
       Buffer.from(JSON.stringify({ response_text: "hi", voice_id: "bf_isabella", response_audio_path: "/tmp/out.wav" })),
+    );
+    child.emit("close", 0);
+
+    await promise;
+  });
+
+  it("lets the main process choose the response speech output path when omitted", async () => {
+    const { registerVoiceSpeakIpcHandler, VOICE_SESSION_CHANNELS } = await import("../src/main/voicePipeline.js");
+    const child = makeFakeChild();
+    spawnMock.mockReturnValue(child);
+    const expectedPath = join(tmpdir(), "awf-gui-live-response.wav");
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    const ipcMain = {
+      handle: (channel: string, listener: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, listener);
+      },
+    };
+
+    registerVoiceSpeakIpcHandler(ipcMain, { command: "awf-speech", cwd: "/repo" });
+    const promise = handlers.get(VOICE_SESSION_CHANNELS.speakText)?.({}, "hi", "bf_isabella");
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      "awf-speech",
+      ["synthesize", "hi", "--voice-id", "bf_isabella", "--response-audio-out", expectedPath],
+      { cwd: "/repo" },
+    );
+    child.stdout.emit(
+      "data",
+      Buffer.from(JSON.stringify({ response_text: "hi", voice_id: "bf_isabella", response_audio_path: expectedPath })),
     );
     child.emit("close", 0);
 

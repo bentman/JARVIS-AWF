@@ -23,6 +23,14 @@ def test_render_outputs_resolves_engine_template():
     assert rendered == {"repairs": 2}
 
 
+def test_render_outputs_resolves_node_output_context():
+    rendered = render_outputs(
+        {"response_text": "{{ engine.reply_response_text }}"},
+        {"reply_response_text": "Assistant response."},
+    )
+    assert rendered == {"response_text": "Assistant response."}
+
+
 def test_render_outputs_passes_through_literal_values():
     rendered = render_outputs({"note": "static text"}, {})
     assert rendered == {"note": "static text"}

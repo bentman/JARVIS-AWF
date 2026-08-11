@@ -78,6 +78,7 @@ EXECUTABLE_NODE_TYPES = ("activity", "agent", "gate", "handoff", "approval", "su
 # generic outer Step created for them by the engine.
 SELF_STEPPING_NODE_TYPES = ("handoff", "loop")
 _INPUT_TEMPLATE_RE = re.compile(r"\{\{\s*input\.(\w+)\s*\}\}")
+_NON_WORD_RE = re.compile(r"\W+")
 
 
 class WorkflowEngineError(RuntimeError):
@@ -86,6 +87,22 @@ class WorkflowEngineError(RuntimeError):
 
 def _render_input_templates(value: str, workflow_input: dict) -> str:
     return _INPUT_TEMPLATE_RE.sub(lambda match: str(workflow_input.get(match.group(1), "")), value)
+
+
+def _render_input_templates_in_value(value, workflow_input: dict):
+    if isinstance(value, str):
+        return _render_input_templates(value, workflow_input)
+    if isinstance(value, list):
+        return [_render_input_templates_in_value(item, workflow_input) for item in value]
+    if isinstance(value, dict):
+        return {key: _render_input_templates_in_value(item, workflow_input) for key, item in value.items()}
+    return value
+
+
+def _engine_context_key(node_id: str, output_key: str) -> str:
+    node_part = _NON_WORD_RE.sub("_", node_id).strip("_")
+    output_part = _NON_WORD_RE.sub("_", output_key).strip("_")
+    return f"{node_part}_{output_part}"
 
 
 def _synthesized_capability_for_node(node: dict, adapter_name: str) -> CapabilityRecord:
@@ -199,8 +216,13 @@ def make_activity_node_executor(
     activity_registry: dict = ACTIVITY_REGISTRY,
     repo_root: Path | None = None,
     worktree_path: Path | None = None,
+    workflow_input: dict | None = None,
 ) -> NodeExecutor:
     def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
+        rendered_node = {
+            **node,
+            "args": _render_input_templates_in_value(node.get("args", {}), dict(workflow_input or {})),
+        }
         if repo_root is not None and node["function"] in {"fs_read", "fs_write", "fs_delete", "command_run", "network_fetch"}:
             from awf.machine.activities import run_machine_activity
 
@@ -211,7 +233,7 @@ def make_activity_node_executor(
                 worktree_path=worktree_path or repo_root,
                 run_id=run_id,
                 step_id=step_id,
-                node=node,
+                node=rendered_node,
                 capability=capability,
             )
 
@@ -234,7 +256,7 @@ def make_activity_node_executor(
                         f"blocked by Capability Guard: {decision.value}",
                         failure_class="POLICY_DENIED",
                     )
-            return activity_fn(conn, node.get("args", {}))
+            return activity_fn(conn, rendered_node.get("args", {}))
 
         return run_step(conn, step_id=step_id, run_id=run_id, fn=fn, input_payload={})
 
@@ -261,6 +283,7 @@ def run_workflow_definition(
     repairs_used = 0
     hops_used = 0
     last_verdict_artifact_id = None
+    node_output_context = {}
     attempt_counts: dict[str, int] = {}
 
     conn.execute(
@@ -301,6 +324,9 @@ def run_workflow_definition(
 
         if "hops_used" in output:
             hops_used = output["hops_used"]
+        if isinstance(output, dict):
+            for output_key, value in output.items():
+                node_output_context[_engine_context_key(current_id, output_key)] = value
 
         if output.get("waiting_input"):
             return {"status": "WAITING_INPUT", "repairs_used": repairs_used, **output}
@@ -330,6 +356,7 @@ def run_workflow_definition(
         "repairs_used": repairs_used,
         "hops_used": hops_used,
         "verdict_artifact_id": last_verdict_artifact_id,
+        **node_output_context,
     }
     rendered_outputs = render_outputs(workflow.outputs, engine_context)
     try:

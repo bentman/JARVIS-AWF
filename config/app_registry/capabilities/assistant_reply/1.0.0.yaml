@@ -1,0 +1,5 @@
+identity: {type: activity, provider: awf, name: assistant_reply, version: 1.0.0}
+schema: {input: "", output: ""}
+effects: {operation: read, reversible: true, idempotent: true, external_side_effect: false}
+risk_class: R0
+approval: never

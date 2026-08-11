@@ -5,6 +5,7 @@ import os
 import shutil
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -29,6 +30,35 @@ class MachineActivityError(RuntimeError):
     def __init__(self, message: str, *, failure_class: str = DEFAULT_FAILURE_CLASS):
         super().__init__(message)
         self.failure_class = failure_class
+
+
+def _repo_python_executable(repo_root: Path) -> str:
+    for candidate in (
+        repo_root / "backend" / ".venv" / "Scripts" / "python.exe",
+        repo_root / "backend" / ".venv" / "bin" / "python",
+    ):
+        if candidate.is_file():
+            return str(candidate)
+    return sys.executable
+
+
+def _execution_argv(repo_root: Path, argv: list[str]) -> list[str]:
+    if not argv:
+        return argv
+    executable = argv[0].replace("\\", "/").lower()
+    if executable in {
+        "python",
+        "python.exe",
+        "py",
+        "python3",
+        "python3.12",
+        "python3.13",
+        "python3.14",
+        "backend/.venv/bin/python",
+        "backend/.venv/scripts/python.exe",
+    }:
+        return [_repo_python_executable(repo_root), *argv[1:]]
+    return argv
 
 
 def run_machine_activity(
@@ -226,7 +256,7 @@ def _command_run(
     validate_command(argv=argv, cwd=cwd, worktree=worktree, constraints=constraints)
     timeout = int(constraints["timeoutSeconds"])
     env = {"PATH": os.environ.get("PATH", os.defpath)}
-    result = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
+    result = subprocess.run(_execution_argv(repo_root, argv), cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
     stdout = result.stdout.encode("utf-8")
     stderr = result.stderr.encode("utf-8")
     max_output = int(constraints.get("maxOutputBytes", 65536))

@@ -48,6 +48,24 @@ def test_run_command_calls_op_run_start_and_reports_failure_exit_code(tmp_path, 
     assert captured["input_data"] == {"objective": "demo"}
 
 
+def test_run_command_accepts_objective_shorthand(tmp_path, monkeypatch):
+    repo_root = make_repo(tmp_path)
+    captured = {}
+
+    def fake_op_run_start(repo_root, conn, *, workflow_ref, input_data):
+        captured["workflow_ref"] = workflow_ref
+        captured["input_data"] = input_data
+        return {"run_id": "run-1", "status": "SUCCEEDED"}
+
+    monkeypatch.setattr(cli_main.ops, "op_run_start", fake_op_run_start)
+
+    exit_code = cli_main.run(["run", "assistant-default@1.0.0", "--objective", "check the system"], repo_root)
+
+    assert exit_code == 0
+    assert captured["workflow_ref"] == "assistant-default@1.0.0"
+    assert captured["input_data"] == {"objective": "check the system"}
+
+
 def test_run_command_success_exit_code(tmp_path, monkeypatch):
     repo_root = make_repo(tmp_path)
     monkeypatch.setattr(

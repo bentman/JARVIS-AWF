@@ -19,11 +19,13 @@ always that step's own, real content to review rather than a bare
 identifier string with nothing behind it.
 """
 
+import json
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
 from awf.engine.executor import run_step
+from awf.events.writer import write_event
 from awf.gates.adversary import (
     check_memory_contamination,
     check_resource_safety,
@@ -51,9 +53,20 @@ def make_trifecta_gate_executor(
     adversary_review_profile: ModelProfile | None = None,
     adversary_review_secret_key: bytes | None = None,
     worktree_path: Path | None = None,
+    tier_reason: str | None = None,
 ):
     def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
         def fn(_payload: dict) -> dict:
+            if tier_reason is not None:
+                write_event(
+                    conn,
+                    run_id=run_id,
+                    step_id=step_id,
+                    new_status="RUNNING",
+                    actor="gate",
+                    reason_code="gate_tier_selected",
+                    payload_json=json.dumps({"tier": tier, "reason": tier_reason}),
+                )
             findings: list[Finding] = [run_verifier_check(check_fn, summary=check_summary)]
 
             needs_diff = review_profile is not None or adversary_review_profile is not None

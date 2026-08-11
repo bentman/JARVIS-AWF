@@ -86,7 +86,7 @@ declare global {
       voiceSpeakText: (
         text: string,
         voiceId: string | undefined,
-        responseAudioOutPath: string,
+        responseAudioOutPath?: string,
       ) => Promise<{ response_audio_path: string }>;
     };
   }
@@ -114,7 +114,7 @@ if (container) {
         voiceProfileRef: string | undefined,
         turnId: string,
       ) => window.awf.voiceSubmitText(voiceSessionId, text, workflowRef, voiceProfileRef, turnId),
-      onVoiceSpeakText: (text: string, voiceId: string | undefined, responseAudioOutPath: string) =>
+      onVoiceSpeakText: (text: string, voiceId: string | undefined, responseAudioOutPath?: string) =>
         window.awf.voiceSpeakText(text, voiceId, responseAudioOutPath),
       onRunList: () => window.awf.runList(),
       onApprovalList: () => window.awf.approvalList(),

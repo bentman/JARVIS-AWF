@@ -43,13 +43,19 @@ export interface VoiceSessionFns {
   onVoiceSpeakText?: (
     text: string,
     voiceId: string | undefined,
-    responseAudioOutPath: string,
+    responseAudioOutPath?: string,
   ) => Promise<{ response_audio_path: string }>;
 }
 
 export interface TextSubmitResult {
   run_id: string;
   status: string;
+  outputs?: {
+    response_text?: string;
+    [key: string]: unknown;
+  };
+  reason?: string;
+  error?: string;
   [key: string]: unknown;
 }
 
@@ -84,6 +90,8 @@ export interface AppProps extends VoiceSessionFns {
 }
 
 type ViewName = "chat" | "status" | "runs" | "approvals" | "proposals" | "memory" | "registry";
+
+export const DEFAULT_CHAT_WORKFLOW_REF = "assistant-default@1.0.0";
 
 // An approval whose node never declared `riskClass` (Section 12.2) has no
 // real value to show - treated as R2 here too, the same safe-never-R0/R1
@@ -142,7 +150,8 @@ export function App({
   const [selectedRunDetail, setSelectedRunDetail] = useState<ControlRunDetail | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<ViewName | undefined>(undefined);
-  const [chatWorkflowRef, setChatWorkflowRef] = useState("");
+  const [chatWorkflowRef, setChatWorkflowRef] = useState(DEFAULT_CHAT_WORKFLOW_REF);
+  const [workflowOptions, setWorkflowOptions] = useState<string[]>([DEFAULT_CHAT_WORKFLOW_REF]);
   const [chatSubmitting, setChatSubmitting] = useState(false);
   const [chatSubmitError, setChatSubmitError] = useState<string | null>(null);
 
@@ -181,6 +190,16 @@ export function App({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!onRegistryList) return;
+    void onRegistryList("workflows")
+      .then((entries) => {
+        const refs = entries.map((entry) => `${entry.name}@${entry.version}`);
+        setWorkflowOptions(Array.from(new Set([DEFAULT_CHAT_WORKFLOW_REF, ...refs])).sort());
+      })
+      .catch(() => undefined);
+  }, [onRegistryList]);
+
   const handleVoiceSubmit = async (
     voiceSessionId: string,
     text: string,
@@ -203,11 +222,13 @@ export function App({
       const spoken = await onVoiceSpeakText(
         result.response_text,
         result.voice?.voice_id,
-        "/tmp/awf-gui-live-response.wav",
       );
       if (typeof Audio !== "undefined") {
         void new Audio(spoken.response_audio_path).play().catch(() => undefined);
       }
+    }
+    if (result.run?.run_id) {
+      void handleRunDetail(result.run.run_id).catch(() => undefined);
     }
     return result;
   };
@@ -225,16 +246,22 @@ export function App({
     setChatSubmitting(true);
     try {
       const result = await onTextSubmit(text, chatWorkflowRef.trim());
+      const responseText =
+        result.outputs?.response_text ??
+        result.reason ??
+        result.error ??
+        `Workflow ${chatWorkflowRef.trim()} finished with status ${result.status}.`;
       setEntries((prev) => [
         ...prev,
         { id: nextId.current++, speaker: "Operator", text },
         {
           id: nextId.current++,
           speaker: "AWF",
-          text: `Workflow ${chatWorkflowRef.trim()} finished with status ${result.status} (run ${result.run_id}).`,
+          text: `${responseText} (run ${result.run_id})`,
         },
       ]);
       void refresh();
+      void handleRunDetail(result.run_id).catch(() => undefined);
     } catch (err) {
       setChatSubmitError((err as Error).message);
       return false;
@@ -359,6 +386,7 @@ export function App({
                 <Transcript
                   entries={entries}
                   workflowRef={chatWorkflowRef}
+                  workflowOptions={workflowOptions}
                   onWorkflowRefChange={setChatWorkflowRef}
                   submitting={chatSubmitting}
                   submitError={chatSubmitError}
@@ -368,6 +396,8 @@ export function App({
                 {voiceAvailable && (
                   <VoiceActivation
                     ref={voiceRef}
+                    defaultWorkflowRef={chatWorkflowRef || DEFAULT_CHAT_WORKFLOW_REF}
+                    workflowOptions={workflowOptions}
                     onSessionStart={onVoiceSessionStart!}
                     onPushToTalkStart={onVoicePushToTalkStart!}
                     onPushToTalkStop={onVoicePushToTalkStop!}

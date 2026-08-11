@@ -161,6 +161,24 @@ describe("App first page (chat + voice, ADR-0025)", () => {
     expect(screen.getByRole("group", { name: "Voice session" })).toBeTruthy();
     // The Chat nav item is the active first page.
     expect(screen.getByRole("button", { name: "Chat" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByLabelText("Workflow")).toHaveValue("assistant-default@1.0.0");
+  });
+
+  it("loads registry workflow refs as chat workflow suggestions", async () => {
+    const onRegistryList = vi.fn().mockResolvedValue([
+      {
+        source: "config" as const,
+        kind: "workflows",
+        name: "producer-reviewer-handoff-demo",
+        version: "1.0.0",
+      },
+    ]);
+
+    render(<App onApprove={vi.fn()} onReject={vi.fn()} onRegistryList={onRegistryList} />);
+
+    await waitFor(() => expect(onRegistryList).toHaveBeenCalledWith("workflows"));
+    expect(screen.getByLabelText("Workflow")).toHaveAttribute("list", "chat-workflow-options");
+    expect(document.querySelector('option[value="producer-reviewer-handoff-demo@1.0.0"]')).toBeTruthy();
   });
 
   it("has no pulsing orb or canvas anywhere on the first page", () => {
@@ -193,13 +211,24 @@ describe("App first page (chat + voice, ADR-0025)", () => {
   });
 
   it("renders voice (STT/TTS) and typed chat in the same governed conversation stream", async () => {
-    const onTextSubmit = vi.fn().mockResolvedValue({ run_id: "run-text-1", status: "SUCCEEDED" });
+    const onTextSubmit = vi.fn().mockResolvedValue({
+      run_id: "run-text-1",
+      status: "SUCCEEDED",
+      outputs: { response_text: "Typed result from the workflow." },
+    });
+    const onControlRunDetail = vi.fn().mockResolvedValue({
+      run: { run_id: "run-text-1", workflow_ref: "demo@1.0.0", status: "SUCCEEDED", steps: [] },
+      artifacts: [],
+      verdicts: [],
+      timeline: {},
+    });
     render(
       <App
         onApprove={vi.fn()}
         onReject={vi.fn()}
         {...voiceProps()}
         onTextSubmit={onTextSubmit}
+        onControlRunDetail={onControlRunDetail}
         onVoiceSpeakText={undefined}
       />,
     );
@@ -218,7 +247,7 @@ describe("App first page (chat + voice, ADR-0025)", () => {
     expect(await screen.findByText("hello")).toBeTruthy();
 
     // Typed chat lands in the very same stream.
-    fireEvent.change(screen.getByRole("textbox", { name: "Workflow" }), {
+    fireEvent.change(screen.getByLabelText("Workflow"), {
       target: { value: "demo@1.0.0" },
     });
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
@@ -227,15 +256,39 @@ describe("App first page (chat + voice, ADR-0025)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onTextSubmit).toHaveBeenCalledWith("typed follow-up", "demo@1.0.0"));
+    await waitFor(() => expect(onControlRunDetail).toHaveBeenCalledWith("run-text-1"));
     expect(log.textContent).toContain("Operator (voice):");
     expect(log.textContent).toContain("hello");
-    expect(await screen.findByText(/Workflow demo@1\.0\.0 finished with status SUCCEEDED/)).toBeTruthy();
+    expect(await screen.findByText(/Typed result from the workflow\. \(run run-text-1\)/)).toBeTruthy();
+  });
+
+  it("shows typed chat failure details from the backend response", async () => {
+    const onTextSubmit = vi.fn().mockResolvedValue({
+      run_id: "run-text-2",
+      status: "FAILED",
+      error: "workflow input did not match schema",
+    });
+    render(<App onApprove={vi.fn()} onReject={vi.fn()} onTextSubmit={onTextSubmit} />);
+
+    fireEvent.change(screen.getByLabelText("Workflow"), {
+      target: { value: "demo@1.0.0" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
+      target: { value: "typed work" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onTextSubmit).toHaveBeenCalledWith("typed work", "demo@1.0.0"));
+    expect(await screen.findByText(/workflow input did not match schema \(run run-text-2\)/)).toBeTruthy();
   });
 
   it("requires a workflow before typed chat can start a durable Run", async () => {
     const onTextSubmit = vi.fn();
     render(<App onApprove={vi.fn()} onReject={vi.fn()} onTextSubmit={onTextSubmit} />);
 
+    fireEvent.change(screen.getByLabelText("Workflow"), {
+      target: { value: "" },
+    });
     const message = screen.getByRole("textbox", { name: "Message" }) as HTMLInputElement;
     fireEvent.change(message, {
       target: { value: "typed work" },

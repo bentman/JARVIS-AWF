@@ -1,0 +1,29 @@
+apiVersion: awf/v1
+kind: Workflow
+metadata:
+  name: assistant-default
+  version: 1.0.0
+  digest: "sha256:assistant-default-1.0.0"
+spec:
+  inputSchema:
+    type: object
+    properties:
+      objective:
+        type: string
+    required: [objective]
+  outputSchema:
+    type: object
+    properties:
+      response_text:
+        type: string
+    required: [response_text]
+  budgets: {}
+  nodes:
+    - id: reply
+      type: activity
+      function: assistant_reply
+      args:
+        objective: "{{ input.objective }}"
+      next: null
+  outputs:
+    response_text: "{{ engine.reply_response_text }}"

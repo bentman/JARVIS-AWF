@@ -21,6 +21,7 @@ describe("App", () => {
     const { lastFrame } = render(<App client={makeFakeClient()} settings={DEFAULT_SETTINGS} />);
     const frame = lastFrame();
     expect(frame).toContain("AWF-CLI ready");
+    expect(frame).toContain("Type a request");
     expect(frame).toContain(">");
   });
 });

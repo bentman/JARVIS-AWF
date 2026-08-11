@@ -125,11 +125,13 @@ Exit codes: `0` pass, `1` fail, `2` skipped, `3` environment unsatisfied. `runti
 ## Running AWF
 
 ```powershell
-.\backend\.venv\Scripts\awf registry list --kind workflows
-.\backend\.venv\Scripts\awf run start --workflow <name@version> --input '{}'
-.\backend\.venv\Scripts\awf run status --run-id <run-id>
-.\backend\.venv\Scripts\awf approval list
+.\backend\.venv\Scripts\awf run assistant-default@1.0.0 --objective "check the system"
+.\backend\.venv\Scripts\awf status <run-id>
+.\backend\.venv\Scripts\awf artifacts <run-id>
+.\backend\.venv\Scripts\awf approvals
 ```
+
+`assistant-default@1.0.0` is the local first-run workflow. It verifies that AWF can accept a request, create a durable Run, and return response text without requiring an external coding-agent CLI. Use implementation workflows after the relevant agent CLIs are installed and authenticated.
 
 Store a provider API key by name, so it never appears in a registry file:
 

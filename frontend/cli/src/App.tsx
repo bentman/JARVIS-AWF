@@ -2,7 +2,7 @@ import type { ProtocolClient } from "@awf/protocol-client";
 import { Box, Static, Text, useApp } from "ink";
 import TextInput from "ink-text-input";
 import React, { useRef, useState } from "react";
-import { CommandError, dispatchCommand } from "./commands.js";
+import { CommandError, dispatchAssistantInput, dispatchCommand } from "./commands.js";
 import type { Settings } from "./settings.js";
 
 interface LogEntry {
@@ -47,7 +47,7 @@ export interface AppProps {
 export function App({ client, settings }: AppProps): React.JSX.Element {
   const { exit } = useApp();
   const [log, setLog] = useState<LogEntry[]>([
-    { id: 0, text: "AWF-CLI ready. Type /help for commands." },
+    { id: 0, text: "AWF-CLI ready. Type a request, or /help for commands." },
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -69,14 +69,11 @@ export function App({ client, settings }: AppProps): React.JSX.Element {
     if (!trimmed) return;
     append(`> ${trimmed}`);
 
-    if (!trimmed.startsWith("/")) {
-      append("Type / to start a command. /help for a list.");
-      return;
-    }
-
     setBusy(true);
     try {
-      const result = await dispatchCommand(client, trimmed, settings);
+      const result = trimmed.startsWith("/")
+        ? await dispatchCommand(client, trimmed, settings)
+        : await dispatchAssistantInput(client, trimmed, settings.defaultWorkflow);
       if (result.kind === "text") {
         append(result.text);
       } else if (result.kind === "json") {

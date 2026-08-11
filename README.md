@@ -2,7 +2,7 @@
 
 ## 📋 Description
 
-JARVIS-AWF is the reference implementation of the Agentic Workflow Fabric (AWF): a durable, local-first control system for running AI coding and research agents against explicit, versioned Workflow definitions. It is built and used by one operator, on their own machines.
+JARVIS-AWF is the reference implementation of the Agentic Workflow Fabric (AWF): a durable, local-first control system for running explicit, versioned Workflow definitions. Workflows can call local activities or drive AI coding and research agents. It is built and used by one operator, on their own machines.
 
 The unit of operation is a Run of a versioned Workflow. Agents are bounded executors inside a Run; AWF is the durable layer above them — it invokes them, records what they did, verifies the result, and keeps the audit trail.
 
@@ -14,6 +14,14 @@ Setup is per-platform. Follow the guide for your host:
 - [`docs/QuickStart-windows.md`](docs/QuickStart-windows.md) — Windows x64 and ARM64
 
 Both cover the same sequence: create the backend virtual environment, install the hardware-appropriate dependency set, bootstrap local state, acquire the speech models, and validate.
+
+After setup, the local first-run check is:
+
+```bash
+awf run assistant-default@1.0.0 --objective "check the system"
+```
+
+That workflow confirms request handling and durable Run creation without requiring an external coding-agent CLI.
 
 ## 🏗️ Architecture
 
@@ -52,9 +60,9 @@ Every path through a node passes the Capability Guard, and every transition is r
 
 ## 🖥️ Interfaces
 
-One core with three surfaces. A headless command-line tool is the scriptable base and the only component that touches durable state. **AWF-CLI** is a terminal UI with a slash-command surface, where registry Skills appear directly as commands. **AWF-GUI** is a desktop voice app — wake word or push-to-talk in, spoken response out — in which agent roles carry distinct personas and voices.
+One core with three surfaces. A headless command-line tool is the scriptable base and the only component that directly opens the durable database. **AWF-CLI** is a terminal UI where plain text starts the default assistant workflow and `/slash` commands expose operator actions. **AWF-GUI** is the desktop control center for chat, runs, approvals, readiness, registry actions, memory, and push-to-talk voice.
 
-Both frontends are presentation layers over the same core. High-risk approvals always require on-screen confirmation of the exact action.
+Both frontends are presentation layers over the same core protocol. High-risk approvals always require on-screen confirmation of the exact action.
 
 ## 🧰 Platform
 

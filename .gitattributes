@@ -1,0 +1,15 @@
+# Normalize text files in the repository to LF so Windows and Linux worktrees
+# produce stable diffs. Git may still treat explicitly binary formats as binary.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.7z binary
+*.exe binary
+*.dll binary

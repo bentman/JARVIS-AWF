@@ -49,8 +49,12 @@ def test_network_fetch_capability_requires_non_empty_allowed_hosts():
 def test_filesystem_policy_blocks_worktree_escape_and_denied_globs(tmp_path):
     repo_root = tmp_path / "repo"
     worktree = tmp_path / "worktree"
+    external_root = tmp_path / "operator-root"
     repo_root.mkdir()
     worktree.mkdir()
+    external_root.mkdir()
+    external_file = external_root / "allowed.txt"
+    external_file.write_text("allowed\n")
     (worktree / ".env").write_text("secret\n")
 
     with pytest.raises(MachinePolicyError, match="outside allowed roots"):
@@ -71,6 +75,18 @@ def test_filesystem_policy_blocks_worktree_escape_and_denied_globs(tmp_path):
             constraints={"allowedRoots": ["worktree"]},
             must_exist=True,
         )
+
+    assert (
+        resolve_allowed_path(
+            repo_root=repo_root,
+            worktree=worktree,
+            run_id="run-1",
+            relative_or_absolute=str(external_file),
+            constraints={"allowedRoots": [str(external_root)]},
+            must_exist=True,
+        )
+        == external_file
+    )
 
 
 def test_command_policy_uses_exact_executable_and_argument_patterns(tmp_path):

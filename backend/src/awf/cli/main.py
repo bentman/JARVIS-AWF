@@ -24,7 +24,9 @@ def _print(obj) -> None:
 
 
 def cmd_run(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    input_data = json.loads(Path(args.input).read_text()) if args.input else {}
+    input_data = {"objective": args.objective} if args.objective else {}
+    if args.input:
+        input_data = json.loads(Path(args.input).read_text())
     result = ops.op_run_start(repo_root, conn, workflow_ref=args.workflow, input_data=input_data)
     _print(result)
     return 0 if result.get("status") == "SUCCEEDED" else 1
@@ -278,7 +280,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_parser = sub.add_parser("run")
     run_parser.add_argument("workflow")
-    run_parser.add_argument("--input", required=False, default=None)
+    run_input = run_parser.add_mutually_exclusive_group()
+    run_input.add_argument("--input", required=False, default=None)
+    run_input.add_argument("--objective", required=False, default=None)
     run_parser.set_defaults(func=cmd_run)
 
     status_parser = sub.add_parser("status")

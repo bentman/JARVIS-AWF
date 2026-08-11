@@ -114,16 +114,116 @@ def _select_managed_llm_artifact(repo_root: Path, server, profile_id: str, *, al
     return profile_id, artifact
 
 
-def _make_check_fn(node: dict, worktree: Path):
+def _repo_python_executable(repo_root: Path) -> tuple[str, str] | None:
+    candidates = [
+        ("windows-venv", repo_root / "backend" / ".venv" / "Scripts" / "python.exe"),
+        ("linux-venv", repo_root / "backend" / ".venv" / "bin" / "python"),
+    ]
+    for marker, candidate in candidates:
+        if candidate.is_file():
+            return marker, str(candidate)
+    return None
+
+
+def _is_python_command(command_name: str) -> bool:
+    normalized = command_name.replace("\\", "/").lower()
+    return normalized in {
+        "python",
+        "python.exe",
+        "py",
+        "python3",
+        "python3.12",
+        "python3.13",
+        "python3.14",
+        "backend/.venv/bin/python",
+        "backend/.venv/scripts/python.exe",
+    }
+
+
+def _check_command_args(repo_root: Path, command: str) -> list[str] | None:
+    stripped = command.strip().lower()
+    if stripped == "true":
+        return None
+    if stripped == "false":
+        return ["__awf_false__"]
+    args = shlex.split(command)
+    if args and _is_python_command(args[0]):
+        selected = _repo_python_executable(repo_root)
+        if selected is not None:
+            _marker, venv_python = selected
+            args[0] = venv_python
+    return args
+
+
+def _make_check_fn(node: dict, worktree: Path, repo_root: Path):
     command = node.get("checkCommand")
     if not command:
         raise CoreOpError(f"gate node '{node['id']}' has no checkCommand")
 
     def check_fn() -> bool:
-        result = subprocess.run(shlex.split(command), cwd=worktree, capture_output=True, text=True)
+        args = _check_command_args(repo_root, command)
+        if args is None:
+            return True
+        if args == ["__awf_false__"]:
+            return False
+        result = subprocess.run(args, cwd=worktree, capture_output=True, text=True)
         return result.returncode == 0
 
     return check_fn
+
+
+def _risk_from_node_field(node: dict) -> str | None:
+    risk = node.get("risk_class") or node.get("riskClass")
+    return risk if risk in {"R2", "R3"} else None
+
+
+def _capability_for_node(repo_root: Path, node: dict):
+    declared = node.get("capability")
+    if declared:
+        try:
+            path, _source = resolve_registry_object(repo_root, "capabilities", declared["name"], declared["version"])
+            return load_capability_record(path)
+        except Exception:
+            return None
+    if node.get("type") == "activity" and node.get("function"):
+        try:
+            path, _source = resolve_registry_object(repo_root, "capabilities", node["function"], "1.0.0")
+            return load_capability_record(path)
+        except Exception:
+            return None
+    return None
+
+
+def _high_risk_reason_for_node(repo_root: Path, node: dict) -> str | None:
+    if node.get("guardBypassed"):
+        return f"{node['id']}:guard_bypassed"
+    risk = _risk_from_node_field(node)
+    if risk:
+        return f"{node['id']}:declared_{risk}"
+    capability = _capability_for_node(repo_root, node)
+    if capability is None:
+        return None
+    if capability.risk_class in {"R2", "R3"}:
+        return f"{node['id']}:{capability.ref}:{capability.risk_class}"
+    if capability.approval == "per-invocation":
+        return f"{node['id']}:{capability.ref}:approval_per_invocation"
+    return None
+
+
+def _effective_gate_tier(repo_root: Path, workflow, gate_node: dict) -> tuple[str, str | None]:
+    explicit_tier = gate_node.get("tier")
+    if explicit_tier == "high-risk":
+        return "high-risk", f"{gate_node['id']}:explicit_high_risk"
+    gate_reason = _high_risk_reason_for_node(repo_root, gate_node)
+    if gate_reason:
+        return "high-risk", gate_reason
+    for node in workflow.nodes:
+        if node["id"] == gate_node["id"]:
+            break
+        reason = _high_risk_reason_for_node(repo_root, node)
+        if reason:
+            return "high-risk", reason
+    return explicit_tier or "default", None
 
 
 def _resolve_named_review_profile(node: dict, repo_root: Path, field_name: str):
@@ -257,7 +357,7 @@ def _build_node_executors(
     run_map_item = _make_run_map_item(artifacts_root, repo_root)
     executors = {
         "agent": make_agent_node_executor(ADAPTER_REGISTRY, worktree, repo_root, workflow_input),
-        "activity": make_activity_node_executor(repo_root=repo_root, worktree_path=worktree),
+        "activity": make_activity_node_executor(repo_root=repo_root, worktree_path=worktree, workflow_input=workflow_input),
         "approval": make_approval_node_executor(),
         "subworkflow": make_subworkflow_node_executor(run_child),
         "map": make_map_node_executor(run_map_item, worktree_path=worktree, repo_root=repo_root),
@@ -265,17 +365,14 @@ def _build_node_executors(
     }
     for node in workflow.nodes:
         if node["type"] == "gate":
-            # A node MAY declare `tier: high-risk` (Section 12.2's trigger
-            # list still has to be checked by the caller/workflow author -
-            # nothing here infers it automatically) to reach the full
-            # Trifecta Adversary pass instead of Builder+Verifier only.
+            tier, tier_reason = _effective_gate_tier(repo_root, workflow, node)
             review_profile, review_secret_key = _resolve_review_profile(node, repo_root)
             adversary_review_profile, adversary_review_secret_key = _resolve_adversary_review_profile(node, repo_root)
             executors["gate"] = make_trifecta_gate_executor(
-                check_fn=_make_check_fn(node, worktree),
+                check_fn=_make_check_fn(node, worktree, repo_root),
                 check_summary=node.get("check", node["id"]),
                 artifacts_root=artifacts_root,
-                tier=node.get("tier", "default"),
+                tier=tier,
                 cache_sandbox_dir=run_scratch_dir,
                 guard_bypassed=node.get("guardBypassed", False),
                 review_profile=review_profile,
@@ -283,6 +380,7 @@ def _build_node_executors(
                 adversary_review_profile=adversary_review_profile,
                 adversary_review_secret_key=adversary_review_secret_key,
                 worktree_path=worktree,
+                tier_reason=tier_reason,
             )
         elif node["type"] == "handoff":
             executors["handoff"] = make_handoff_node_executor(ADAPTER_REGISTRY, worktree)
@@ -326,10 +424,63 @@ def _run_workflow_safely(conn: sqlite3.Connection, *, run_id: str, workflow, nod
         return {"status": "FAILED", "error": str(exc)}
 
 
+def _default_response_text(workflow_ref: str, result: dict) -> str:
+    status = result.get("status", "UNKNOWN")
+    if status == "SUCCEEDED":
+        details = []
+        if "repairs_used" in result:
+            details.append(f"repairs used: {result['repairs_used']}")
+        if "hops_used" in result:
+            details.append(f"hops used: {result['hops_used']}")
+        if result.get("verdict_artifact_id"):
+            details.append(f"verdict: {result['verdict_artifact_id']}")
+        suffix = f" ({'; '.join(details)})" if details else ""
+        return f"Workflow {workflow_ref} succeeded{suffix}."
+    if result.get("error"):
+        return f"Workflow {workflow_ref} failed: {result['error']}"
+    if result.get("reason"):
+        return f"Workflow {workflow_ref} finished with status {status}: {result['reason']}"
+    return f"Workflow {workflow_ref} finished with status {status}."
+
+
+def _with_response_text(workflow_ref: str, result: dict) -> dict:
+    outputs = result.get("outputs")
+    if not isinstance(outputs, dict):
+        outputs = {}
+    if isinstance(outputs.get("response_text"), str):
+        return {**result, "outputs": outputs}
+    return {**result, "outputs": {**outputs, "response_text": _default_response_text(workflow_ref, result)}}
+
+
+def _adapt_objective_input(input_data: dict, input_schema: dict) -> dict:
+    if "objective" not in input_data or not isinstance(input_data.get("objective"), str):
+        return input_data
+    required = input_schema.get("required")
+    properties = input_schema.get("properties", {})
+    if not isinstance(required, list) or len(required) != 1:
+        return input_data
+    target = required[0]
+    if target == "objective":
+        return input_data
+    target_schema = properties.get(target, {})
+    target_type = target_schema.get("type") if isinstance(target_schema, dict) else None
+    if target_type not in (None, "string"):
+        return input_data
+    adapted = {target: input_data["objective"]}
+    allows_extra = input_schema.get("additionalProperties", True) is not False
+    for key, value in input_data.items():
+        if key == "objective":
+            continue
+        if allows_extra or key in properties:
+            adapted[key] = value
+    return adapted
+
+
 def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str, input_data: dict) -> dict:
     import json
 
     workflow = _resolve_workflow(repo_root, workflow_ref, conn=conn)
+    input_data = _adapt_objective_input(input_data, workflow.input_schema)
     try:
         validate_input(input_data, workflow.input_schema)
     except InputValidationError as exc:
@@ -344,7 +495,10 @@ def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str
         workflow, worktree, artifacts_dir(repo_root), repo_root, run_scratch_dir, input_data
     )
 
-    result = _run_workflow_safely(conn, run_id=run_id, workflow=workflow, node_executors=node_executors)
+    result = _with_response_text(
+        workflow.ref,
+        _run_workflow_safely(conn, run_id=run_id, workflow=workflow, node_executors=node_executors),
+    )
     _cleanup_run_workspace(
         repo_root,
         run_id,
@@ -384,7 +538,10 @@ def op_run_resume(repo_root: Path, conn: sqlite3.Connection) -> list[dict]:
         node_executors = _build_node_executors(
             workflow, worktree, artifacts_dir(repo_root), repo_root, run_scratch_dir, input_data
         )
-        result = _run_workflow_safely(conn, run_id=run_id, workflow=workflow, node_executors=node_executors)
+        result = _with_response_text(
+            workflow.ref,
+            _run_workflow_safely(conn, run_id=run_id, workflow=workflow, node_executors=node_executors),
+        )
         _cleanup_run_workspace(
             repo_root,
             run_id,

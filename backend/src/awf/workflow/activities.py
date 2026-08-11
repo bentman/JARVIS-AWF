@@ -25,6 +25,20 @@ def _gpu_utilization_sample(conn: sqlite3.Connection, _args: dict) -> dict:
     return {"utilization": sample_gpu_utilization()}
 
 
+def _assistant_reply(conn: sqlite3.Connection, args: dict) -> dict:
+    objective = str(args.get("objective", "")).strip()
+    if not objective:
+        return {"response_text": "I am ready. Send a request or choose a workflow to run."}
+    return {
+        "response_text": (
+            f"I received your request: {objective}\n\n"
+            "This local assistant workflow confirmed that AWF accepted the request, created a durable Run, "
+            "and returned operator-visible response text. Choose a specialized workflow when you want AWF "
+            "to perform implementation or review work."
+        )
+    }
+
+
 def _llm_server_ensure(conn: sqlite3.Connection, _args: dict) -> dict:
     from dataclasses import asdict
 
@@ -74,6 +88,7 @@ def _machine_placeholder(conn: sqlite3.Connection, _args: dict) -> dict:
 
 
 ACTIVITY_REGISTRY: dict[str, ActivityFn] = {
+    "assistant_reply": _assistant_reply,
     "hardware_probe": _hardware_probe,
     "gpu_utilization_sample": _gpu_utilization_sample,
     "llm_server_ensure": _llm_server_ensure,

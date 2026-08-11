@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ProtocolClient } from "@awf/protocol-client";
 import type { IpcMainLike } from "./ipc.js";
 
@@ -44,7 +46,7 @@ export interface RunVoiceSpeakTextOptions {
   cwd: string;
   text: string;
   voiceId?: string;
-  responseAudioOutPath: string;
+  responseAudioOutPath?: string;
 }
 
 function parseLastJsonLine<T>(stdout: string, stderr: string, code: number | null): T {
@@ -110,12 +112,13 @@ export function runVoiceRoundTrip(options: RunVoiceRoundTripOptions): Promise<Vo
 
 export function runVoiceSpeakText(options: RunVoiceSpeakTextOptions): Promise<VoiceSpeakTextResult> {
   return new Promise((resolve, reject) => {
+    const responseAudioOutPath = options.responseAudioOutPath ?? join(tmpdir(), "awf-gui-live-response.wav");
     const args = [
       "synthesize",
       options.text,
       ...(options.voiceId ? ["--voice-id", options.voiceId] : []),
       "--response-audio-out",
-      options.responseAudioOutPath,
+      responseAudioOutPath,
     ];
     const child = spawn(options.command ?? "awf-speech", args, { cwd: options.cwd });
     let stdout = "";
@@ -188,7 +191,7 @@ export function registerVoiceSpeakIpcHandler(
       ...defaults,
       text: text as string,
       voiceId: voiceId as string | undefined,
-      responseAudioOutPath: responseAudioOutPath as string,
+      responseAudioOutPath: responseAudioOutPath as string | undefined,
     }),
   );
 }

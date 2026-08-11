@@ -157,6 +157,11 @@ Implemented on 2026-08-09.
   for `fs_write`. `network_fetch` is available as a standard activity, but
   requires an operator- or application-declared Capability Record with a
   non-empty host allowlist.
+- Machine policy accepts platform-native absolute allowed roots, not only
+  POSIX-style `/...` roots. Command activities validate the authored
+  executable exactly, then resolve Python aliases such as `python3.12` and
+  repo-relative venv paths to the active repo venv/current interpreter at
+  execution time so the same workflow works on Windows and Linux.
 
 Validation evidence:
 

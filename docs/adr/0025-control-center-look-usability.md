@@ -4,12 +4,12 @@
 
 Implemented.
 
-Scope is AWF-GUI only. The CLI and TUI reach their own ADR-0024 targets in a
-separate record.
-
-This record documents the shipped renderer. It is written against
-`frontend/gui/src/renderer/`, which is the source of truth for the look and
-feel; where this record and that directory disagree, the code is correct.
+This record began as an AWF-GUI look-and-feel record and still treats
+`frontend/gui/src/renderer/` as the source of truth for visual layout. Later
+operator-usability work extended the same decision boundary into the shared
+assistant path: backend response text, default workflow selection, and the
+AWF-CLI plain-text assistant entry point. Where this record and the referenced
+source files disagree, the code is correct.
 
 ## Context
 
@@ -52,7 +52,20 @@ reads a variable and a palette change is one edit.
 
 **Chat renders as a messenger window.** Title bar, auto-scrolling bubble
 stream with letter avatars, operator right and agent left, and a composer with
-a mic button and a Send button.
+a mic button, workflow selector, message input, and a Send button. Typed chat
+shows the useful core response in the transcript: `outputs.response_text`
+first, then failure `reason`/`error`, with the Run id retained for traceability.
+The backend accepts normal assistant input as `{ objective: "..." }` and maps it
+onto strict single-string workflow schemas when needed, while preserving only
+metadata fields that the workflow schema allows.
+
+**The CLI also accepts plain assistant input.** A non-slash line starts the same
+default workflow with `{ objective: text }` and prints the assistant-facing
+response text plus the Run id. If `settings.defaultWorkflow` is configured, the
+plain assistant path uses that workflow; otherwise it falls back to
+`assistant-default@1.0.0`, a local deterministic workflow that requires no
+external agent CLI. Slash commands remain available for explicit operator
+actions.
 
 **Inline SVG icons, no icon package.** One `makeIcon` factory over 24×24
 stroke paths.
@@ -61,9 +74,11 @@ stroke paths.
 
 ## Deviation recorded
 
-None. This record changes only `frontend/gui/src/` and the GUI build step. No
-protocol method, IPC channel, backend operation, registry object, or
-authorization path is touched.
+The renderer-only scope was intentionally widened for first-run usability. The
+default assistant path now relies on a repo-tracked `assistant-default@1.0.0`
+Workflow and `assistant_reply@1.0.0` Capability Record, plus backend support for
+operator-visible `outputs.response_text`. No new protocol authority is added:
+GUI, CLI, and JSON-RPC still call the existing Run-start path.
 
 ## Mechanism
 
@@ -223,14 +238,29 @@ or `A`), a 10px uppercase `.bubble-speaker`, and 14px `.bubble-text` at 1.5
 line height.
 
 The composer is a flex row: a 36px `.btn-mic` labelled `Push to talk`, a
-`.composer-input` labelled `Message`, and a `.btn-send` labelled `Send`,
-disabled until the draft is non-empty.
+monospace `.workflow-input` labelled `Workflow`, a `.composer-input` labelled
+`Message`, and a `.btn-send` labelled `Send`, disabled until the draft is
+non-empty. The workflow field defaults to `assistant-default@1.0.0` because
+that shipped workflow accepts the chat payload's `objective` field and returns
+operator-visible response text without requiring external agent CLIs; the
+operator may still override it. When registry listing is available, known
+workflow refs are offered as datalist suggestions rather than forcing exact
+free-typed recall. If no workflow is supplied, typed chat keeps the draft and
+reports a visible error. Successful typed submissions append the operator text
+and the core response text to the same log; failed Runs append the returned
+failure reason or error with the Run id. The core supplies a fallback
+`outputs.response_text` for workflows that do not declare one, so the chat page
+is not dependent on every workflow author remembering a GUI-specific output
+field. The backend also adapts a chat `objective` to a workflow's single
+required string input field, so shipped `topic` workflows can run from the same
+chat composer.
 
 `VoiceActivation` renders `.voice-bar` beneath the composer: a first
 `.voice-row` with the session-state chip, the session id, and the five session
 buttons; a second `.voice-row` with the workflow, voice-profile, and
 recognized-text controls at fixed widths, plus the partial transcript and any
-error.
+error. Its workflow field starts from the same chat workflow default and uses
+the same registry-backed suggestions.
 
 ### Part G — buttons and inputs
 
@@ -318,6 +348,10 @@ frontend/gui/src/renderer/
 - Every interactive element shows a visible accent focus ring on keyboard
   traversal.
 - The chat log scrolls to its newest entry when entries change.
+- Typed chat requires a workflow, starts a durable Run, and renders the core
+  response or failure text in the shared transcript with the Run id.
+- Workflow inputs offer registry-backed workflow refs when available, and
+  voice starts with the same default workflow as typed chat.
 - No new entry in `frontend/gui/package.json` `dependencies` or
   `devDependencies`.
 - `npm --prefix frontend run build --workspaces` and
@@ -331,5 +365,5 @@ frontend/gui/src/renderer/
 - One token block governs the whole surface, so a colour or spacing change is
   a single edit.
 - The GUI gains no dependency and no build configuration.
-- The CLI and TUI remain at their current level; their alignment to ADR-0024
-  is recorded separately.
+- The CLI plain-text path now starts the same default assistant workflow as the
+  GUI chat surface unless operator settings choose a different workflow.

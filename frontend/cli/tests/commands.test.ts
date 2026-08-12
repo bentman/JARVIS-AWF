@@ -54,6 +54,7 @@ function makeFakeClient(overrides: Partial<CommandClient> = {}): CommandClient {
     llmModels: vi.fn().mockResolvedValue({ local_models: [] }),
     llmServeStatus: vi.fn().mockResolvedValue({ state: "stopped" }),
     registryGet: vi.fn().mockResolvedValue({ kind: "skills", name: "demo", version: "1.0.0" }),
+    skillInvoke: vi.fn().mockResolvedValue({ ref: "demo@1.0.0", response_text: "Skill response." }),
     sessionStart: vi.fn().mockResolvedValue({ session_id: "s1" }),
     sessionShow: vi.fn().mockResolvedValue({ session_id: "s1", entries: [] }),
     episodicSearch: vi.fn().mockResolvedValue([]),
@@ -286,6 +287,14 @@ describe("dispatchCommand", () => {
     await dispatchCommand(client, "/skill demo@1.0.0", DEFAULT_SETTINGS);
 
     expect(client.registryGet).toHaveBeenCalledWith("skills", "demo", "1.0.0");
+  });
+
+  it("/skill-run invokes a registry Skill with operator input", async () => {
+    const client = makeFakeClient();
+
+    await dispatchCommand(client, "/skill-run demo@1.0.0 apply the recipe", DEFAULT_SETTINGS);
+
+    expect(client.skillInvoke).toHaveBeenCalledWith("demo@1.0.0", "apply the recipe");
   });
 
   it("/skill requires a name@version ref", async () => {

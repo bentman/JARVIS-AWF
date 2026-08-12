@@ -1,0 +1,11 @@
+identity: {type: activity, provider: awf, name: network_fetch, version: 1.0.0}
+schema: {input: "", output: ""}
+effects: {operation: communicate, reversible: false, idempotent: true, external_side_effect: true}
+risk_class: R2
+approval: per-invocation
+constraints:
+  network:
+    allowedHosts: [example.com]
+    allowedMethods: [GET, HEAD]
+    maxResponseBytes: 262144
+    timeoutSeconds: 30

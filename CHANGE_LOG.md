@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-12 14:28
+  - Host class(es): Windows AMD64 focused backend/frontend validation
+  - Summary: Closed the B11-B15 registry/governance gaps by adding direct Skill invocation, fail-closed MCP execution for unguarded adapters, deterministic workflow proposal verification, a shipped `network_fetch` Capability Record, and complete memory registry data-root scaffolding.
+  - Scope: `backend/src/awf/{authoring/workflow.py,cli/core_ops.py,db/{bootstrap.py,schema.py},engine/agent_step.py,server/stdio.py}`, `frontend/{shared,cli}`, `config/app_registry/capabilities/network_fetch/1.0.0.yaml`, `data/registry/{memory-profiles,semantic-memories}/.gitkeep`, `.gitignore`, focused backend/frontend tests, `docs/adr/{0003,0004,0011,0019,0020,0021,0022}*.md`, `CHANGE_LOG.md`.
+  - Validation: Focused backend pytest passed (`36 passed` after schema fix; earlier focused slice `42 passed` with two proposal verifier failures corrected); frontend shared client test passed (`12 passed`) and AWF-CLI commands test passed (`37 passed`) outside the Windows sandbox after Vite `.vite-temp` EPERM inside the sandbox.
+  - Notes: MCP execution is currently guarded only for Copilot; unguarded adapters deny `mcp_refs` before adapter startup.
+
 - Timestamp: 2026-08-12 14:17
   - Host class(es): Windows AMD64 focused backend/frontend validation
   - Summary: Wired execution memory retrieval, made the default assistant workflow model-backed, moved voice default workflow handling into core, added stdio event snapshots with concurrent request handling, and enabled browser speech recognition for live GUI push-to-talk.

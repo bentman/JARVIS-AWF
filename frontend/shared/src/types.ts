@@ -27,6 +27,7 @@ export type MethodName =
   | "awf/registry.reindex"
   | "awf/registry.retire"
   | "awf/registry.trust"
+  | "awf/skill.invoke"
   | "awf/workflow.authorDraft"
   | "awf/proposal.get"
   | "awf/proposal.update"

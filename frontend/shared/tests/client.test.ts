@@ -124,6 +124,14 @@ describe("ProtocolClient", () => {
       version: "1.0.0",
       status: "trusted",
     });
+
+    void client.skillInvoke("demo-skill@1.0.0", "apply this");
+    expect(transport.lastRequest().method).toBe("awf/skill.invoke");
+    expect(transport.lastRequest().params).toEqual({
+      ref: "demo-skill@1.0.0",
+      input: "apply this",
+      profile: undefined,
+    });
   });
 
   it("builds correct params for proposal methods", () => {

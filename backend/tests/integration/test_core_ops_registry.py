@@ -80,7 +80,7 @@ def test_registry_publish_rejects_stale_workflow_metadata_digest(tmp_path):
         encoding="utf-8",
     )
 
-    with pytest.raises(CoreOpError, match="metadata.digest mismatch"):
+    with pytest.raises(CoreOpError, match=r"metadata\.digest mismatch"):
         op_registry_publish(repo_root, conn, path=source, kind="workflows")
 
 
@@ -94,12 +94,35 @@ def test_registry_validate_representative_shipped_kinds(repo_root):
     workflow = op_registry_validate(
         repo_root / "config" / "app_registry" / "workflows" / "assistant-default" / "1.0.0.yaml"
     )
+    network_fetch = op_registry_validate(
+        repo_root / "config" / "app_registry" / "capabilities" / "network_fetch" / "1.0.0.yaml"
+    )
 
     assert agent["kind"] == "AgentManifest"
     assert mcp["kind"] == "McpServer"
     assert skill["kind"] == "Skill"
     assert model_profile["ref"] == "resident-mind@1.0.0"
     assert workflow["ref"] == "assistant-default@1.0.0"
+    assert network_fetch["ref"] == "network_fetch@1.0.0"
+
+
+def test_data_registry_scaffolds_all_declared_data_roots(repo_root):
+    expected = {
+        "agents",
+        "capabilities",
+        "mcp",
+        "memory-profiles",
+        "model-profiles",
+        "personas",
+        "semantic-memories",
+        "skills",
+        "voice-profiles",
+        "workflows",
+    }
+
+    actual = {path.name for path in (repo_root / "data" / "registry").iterdir() if path.is_dir()}
+
+    assert expected <= actual
 
 
 def test_registry_retire_then_trust_restores_resolution(tmp_path, fixtures_dir):

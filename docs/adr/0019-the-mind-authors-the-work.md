@@ -10,6 +10,12 @@ Corrective update, 2026-08-12: the default authoring profile
 a fresh checkout. Operator-authored `data/registry/model-profiles/resident-mind/`
 profiles still shadow the config default.
 
+Corrective update, 2026-08-12: `op_proposal_publish` now runs a deterministic
+workflow-proposal verifier before calling `op_registry_publish`. The verifier
+parses the draft, checks proposal identity against Workflow metadata, resolves
+activity Capability Records, writes a `verified` proposal event on success,
+and blocks publication on verifier failure.
+
 ## Context
 
 `docs/archives/ProjectVisionAWF.md` defines the second promise as authorship:
@@ -175,7 +181,7 @@ CREATE TABLE IF NOT EXISTS registry_proposal_events (
     event_id TEXT PRIMARY KEY,
     proposal_id TEXT NOT NULL REFERENCES registry_proposals (proposal_id),
     event_type TEXT NOT NULL CHECK (event_type IN (
-        'created', 'updated', 'published', 'rejected'
+        'created', 'updated', 'verified', 'published', 'rejected'
     )),
     occurred_at TEXT NOT NULL,
     actor TEXT NOT NULL,
@@ -271,7 +277,7 @@ def mark_published(
 1. Requires `status == 'draft'`.
 2. Recomputes the draft digest from disk.
 3. Requires `actual_digest == caller_digest`.
-4. Validates the Workflow again.
+4. Runs the deterministic workflow-proposal verifier.
 5. Calls `op_registry_publish(repo_root, conn, path=draft_path, kind="workflows")`.
 6. Marks the proposal `published`.
 
@@ -378,6 +384,8 @@ operator registry state.
 - The draft validates through existing Workflow validation.
 - Publishing with the current digest writes the Workflow through
   `op_registry_publish`.
+- Publishing runs the deterministic verifier first and records a `verified`
+  event before registry state changes.
 - Publishing with a stale digest fails and does not write registry state.
 - Editing a proposal changes the digest and requires the new digest for
   publication.

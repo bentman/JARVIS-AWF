@@ -239,3 +239,42 @@ spec:
 
     assert response["id"] == 8
     assert response["result"]["semantic"] == []
+
+
+def test_skill_invoke_over_jsonrpc(tmp_path, monkeypatch):
+    repo_root, conn = make_repo(tmp_path)
+    skill_dir = repo_root / "config" / "app_registry" / "skills" / "demo-skill" / "1.0.0"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\nname: demo-skill\ndescription: Demo.\n---\n\nDo the demo thing.\n")
+    profile_dir = repo_root / "config" / "app_registry" / "model-profiles" / "resident-mind"
+    profile_dir.mkdir(parents=True)
+    (profile_dir / "1.0.0.yaml").write_text(
+        "\n".join(
+            [
+                "name: resident-mind",
+                "version: 1.0.0",
+                "purpose: general-reasoning",
+                "privacy: {maximum_data_class: internal, local_only: true}",
+                "candidates:",
+                "  - {provider: openai, model: local-model, priority: 1, enabled: true, api_base: 'http://127.0.0.1:8080/v1'}",
+                "fallback: {mode: none, allow_quality_degrade: false}",
+                "limits: {max_input_tokens_per_call: 8192, max_output_tokens_per_call: 1024, max_cost_usd_per_call: 0.0}",
+                "",
+            ]
+        )
+    )
+    monkeypatch.setattr("awf.cli.core_ops.complete", lambda *args, **kwargs: "skill response")
+
+    response = send(
+        repo_root,
+        conn,
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "awf/skill.invoke",
+            "params": {"ref": "demo-skill@1.0.0", "input": "use it"},
+        },
+    )
+
+    assert response["result"]["ref"] == "demo-skill@1.0.0"
+    assert response["result"]["response_text"] == "skill response"

@@ -4,11 +4,19 @@
 
 Implemented.
 
+Corrective update, 2026-08-12: Skills are now directly executable through
+the core protocol method `awf/skill.invoke` and the AWF-CLI command
+`/skill-run <name>@<version> <input>`. The existing `/skills` and
+`/skill <name>@<version>` commands remain read-only registry views. The
+literal Section 12.2 shortcut form `/<skill-name>` is still not used because
+the slash namespace already contains many fixed commands; `/skill-run` is
+the explicit direct-invocation surface.
+
 ## Context
 
 Section 9.3 specifies the `skills` registry kind at `skills/<name>/<version>/SKILL.md` (+ optional `scripts/`, `references/`, `assets/`), one of the two kinds shaped as a directory rather than a single file (`skills` shares this with the earlier-established pattern for Markdown-bodied objects). Section 5 pins the format: the Agent Skills open standard (`agentskills.io`, Apache-2.0, stewarded via the Agentic AI Foundation) - `SKILL.md` YAML frontmatter (`name`, `description` required; `license`, `compatibility`, `metadata`, `allowed-tools` optional) followed by a Markdown body, with progressive disclosure into `scripts/`/`references/`/`assets/` only as needed. Section 12.2's citation of `/skills` states each registry Skill "is also directly invocable as `/<skill-name>`" in AWF's own CLI, and that this is the single source of truth for custom commands - there is no second, AWF-specific command file format.
 
-`registry/resolve.py` and `cli/core_ops.py` already special-case `kind == "skills"` as a directory (`<name>/<version>/SKILL.md`, not `<version>.yaml`), `op_registry_list`/`op_registry_get` work end-to-end, and the shipped minimal fixture lives at `config/app_registry/skills/demo-skill/1.0.0/SKILL.md`. `data/registry/skills/` is reserved for operator-local skills and overrides, not repo-owned demos. But no `registry/skill.py` loader exists (unlike `capability_record.py`, `agent_manifest.py`, `mcp_server.py`), `AgentManifest` has no `skills` field, and `adapters/base.py`'s `AgentInvocation.skills: tuple[str, ...] = ()` - present in the envelope since Section 12.2 requires it ("available skills") - has no resolver populating it and no consumer reading it. This is the same "schema with no caller" state `mcp` was in before ADR-0003.
+`registry/resolve.py` and `cli/core_ops.py` special-case `kind == "skills"` as a directory (`<name>/<version>/SKILL.md`, not `<version>.yaml`), `op_registry_list`/`op_registry_get` work end-to-end, and the shipped minimal fixture lives at `config/app_registry/skills/demo-skill/1.0.0/SKILL.md`. `registry/skill.py` loads and validates `SKILL.md`, `AgentManifest.skills` threads skills into agent execution, and `awf/skill.invoke` applies a registry Skill directly through the Model Gateway. `data/registry/skills/` is reserved for operator-local skills and overrides, not repo-owned demos.
 
 Unlike `mcp`, the registry format here is not something AWF has to translate per adapter - `SKILL.md` is already the literal shared interchange format. Verified live against the same four installed CLIs used in ADR-0003:
 
@@ -78,7 +86,11 @@ For the AWF-injected tier, there is no tradeoff to name: the content becomes pla
 4. `registry/agent_manifest.py` - add the `skills` field (list of `{ref, share}` or equivalent), parsed the same way `mcp` is today.
 5. `cli/core_ops.py` - `op_registry_publish`/`op_registry_validate` gain a `skills` branch (`op_registry_list` already works generically for this kind, per Context above).
 6. Codex renderer for the shared tier: build the scratch-`$CODEX_HOME` + symlink mechanism (confirmed working, see Mechanism step 4) - the same shape as ADR-0003's Antigravity MCP renderer, not a new pattern to design from scratch.
-7. AWF's own `/skills` → `/<skill-name>` direct-invocation surface (Section 12.2's `/skills` line) is a CLI-frontend concern, not this ADR's registry/mechanism scope - `frontend/cli` currently only lists the kind generically (`commands.ts`), and wiring real per-skill invocation is a separate, later piece of work.
+7. AWF's own direct-invocation surface is implemented as `awf/skill.invoke`
+   plus AWF-CLI `/skill-run <name>@<version> <input>`. `/skills` and
+   `/skill <name>@<version>` stay read-only. The literal `/<skill-name>`
+   shortcut remains a possible frontend alias, not the authoritative core
+   method.
 
 ## Acceptance
 
@@ -87,7 +99,9 @@ A manifest with `skills: [demo-skill@1.0.0]` (no `share`) drives a real Run wher
 ## Consequences
 
 - `AgentManifest.skills` and `AgentInvocation.skills` get their first real consumer; `skills` stops being schema with no caller.
-- Section 12.2's `/skills` → `/<skill-name>` CLI surface remains open work, not closed by this ADR - named in Scope item 7 rather than left implicit.
+- Section 12.2's direct skill intent is closed by `awf/skill.invoke` and
+  `/skill-run`; the exact `/<skill-name>` shortcut remains unimplemented by
+  design to avoid ambiguous slash-command dispatch.
 - The Agent Skills standard's `allowed-tools` field stays unread by AWF for both tiers - a second, adapter-native allowlist concept coexisting with, not merged into, the Capability Guard. Same shape of gap ADR-0003 named for MCP, not resolved here either.
 - The explicit `share` marker is the only "grant" the system can express, because no authority model exists above the operator who authors the manifest. If a future revision adds real multi-operator or delegated authority, this is the mechanism that would need to change first.
 - All four adapters' shared tier is settled, live-verified, none assumed: Claude Code and Copilot CLI read `.claude/skills/<name>/SKILL.md` directly; Antigravity reads `.agents/skills/<name>/SKILL.md` given flags it already passes; Codex needs one additional piece - a scratch `$CODEX_HOME` with a symlinked skill directory and a copied-in real `auth.json`, mirroring ADR-0003's Antigravity MCP fix exactly. No adapter is excluded from the shared tier in this revision.

@@ -7,7 +7,7 @@ from cryptography.fernet import Fernet
 from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
-from awf.engine.agent_step import run_agent_step
+from awf.engine.agent_step import AgentStepError, run_agent_step
 from awf.engine.run import create_run, create_step
 from awf.isolation.worktree import create_worktree
 
@@ -63,7 +63,7 @@ def _write_fetch_tool_capability(repo_root, name="fetch_url"):
     )
 
 
-def test_mcp_ref_renders_config_and_passes_extra_args_to_adapter(repo_and_worktree, conn):
+def test_guarded_mcp_ref_renders_config_and_passes_extra_args_to_adapter(repo_and_worktree, conn):
     repo_root, worktree = repo_and_worktree
     _write_fetch_server(repo_root)
     seen = {}
@@ -81,14 +81,14 @@ def test_mcp_ref_renders_config_and_passes_extra_args_to_adapter(repo_and_worktr
         invocation=invocation,
         adapter_fn=adapter_fn,
         commit_message="agent: used fetch",
-        actor="claude-code",
+        actor="copilot",
         mcp_refs=["fetch@1.0.0"],
         repo_root=repo_root,
     )
 
     rendered_invocation = seen["invocation"]
-    assert "--mcp-config" in rendered_invocation.constraints["mcp_extra_args"]
-    assert (worktree / "mcp" / "claude-code.mcp.json").is_file()
+    assert "--additional-mcp-config" in rendered_invocation.constraints["mcp_extra_args"]
+    assert (worktree / "mcp" / "copilot.mcp-config.json").is_file()
 
     event = conn.execute("SELECT new_status, payload_json FROM events WHERE new_status = 'mcp_rendered'").fetchone()
     assert event is not None
@@ -117,7 +117,7 @@ def test_mcp_server_with_declared_tools_requires_all_tools_to_have_allowed_capab
         invocation=AgentInvocation(objective="use fetch", inputs={}, workspace_root=worktree),
         adapter_fn=adapter_fn,
         commit_message="agent: used fetch",
-        actor="claude-code",
+        actor="copilot",
         mcp_refs=["fetch@1.0.0"],
         agent_allowlist=["fetch_url@1.0.0"],
         repo_root=repo_root,
@@ -138,13 +138,13 @@ def test_mcp_server_with_declared_tools_requires_all_tools_to_have_allowed_capab
         invocation=AgentInvocation(objective="use fetch", inputs={}, workspace_root=worktree),
         adapter_fn=adapter_fn,
         commit_message="agent: used fetch",
-        actor="claude-code",
+        actor="copilot",
         mcp_refs=["fetch@1.0.0"],
         agent_allowlist=["fetch_url@1.0.0", "scrape_url@1.0.0"],
         repo_root=repo_root,
     )
 
-    rendered_file = worktree / "mcp" / "claude-code.mcp.json"
+    rendered_file = worktree / "mcp" / "copilot.mcp-config.json"
     rendered = json.loads(rendered_file.read_text())
     assert rendered["mcpServers"]["fetch"]["command"] == "npx"
     event = conn.execute("SELECT payload_json FROM events WHERE new_status = 'mcp_rendered'").fetchone()
@@ -209,7 +209,7 @@ def test_quarantined_mcp_ref_is_refused_before_adapter_runs(repo_and_worktree, c
         invocation=invocation,
         adapter_fn=adapter_fn,
         commit_message="agent: refused",
-        actor="claude-code",
+        actor="copilot",
         mcp_refs=["fetch@1.0.0"],
         repo_root=repo_root,
     )
@@ -220,50 +220,31 @@ def test_quarantined_mcp_ref_is_refused_before_adapter_runs(repo_and_worktree, c
     assert conn.execute("SELECT 1 FROM events WHERE new_status = 'mcp_rendered'").fetchone() is None
 
 
-def test_antigravity_mcp_ref_materializes_a_scratch_home_never_the_real_one(
-    repo_and_worktree, conn, tmp_path, monkeypatch
-):
+def test_unguarded_adapter_mcp_ref_is_denied_before_adapter_runs(repo_and_worktree, conn):
     repo_root, worktree = repo_and_worktree
     _write_fetch_server(repo_root)
-
-    fake_real_home = tmp_path / "fake_real_home"
-    (fake_real_home / ".gemini" / "antigravity-cli").mkdir(parents=True)
-    (fake_real_home / ".gemini" / "antigravity-cli" / "antigravity-oauth-token").write_text("real-token-contents")
-
-    import awf.engine.agent_step as agent_step_module
-
-    monkeypatch.setattr(agent_step_module.Path, "home", staticmethod(lambda: fake_real_home))
-
-    seen = {}
+    seen = []
 
     def adapter_fn(invocation: AgentInvocation) -> AgentResult:
-        seen["invocation"] = invocation
+        seen.append(invocation)
         return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
 
     invocation = AgentInvocation(objective="use fetch", inputs={}, workspace_root=worktree)
-    run_agent_step(
-        conn,
-        step_id="step-1",
-        run_id="run-1",
-        worktree_path=worktree,
-        invocation=invocation,
-        adapter_fn=adapter_fn,
-        commit_message="agent: used fetch via antigravity",
-        actor="antigravity",
-        mcp_refs=["fetch@1.0.0"],
-        repo_root=repo_root,
-    )
+    with pytest.raises(AgentStepError, match="pre-tool Guard hook"):
+        run_agent_step(
+            conn,
+            step_id="step-1",
+            run_id="run-1",
+            worktree_path=worktree,
+            invocation=invocation,
+            adapter_fn=adapter_fn,
+            commit_message="agent: denied fetch via antigravity",
+            actor="antigravity",
+            mcp_refs=["fetch@1.0.0"],
+            repo_root=repo_root,
+        )
 
-    scratch_home = repo_root / "cache" / "sandbox" / "run-1" / "scratch_home" / "antigravity"
-    assert (scratch_home / ".gemini" / "config" / "mcp_config.json").is_file()
-    assert (
-        scratch_home / ".gemini" / "antigravity-cli" / "antigravity-oauth-token"
-    ).read_text() == "real-token-contents"
-    # the real home directory itself was never written to
-    assert not (fake_real_home / ".gemini" / "config").exists()
-
-    overlay = seen["invocation"].constraints["mcp_env_overlay"]
-    assert overlay["HOME"] == str(scratch_home)
+    assert seen == []
 
 
 def test_mcp_secret_reaches_env_overlay_never_the_rendered_file(repo_and_worktree, conn):
@@ -295,54 +276,39 @@ def test_mcp_secret_reaches_env_overlay_never_the_rendered_file(repo_and_worktre
         invocation=invocation,
         adapter_fn=adapter_fn,
         commit_message="agent: used context7",
-        actor="claude-code",
+        actor="copilot",
         mcp_refs=["context7@1.0.0"],
         repo_root=repo_root,
     )
 
-    rendered_file = (worktree / "mcp" / "claude-code.mcp.json").read_text()
+    rendered_file = (worktree / "mcp" / "copilot.mcp-config.json").read_text()
     assert "sk-real-secret-value" not in rendered_file
     overlay = seen["invocation"].constraints["mcp_env_overlay"]
     assert overlay == {"AWF_MCP_CONTEXT7_CONTEXT7_API_KEY": "sk-real-secret-value"}
 
 
-def test_cline_mcp_ref_materializes_a_scratch_home_never_the_real_one(repo_and_worktree, conn, tmp_path, monkeypatch):
+def test_cline_mcp_ref_is_denied_before_adapter_runs(repo_and_worktree, conn):
     repo_root, worktree = repo_and_worktree
     _write_fetch_server(repo_root)
-
-    fake_real_home = tmp_path / "fake_real_home"
-    (fake_real_home / ".cline").mkdir(parents=True)
-
-    import awf.engine.agent_step as agent_step_module
-
-    monkeypatch.setattr(agent_step_module.Path, "home", staticmethod(lambda: fake_real_home))
-
-    seen = {}
+    seen = []
 
     def adapter_fn(invocation: AgentInvocation) -> AgentResult:
-        seen["invocation"] = invocation
+        seen.append(invocation)
         return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
 
     invocation = AgentInvocation(objective="use fetch", inputs={}, workspace_root=worktree)
-    run_agent_step(
-        conn,
-        step_id="step-1",
-        run_id="run-1",
-        worktree_path=worktree,
-        invocation=invocation,
-        adapter_fn=adapter_fn,
-        commit_message="agent: used fetch via cline",
-        actor="cline",
-        mcp_refs=["fetch@1.0.0"],
-        repo_root=repo_root,
-    )
+    with pytest.raises(AgentStepError, match="pre-tool Guard hook"):
+        run_agent_step(
+            conn,
+            step_id="step-1",
+            run_id="run-1",
+            worktree_path=worktree,
+            invocation=invocation,
+            adapter_fn=adapter_fn,
+            commit_message="agent: denied fetch via cline",
+            actor="cline",
+            mcp_refs=["fetch@1.0.0"],
+            repo_root=repo_root,
+        )
 
-    scratch_home = repo_root / "cache" / "sandbox" / "run-1" / "scratch_home" / "cline"
-    mcp_file = scratch_home / ".cline" / "cline_mcp_settings.json"
-    assert mcp_file.is_file()
-    assert "mcpServers" in json.loads(mcp_file.read_text())
-    # the real home directory itself was never written to
-    assert not (fake_real_home / ".cline" / "cline_mcp_settings.json").exists()
-
-    overlay = seen["invocation"].constraints["mcp_env_overlay"]
-    assert overlay["HOME"] == str(scratch_home)
+    assert seen == []

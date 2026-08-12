@@ -299,6 +299,51 @@ def reject_proposal(
     return get_proposal(repo_root, conn, proposal_id=proposal_id)
 
 
+def verify_workflow_proposal(repo_root: Path, conn: sqlite3.Connection, *, proposal_id: str) -> dict:
+    current = get_proposal(repo_root, conn, proposal_id=proposal_id)
+    if current["status"] != "draft":
+        raise ProposalError(f"proposal {proposal_id} is not draft (status={current['status']})")
+    raw = yaml.safe_load(current["content"])
+    if not isinstance(raw, dict):
+        raise ProposalError("workflow proposal verifier expected a YAML mapping")
+    workflow = parse_workflow(raw)
+    if workflow.metadata.name != current["name"] or workflow.metadata.version != current["version"]:
+        raise ProposalError(
+            "workflow proposal verifier rejected draft identity mismatch: "
+            f"{workflow.metadata.name}@{workflow.metadata.version} != {current['name']}@{current['version']}"
+        )
+
+    checked_capabilities = []
+    for node in workflow.nodes:
+        if node.get("type") != "activity" or not node.get("function"):
+            continue
+        capability = node.get("capability") or {"name": node["function"], "version": "1.0.0"}
+        name = capability.get("name")
+        version = capability.get("version")
+        if not name or not version:
+            raise ProposalError(f"workflow proposal verifier rejected activity node {node['id']}: invalid capability ref")
+        try:
+            resolve_registry_object(repo_root, "capabilities", name, version, conn=conn)
+        except Exception as exc:
+            raise ProposalError(
+                f"workflow proposal verifier rejected activity node {node['id']}: {exc}"
+            ) from exc
+        checked_capabilities.append(f"{name}@{version}")
+
+    result = {
+        "verifier": "deterministic-workflow-proposal",
+        "status": "passed",
+        "checks": {
+            "parse_workflow": True,
+            "identity_matches_proposal": True,
+            "activity_capabilities": checked_capabilities,
+        },
+    }
+    _event(conn, proposal_id, "verified", result, actor="workflow-verifier")
+    conn.commit()
+    return result
+
+
 def mark_published(
     repo_root: Path,
     conn: sqlite3.Connection,

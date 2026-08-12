@@ -26,10 +26,13 @@ from awf.adapters.codex_cli import invoke as codex_invoke
 from awf.adapters.copilot_cli import invoke as copilot_invoke
 from awf.authoring import workflow as workflow_authoring
 from awf.clock import utc_now_rfc3339
+from awf.cognition.envelope import PromptEnvelope, PromptSegment
+from awf.cognition.render import render_chat
 from awf.engine.recovery import scan_incomplete_runs
 from awf.engine.run import create_run
 from awf.envfile import get_env_value
 from awf.gates.gate_node import make_trifecta_gate_executor
+from awf.gateway.client import LLM_COMPLETE_CAPABILITY_REF, complete
 from awf.ids import uuid7
 from awf.improvement import proposals as improvement_proposals
 from awf.isolation.scratch import create_scratch_dir, remove_scratch_dir, scratch_path
@@ -913,6 +916,55 @@ def op_registry_get(repo_root: Path, conn: sqlite3.Connection, *, kind: str, nam
     }
 
 
+def op_skill_invoke(
+    repo_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    ref: str,
+    input_text: str,
+    profile_ref: str = workflow_authoring.DEFAULT_AUTHOR_PROFILE,
+) -> dict:
+    name, sep, version = ref.partition("@")
+    if not sep or not name or not version:
+        raise CoreOpError(f"skill ref must be '<name>@<version>', got {ref!r}")
+    profile_name, profile_sep, profile_version = profile_ref.partition("@")
+    if not profile_sep or not profile_name or not profile_version:
+        raise CoreOpError(f"profile ref must be '<name>@<version>', got {profile_ref!r}")
+    skill_path, _skill_source = resolve_registry_object(repo_root, "skills", name, version, conn=conn)
+    profile_path, _profile_source = resolve_registry_object(
+        repo_root, "model-profiles", profile_name, profile_version, conn=conn
+    )
+    skill = load_skill(skill_path)
+    profile = load_model_profile(profile_path)
+    envelope = PromptEnvelope(
+        segments=(
+            PromptSegment(
+                "application",
+                "instruction",
+                True,
+                "Apply the referenced AWF Skill to the operator input and return the direct result.",
+            ),
+            PromptSegment("skill", "instruction", False, skill.body),
+            PromptSegment("user", "input", False, input_text),
+        )
+    )
+    response_text = complete(
+        profile,
+        render_chat(envelope).messages,
+        conn=conn,
+        actor="skill.invoke",
+        repo_root=repo_root,
+        agent_allowlist=[LLM_COMPLETE_CAPABILITY_REF],
+    )
+    return {
+        "kind": "skills",
+        "ref": skill.ref,
+        "profile_ref": profile.ref,
+        "digest": directory_digest(skill_path.parent),
+        "response_text": response_text,
+    }
+
+
 def _skill_md_path(path: Path) -> Path | None:
     # Skills are directory-shaped (<name>/<version>/SKILL.md, Section 9.3),
     # not a single file like every other kind - `path` may point at either
@@ -1206,6 +1258,10 @@ def op_proposal_publish(
         raise CoreOpError(
             f"proposal {proposal_id} draft file digest mismatch: expected {digest}, actual {actual_digest}"
         )
+    try:
+        verification = workflow_authoring.verify_workflow_proposal(repo_root, conn, proposal_id=proposal_id)
+    except workflow_authoring.ProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
     published = op_registry_publish(repo_root, conn, path=draft_path, kind=proposal["kind"])
     try:
         marked = workflow_authoring.mark_published(
@@ -1216,7 +1272,7 @@ def op_proposal_publish(
         )
     except workflow_authoring.ProposalError as exc:
         raise CoreOpError(str(exc)) from exc
-    return {"proposal": marked, "published": published}
+    return {"proposal": marked, "published": published, "verification": verification}
 
 
 def op_proposal_reject(

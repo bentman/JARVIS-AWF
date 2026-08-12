@@ -4,6 +4,13 @@
 
 Implemented.
 
+Corrective update, 2026-08-12: MCP registry objects remain renderable for
+adapter-native clients, but executable use is fail-closed unless the adapter
+has a pre-tool Capability Guard hook. In the current codebase that guarded
+path is GitHub Copilot CLI only (`copilot_guard_hook.py`). `claude-code`,
+`codex`, `cline`, and `antigravity` retain renderer code, but `agent_step`
+denies `mcp_refs` for them before the adapter starts.
+
 ## Context
 
 Section 9.3 specifies the `mcp` registry kind: each `mcp/<name>/<version>.yaml`
@@ -23,10 +30,11 @@ is parsed and stored but has no refs to resolve against and no consumer.
 
 ## Decision
 
-AWF does not implement an MCP client. All five named adapters (Claude
-Code, Codex CLI, Antigravity, GitHub Copilot CLI, Cline) already have one.
-AWF renders registry `mcp` definitions into whatever config file each
-adapter reads, at Run time, and the adapter does the connecting.
+AWF does not implement an MCP client. The adapter owns the connection when
+an MCP server is used. AWF renders registry `mcp` definitions into adapter
+config at Run time, but only adapters with a pre-tool Capability Guard hook
+may execute with that rendered surface. Adapters without such a hook fail
+closed when `mcp_refs` are present.
 
 ## Rationale
 
@@ -123,13 +131,13 @@ remain real, documented options for a later addition.
 
 ## The tradeoff accepted
 
-Tool calls happen inside the adapter, so the Capability Guard does not see
-them. The manifest's `mcp` list is the allowlist instead - deterministic,
-enforced in control code, testable, the same shape as the `capabilities`
-allowlist (ADR-0002) - plus the trust gate and the `events` record above.
-This is accepted for adapters without a tool hook. GitHub Copilot CLI's
-`preToolUse` hook is wired to the Capability Guard for Copilot tool calls;
-that does not create a general per-tool authorization path for every adapter.
+Tool calls happen inside the adapter, so AWF's normal Capability Guard does
+not see them unless the adapter supplies a pre-tool hook. GitHub Copilot
+CLI's `preToolUse` hook is wired to the Capability Guard for Copilot tool
+calls; that does not create a general per-tool authorization path for every
+adapter. For adapters without a hook, the previous tradeoff is no longer
+accepted at execution time: `agent_step` denies `mcp_refs` before rendering
+or invoking the adapter.
 
 ## Scope for implementation
 
@@ -168,13 +176,11 @@ that does not create a general per-tool authorization path for every adapter.
 
 ## Acceptance
 
-A manifest with `mcp: [context7@1.0.0]` drives a real Run where the adapter
-actually calls a tool from it - verified against all four implemented
-adapters, including Antigravity via its scratch-`$HOME` mechanism. The same workflow
-with the field omitted renders nothing. A quarantined ref is refused
-before the adapter starts. `events` shows the rendered set. No secret
-exists on disk anywhere, except Antigravity's copied session-auth token,
-named as an accepted exception in the Mechanism section above.
+A manifest with `mcp: [context7@1.0.0]` is executable only through the
+guarded Copilot path. The same workflow with the field omitted renders
+nothing. A quarantined ref is skipped before render. An unguarded adapter
+with any `mcp_refs` is denied before it starts. `events` shows the rendered
+set only for guarded execution that reaches render.
 
 ## Consequences
 

@@ -31,6 +31,7 @@ export type CommandClient = Pick<
   | "llmServeStatus"
   | "registryList"
   | "registryGet"
+  | "skillInvoke"
   | "workflowAuthorDraft"
   | "proposalGet"
   | "proposalUpdate"
@@ -97,6 +98,7 @@ Plain text                            Ask the default assistant workflow
 /agents                               Registered Agent Manifests
 /skills                               Registry Skills
 /skill <name>@<version>               Show a registry Skill
+/skill-run <name>@<version> <input>   Invoke a registry Skill through the resident mind
 /workflows                            Registry Workflow definitions
 /capabilities                         Capability Records with risk classes
 /mcp                                  Registered MCP servers and trust status
@@ -373,6 +375,11 @@ export async function dispatchCommand(
     if (!args[0]) throw new CommandError("usage: /skill <name>@<version>");
     const [skillName, version] = splitRegistryRef(args[0], "skill");
     return { kind: "json", data: await client.registryGet("skills", skillName, version) };
+  }
+  if (name === "skill-run") {
+    if (!args[0] || args.length < 2) throw new CommandError("usage: /skill-run <name>@<version> <input>");
+    const [skillRef, ...inputParts] = args;
+    return { kind: "json", data: await client.skillInvoke(skillRef, inputParts.join(" ")) };
   }
   if (name === "secrets") return { kind: "json", data: await client.secretListNames() };
 

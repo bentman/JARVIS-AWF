@@ -187,6 +187,10 @@ export class ProtocolClient {
     return this.call("awf/registry.trust", { kind, name, version, status });
   }
 
+  skillInvoke(ref: string, input: string, profile?: string): Promise<Record<string, unknown>> {
+    return this.call("awf/skill.invoke", { ref, input, profile });
+  }
+
   workflowAuthorDraft(options: {
     objective: string;
     name?: string;

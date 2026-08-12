@@ -190,7 +190,7 @@ def test_agent_ref_mcp_list_is_threaded_through_to_the_adapter(tmp_path, conn):
     publish_manifest(
         tmp_path,
         "fetch-user",
-        "name: fetch-user\nversion: 1.0.0\ndescription: x\nadapter: claude-code\nmcp: [fetch@1.0.0]\n",
+        "name: fetch-user\nversion: 1.0.0\ndescription: x\nadapter: copilot\nmcp: [fetch@1.0.0]\n",
     )
     fetch_dir = tmp_path / "config" / "app_registry" / "mcp" / "fetch"
     fetch_dir.mkdir(parents=True)
@@ -203,12 +203,12 @@ def test_agent_ref_mcp_list_is_threaded_through_to_the_adapter(tmp_path, conn):
         captured["invocation"] = invocation
         return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
 
-    executor = make_agent_node_executor({"claude-code": fake_adapter}, tmp_path, tmp_path)
+    executor = make_agent_node_executor({"copilot": fake_adapter}, tmp_path, tmp_path)
     node = {"id": "build", "type": "agent", "agentRef": "fetch-user@1.0.0", "objective": "fetch a page"}
 
     executor(conn, "run-1", "step-1", node)
 
-    assert "--mcp-config" in captured["invocation"].constraints["mcp_extra_args"]
+    assert "--additional-mcp-config" in captured["invocation"].constraints["mcp_extra_args"]
 
 
 def test_agent_ref_skills_list_is_threaded_through_to_the_objective(tmp_path, conn):

@@ -149,13 +149,18 @@ def test_init_db_migrates_registry_proposal_kind_constraint_and_preserves_events
             "(proposal_id, kind, name, version, status, draft_digest, draft_path, summary, created_at, updated_at) "
             "VALUES ('p2', 'semantic-memories', 'memory', '1.0.0', 'draft', 'def', 'draft.yaml', 'memory', 't', 't')"
         )
+        conn.execute(
+            "INSERT INTO registry_proposal_events "
+            "(event_id, proposal_id, event_type, occurred_at, actor, payload_json) "
+            "VALUES ('e2', 'p1', 'verified', 't', 'verifier', '{}')"
+        )
         proposal = conn.execute("SELECT * FROM registry_proposals WHERE proposal_id = 'p1'").fetchone()
-        event = conn.execute("SELECT * FROM registry_proposal_events WHERE proposal_id = 'p1'").fetchone()
+        events = conn.execute("SELECT * FROM registry_proposal_events WHERE proposal_id = 'p1'").fetchall()
     finally:
         conn.close()
 
     assert proposal["kind"] == "workflows"
-    assert event["event_id"] == "e1"
+    assert {event["event_id"] for event in events} == {"e1", "e2"}
 
 
 def test_uuid7_has_correct_version_and_variant():

@@ -4,6 +4,13 @@
 
 Implemented.
 
+Corrective update, 2026-08-12: the default capability registry now includes
+`network_fetch@1.0.0` with an explicit example host allowlist
+(`example.com`), `GET`/`HEAD`, R2 risk, and per-invocation approval. Workflows
+can resolve the standard activity capability on a fresh checkout; operators
+still need custom `data/registry/capabilities/network_fetch/` records for real
+destinations beyond the shipped example.
+
 Acceptance run: `backend/.venv/bin/python -m pytest backend/tests -q` outside
 the Codex sandbox -> 550 passed, 7 warnings; `backend/.venv/bin/python -m ruff
 check .` passed; `npm --prefix frontend run build --workspaces` passed; `npm
@@ -152,11 +159,10 @@ Implemented on 2026-08-09.
 - Added MCP declared-tool exposure checks: a server that declares tools is
   rendered only when every declared tool has a matching allowed MCP-tool
   Capability Record.
-- Added default filesystem and command capability records under
+- Added default filesystem, command, and network capability records under
   `config/app_registry/capabilities/`, including bounded write size defaults
-  for `fs_write`. `network_fetch` is available as a standard activity, but
-  requires an operator- or application-declared Capability Record with a
-  non-empty host allowlist.
+  for `fs_write` and a conservative example-host allowlist for
+  `network_fetch`.
 - Machine policy accepts platform-native absolute allowed roots, not only
   POSIX-style `/...` roots. Command activities validate the authored
   executable exactly, then resolve Python aliases such as `python3.12` and

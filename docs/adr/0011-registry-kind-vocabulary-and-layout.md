@@ -122,7 +122,10 @@ CAPABILITIES= RegistryKind("capabilities",   "yaml",      False)
 MCP         = RegistryKind("mcp",            "yaml",      False)
 SKILLS      = RegistryKind("skills",         "directory", False)
 VOICE_PROFILES = RegistryKind("voice-profiles", "yaml",   False)
-MODEL_PROFILES = RegistryKind("model-profiles", "yaml",   True)
+MODEL_PROFILES = RegistryKind("model-profiles", "yaml",   False)
+PERSONAS = RegistryKind("personas", "yaml", False)
+MEMORY_PROFILES = RegistryKind("memory-profiles", "yaml", False)
+SEMANTIC_MEMORIES = RegistryKind("semantic-memories", "yaml", False)
 
 KINDS: tuple[RegistryKind, ...]
 by_key(key: str) -> RegistryKind          # raises UnknownRegistryKindError
@@ -260,6 +263,8 @@ backend/src/awf/
 ## Consequences
 
 - Adding a registry kind is one entry in `kinds.py` plus its loader.
+- `data/registry/` scaffolding now includes `.gitkeep` roots for every
+  declared kind, including `memory-profiles` and `semantic-memories`.
 - A misspelled kind fails with an error naming the kind and listing the valid
   ones.
 - An object's type comes from where it lives or from what the caller said,

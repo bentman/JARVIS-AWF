@@ -12,14 +12,16 @@ so a later `awf status`/`op_run_status` query can actually see which voice
 a Step's output should be spoken in.
 
 `mcp_refs` (an Agent Manifest's `mcp` list, ADR-0002/ADR-0003), when given,
-resolves each `name@version` against the registry, skips anything
-`quarantined`/`blocked` in `registry_index`, renders the surviving set into
-the invoking adapter's own config format (`awf.mcp.render`), writes it into
-the Run's worktree, records one `mcp_rendered` event, and merges the
-render's resolved-secret environment overlay into the adapter subprocess's
-environment via `invocation.constraints` - AWF never runs an MCP client of
-its own; the adapter connects. An empty or absent `mcp_refs` renders
-nothing and the adapter runs exactly as it would have.
+are executable only for adapters with a pre-tool Capability Guard hook. For
+that guarded set, AWF resolves each `name@version` against the registry,
+skips anything `quarantined`/`blocked` in `registry_index`, renders the
+surviving set into the invoking adapter's own config format
+(`awf.mcp.render`), writes it into the Run's worktree, records one
+`mcp_rendered` event, and merges the render's resolved-secret environment
+overlay into the adapter subprocess's environment via
+`invocation.constraints` - AWF never runs an MCP client of its own; the
+adapter connects. An empty or absent `mcp_refs` renders nothing and the
+adapter runs exactly as it would have.
 
 `skill_refs`/`instructions` (an Agent Manifest's `skills` list and Markdown
 body, ADR-0004): each resolved, trust-passing Skill's `SKILL.md` body is
@@ -75,6 +77,7 @@ from awf.registry.skill import Skill, directory_digest, load_skill
 from awf.secrets.store import get_secret
 
 AdapterFn = Callable[[AgentInvocation], AgentResult]
+GUARDED_MCP_ADAPTERS = {"copilot"}
 
 AGENT_STATUS_FAILURE_CLASSES = {
     AgentStatus.FAILED: "TOOL_ERROR",
@@ -172,6 +175,11 @@ def _apply_mcp(
 ) -> AgentInvocation:
     if not mcp_refs or repo_root is None:
         return invocation
+    if actor not in GUARDED_MCP_ADAPTERS:
+        raise AgentStepError(
+            f"MCP refs require an adapter pre-tool Guard hook; adapter {actor!r} is not currently executable with MCP",
+            failure_class="POLICY_DENIED",
+        )
 
     servers, refs_with_digest = _resolve_mcp_servers(conn, repo_root, mcp_refs, capability_refs)
     if not servers:

@@ -132,7 +132,7 @@ DDL_STATEMENTS = [
     CREATE TABLE IF NOT EXISTS registry_proposal_events (
         event_id TEXT PRIMARY KEY,
         proposal_id TEXT NOT NULL REFERENCES registry_proposals (proposal_id),
-        event_type TEXT NOT NULL CHECK (event_type IN ('created', 'updated', 'published', 'rejected')),
+        event_type TEXT NOT NULL CHECK (event_type IN ('created', 'updated', 'verified', 'published', 'rejected')),
         occurred_at TEXT NOT NULL,
         actor TEXT NOT NULL,
         payload_json TEXT NOT NULL

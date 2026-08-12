@@ -50,6 +50,7 @@ METHOD_NAMES = (
     "awf/registry.reindex",
     "awf/registry.retire",
     "awf/registry.trust",
+    "awf/skill.invoke",
     "awf/workflow.authorDraft",
     "awf/proposal.get",
     "awf/proposal.update",
@@ -162,6 +163,14 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
     if method == "awf/registry.trust":
         return ops.op_registry_trust(
             conn, kind=params["kind"], name=params["name"], version=params["version"], status=params["status"]
+        )
+    if method == "awf/skill.invoke":
+        return ops.op_skill_invoke(
+            repo_root,
+            conn,
+            ref=params["ref"],
+            input_text=params["input"],
+            profile_ref=params.get("profile", ops.workflow_authoring.DEFAULT_AUTHOR_PROFILE),
         )
     if method == "awf/workflow.authorDraft":
         return ops.op_workflow_author_draft(

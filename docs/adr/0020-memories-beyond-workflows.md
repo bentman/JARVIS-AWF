@@ -12,6 +12,11 @@ hits render as untrusted `retrieval/context` segments before the current
 `user/input`. Retrieval failures are logged as `memory_retrieval_skipped` and
 do not fail the agent step.
 
+Corrective update, 2026-08-12: `data/registry/memory-profiles/.gitkeep` and
+`data/registry/semantic-memories/.gitkeep` now ship with matching `.gitignore`
+re-include rules, so every declared memory registry kind has consistent
+operator-data scaffolding.
+
 ## Context
 
 `docs/archives/ProjectVisionAWF.md` defines the third promise as memory beyond

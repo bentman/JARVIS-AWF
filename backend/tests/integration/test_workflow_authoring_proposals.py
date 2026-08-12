@@ -112,6 +112,7 @@ def test_update_then_publish_requires_current_digest_and_uses_registry(monkeypat
 
     assert published["proposal"]["status"] == "published"
     assert published["published"]["kind"] == "workflows"
+    assert published["verification"]["status"] == "passed"
     path, source = resolve_registry_object(repo_root, "workflows", "demo-authored", "0.2.0", conn=conn)
     assert source == "data"
     assert path.read_text(encoding="utf-8") == updated["content"]
@@ -129,6 +130,21 @@ def test_publish_rehashes_draft_file_before_registry_write(monkeypatch, tmp_path
 
     with pytest.raises(RegistryObjectNotFoundError):
         resolve_registry_object(repo_root, "workflows", "demo-authored", "0.1.0", conn=conn)
+
+
+def test_publish_runs_deterministic_verifier_before_registry_write(monkeypatch, tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+    payload = authoring_payload()
+    payload["workflow"]["spec"]["nodes"] = [
+        {"id": "fetch", "type": "activity", "function": "missing_capability", "args": {}, "next": None}
+    ]
+    monkeypatch.setattr(workflow_authoring, "complete_structured", lambda *args, **kwargs: payload)
+    proposal = op_workflow_author_draft(repo_root, conn, objective="make a demo")
+
+    with pytest.raises(CoreOpError, match="missing_capability"):
+        op_proposal_publish(repo_root, conn, proposal_id=proposal["proposal_id"], digest=proposal["draft_digest"])
+
+    assert conn.execute("SELECT 1 FROM registry_proposal_events WHERE event_type = 'published'").fetchone() is None
 
 
 def test_rejected_proposal_cannot_publish(monkeypatch, tmp_path):

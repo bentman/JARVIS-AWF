@@ -4,6 +4,12 @@
 
 Implemented.
 
+Corrective update, 2026-08-12: registry proposal publication now has an
+explicit deterministic verifier gate before registry publish. This strengthens
+the authored-work input to self-improvement but does not widen authorship
+beyond Workflows and Semantic Memories; Skill, Agent Manifest, and Capability
+Record authoring remain future work.
+
 Acceptance run: `backend/.venv/bin/python -m pytest backend/tests -q` outside
 the Codex sandbox -> 559 passed, 7 warnings; `backend/.venv/bin/python -m ruff
 check .` passed; `npm --prefix frontend run build --workspaces` passed; `npm

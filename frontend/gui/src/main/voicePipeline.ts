@@ -175,7 +175,7 @@ export function registerVoiceSessionIpcHandlers(ipcMain: IpcMainLike, client: Pr
     client.voiceSubmitText({
       voiceSessionId: voiceSessionId as string,
       text: text as string,
-      workflowRef: workflowRef as string,
+      workflowRef: (workflowRef as string | undefined) || undefined,
       voiceProfileRef: voiceProfileRef as string | undefined,
       turnId: turnId as string | undefined,
     }),

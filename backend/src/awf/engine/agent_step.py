@@ -316,6 +316,24 @@ def _apply_skills(
         for _ref, skill, _digest, _dir in resolved
         if skill.body.strip()
     )
+    if repo_root is not None and invocation.objective.strip():
+        from awf.memory.context import retrieve_memory_context
+
+        profile_ref = str(invocation.constraints.get("memory_profile_ref") or "default@1.0.0")
+        try:
+            segments.extend(
+                retrieve_memory_context(repo_root, conn, query=invocation.objective, profile_ref=profile_ref)
+            )
+        except Exception as exc:
+            write_event(
+                conn,
+                run_id=run_id,
+                step_id=step_id,
+                new_status="memory_retrieval_skipped",
+                actor=actor,
+                reason_code="memory_retrieval_skipped",
+                payload_json=json.dumps({"profile_ref": profile_ref, "error": str(exc)}, sort_keys=True),
+            )
     if invocation.objective.strip():
         segments.append(PromptSegment("user", "input", False, invocation.objective))
     envelope = PromptEnvelope(

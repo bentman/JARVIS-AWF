@@ -34,9 +34,18 @@ def test_hardware_probe_activity_runs_for_real_and_persists_the_step(conn):
     assert resolved_event is not None
 
 
-def test_assistant_reply_activity_returns_operator_visible_text(conn):
+def test_assistant_reply_activity_uses_model_gateway(conn, repo_root, monkeypatch):
     create_step(conn, step_id="step-1", run_id="run-1", node_id="reply")
-    executor = make_activity_node_executor()
+    captured = {}
+
+    def fake_complete(profile, messages, **kwargs):
+        captured["profile"] = profile.ref
+        captured["messages"] = messages
+        captured["kwargs"] = kwargs
+        return "Model response."
+
+    monkeypatch.setattr("awf.workflow.activities.complete", fake_complete)
+    executor = make_activity_node_executor(repo_root=repo_root)
 
     output = executor(
         conn,
@@ -45,10 +54,12 @@ def test_assistant_reply_activity_returns_operator_visible_text(conn):
         {"id": "reply", "type": "activity", "function": "assistant_reply", "args": {"objective": "triage runs"}},
     )
 
-    assert "triage runs" in output["response_text"]
+    assert output["response_text"] == "Model response."
+    assert captured["profile"] == "resident-mind@1.0.0"
+    assert captured["kwargs"]["run_id"] == "run-1"
     row = conn.execute("SELECT status, output_json FROM steps WHERE step_id = 'step-1'").fetchone()
     assert row["status"] == "SUCCEEDED"
-    assert "triage runs" in row["output_json"]
+    assert "Model response" in row["output_json"]
 
 
 def test_unknown_activity_name_raises_with_invalid_input_failure_class(conn):

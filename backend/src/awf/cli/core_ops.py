@@ -83,6 +83,8 @@ ADAPTER_REGISTRY = {
     "cline": cline_invoke,
 }
 
+DEFAULT_ASSISTANT_WORKFLOW_REF = "assistant-default@1.0.0"
+
 
 class CoreOpError(RuntimeError):
     pass
@@ -1422,14 +1424,34 @@ def op_voice_submit_text(
 ) -> dict:
     from awf.speech.session import append_assistant_response, append_operator_utterance, current_voice_session
 
-    if not workflow_ref:
-        raise CoreOpError("voice.submitText requires a workflowRef")
+    workflow_ref = workflow_ref or DEFAULT_ASSISTANT_WORKFLOW_REF
     if not text.strip():
         raise CoreOpError("voice.submitText requires non-empty text")
 
     voice_profile = _resolve_voice_profile(repo_root, voice_profile_ref)
     session = current_voice_session(conn, voice_session_id=voice_session_id)
-    if session.state == "transcribing":
+    if session.state in {"idle", "armed"}:
+        op_voice_session_event(
+            conn,
+            voice_session_id=voice_session_id,
+            frame_type="vad.speech_started",
+            turn_id=turn_id,
+        )
+        session = op_voice_session_event(
+            conn,
+            voice_session_id=voice_session_id,
+            frame_type="vad.speech_stopped",
+            turn_id=turn_id,
+        )
+    elif session.state == "listening":
+        session = op_voice_session_event(
+            conn,
+            voice_session_id=voice_session_id,
+            frame_type="vad.speech_stopped",
+            turn_id=turn_id,
+        )
+    session_state = session["state"] if isinstance(session, dict) else session.state
+    if session_state == "transcribing":
         op_voice_session_event(
             conn,
             voice_session_id=voice_session_id,
@@ -1483,6 +1505,18 @@ def _voice_response_text(workflow_ref: str, run_result: dict) -> str:
     if isinstance(outputs, dict) and isinstance(outputs.get("response_text"), str):
         return outputs["response_text"]
     return f"Workflow {workflow_ref} finished with status {run_result.get('status')} (run {run_result.get('run_id')})."
+
+
+def op_events_snapshot(conn: sqlite3.Connection, *, run_id: str | None = None, limit: int = 100) -> dict:
+    limit = max(1, min(int(limit), 500))
+    if run_id:
+        rows = conn.execute(
+            "SELECT * FROM events WHERE run_id = ? ORDER BY occurred_at DESC, event_id DESC LIMIT ?",
+            (run_id, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM events ORDER BY occurred_at DESC, event_id DESC LIMIT ?", (limit,)).fetchall()
+    return {"events": [dict(row) for row in reversed(rows)], "streaming": False}
 
 
 def op_secret_set(repo_root: Path, conn: sqlite3.Connection, *, name: str, value: str) -> dict:

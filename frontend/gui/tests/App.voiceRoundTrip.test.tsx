@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/renderer/App.js";
 
 function liveVoiceProps() {
@@ -34,6 +34,11 @@ function liveVoiceProps() {
 }
 
 describe("App live voice session (text-first invariant)", () => {
+  afterEach(() => {
+    delete (window as any).SpeechRecognition;
+    delete (window as any).webkitSpeechRecognition;
+  });
+
   it("renders recognized voice text and response text in the visible transcript", async () => {
     const props = liveVoiceProps();
     const onControlRunDetail = vi.fn().mockResolvedValue({
@@ -68,7 +73,7 @@ describe("App live voice session (text-first invariant)", () => {
     expect(onControlRunDetail).toHaveBeenCalledWith("run-voice-1");
   });
 
-  it("shows a clear error when no default workflow is supplied", async () => {
+  it("lets the backend apply the default workflow when the field is empty", async () => {
     const props = liveVoiceProps();
     render(<App onApprove={vi.fn()} onReject={vi.fn()} {...props} />);
 
@@ -82,8 +87,50 @@ describe("App live voice session (text-first invariant)", () => {
     });
     fireEvent.click(screen.getByText("Submit voice text"));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Set a default workflow/);
-    expect(props.onVoiceSubmitText).not.toHaveBeenCalled();
+    expect(props.onVoiceSubmitText).toHaveBeenCalledWith(
+      "vs-1",
+      "Hello world.",
+      undefined,
+      "narrator@1.0.0",
+      expect.stringMatching(/^turn-/),
+    );
+  });
+
+  it("captures live speech recognition results during push to talk", async () => {
+    const props = liveVoiceProps();
+    let recognition: any;
+    (window as any).SpeechRecognition = vi.fn(function FakeSpeechRecognition(this: any) {
+      recognition = {
+        continuous: false,
+        interimResults: false,
+        lang: "",
+        onresult: null,
+        onerror: null,
+        start: vi.fn(),
+        stop: vi.fn(),
+      };
+      return recognition;
+    });
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop: vi.fn() }] }) },
+    });
+    render(<App onApprove={vi.fn()} onReject={vi.fn()} {...props} />);
+
+    fireEvent.click(screen.getByText("Start voice session"));
+    expect(await screen.findByText(/Voice session: vs-1/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Push to talk"));
+    await waitFor(() => expect(recognition.start).toHaveBeenCalled());
+
+    recognition.onresult({
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: { isFinal: true, 0: { transcript: "Hello from microphone." } },
+      },
+    });
+
+    expect(await screen.findByDisplayValue("Hello from microphone.")).toBeTruthy();
   });
 
   it("does not render live voice controls when session handlers are absent", () => {

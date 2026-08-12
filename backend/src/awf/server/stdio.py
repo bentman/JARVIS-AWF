@@ -14,6 +14,8 @@ with a method-not-found-shaped error rather than pretending to stream.
 
 import json
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from awf.cli import core_ops as ops
@@ -268,18 +270,15 @@ def dispatch(repo_root: Path, conn, method: str, params: dict):
     if method == "awf/llm.serveStatus":
         return ops.op_llm_serve(repo_root, conn, action="status")
     if method == "awf/events.subscribe":
-        raise JsonRpcError(
-            METHOD_NOT_FOUND,
-            "awf/events.subscribe requires a streaming transport, not implemented over request/response stdio",
-        )
+        return ops.op_events_snapshot(conn, run_id=params.get("runId"), limit=int(params.get("limit", 100)))
     raise JsonRpcError(METHOD_NOT_FOUND, f"unknown method: {method}")
 
 
-def handle_line(repo_root: Path, conn, line: str, out_stream) -> None:
+def handle_line(repo_root: Path, conn, line: str, out_stream, write_lock=None) -> None:
     try:
         request = json.loads(line)
     except json.JSONDecodeError:
-        _write(out_stream, {"jsonrpc": "2.0", "id": None, "error": {"code": PARSE_ERROR, "message": "parse error"}})
+        _write(out_stream, {"jsonrpc": "2.0", "id": None, "error": {"code": PARSE_ERROR, "message": "parse error"}}, write_lock)
         return
 
     request_id = request.get("id")
@@ -288,16 +287,31 @@ def handle_line(repo_root: Path, conn, line: str, out_stream) -> None:
 
     try:
         result = dispatch(repo_root, conn, method, params)
-        _write(out_stream, {"jsonrpc": "2.0", "id": request_id, "result": result})
+        _write(out_stream, {"jsonrpc": "2.0", "id": request_id, "result": result}, write_lock)
     except JsonRpcError as exc:
-        _write(out_stream, {"jsonrpc": "2.0", "id": request_id, "error": {"code": exc.code, "message": exc.message}})
+        _write(out_stream, {"jsonrpc": "2.0", "id": request_id, "error": {"code": exc.code, "message": exc.message}}, write_lock)
     except Exception as exc:
-        _write(out_stream, {"jsonrpc": "2.0", "id": request_id, "error": {"code": INTERNAL_ERROR, "message": str(exc)}})
+        _write(out_stream, {"jsonrpc": "2.0", "id": request_id, "error": {"code": INTERNAL_ERROR, "message": str(exc)}}, write_lock)
 
 
-def _write(out_stream, payload: dict) -> None:
-    out_stream.write(json.dumps(payload, default=str) + "\n")
-    out_stream.flush()
+def _write(out_stream, payload: dict, write_lock=None) -> None:
+    def write() -> None:
+        out_stream.write(json.dumps(payload, default=str) + "\n")
+        out_stream.flush()
+
+    if write_lock is None:
+        write()
+        return
+    with write_lock:
+        write()
+
+
+def _handle_line_with_fresh_connection(repo_root: Path, db_path: Path, line: str, out_stream, write_lock) -> None:
+    conn = get_connection(db_path)
+    try:
+        handle_line(repo_root, conn, line, out_stream, write_lock)
+    finally:
+        conn.close()
 
 
 def serve_stdio(repo_root: Path, *, in_stream=None, out_stream=None) -> None:
@@ -306,13 +320,13 @@ def serve_stdio(repo_root: Path, *, in_stream=None, out_stream=None) -> None:
 
     db_path = resolve_db_path(repo_root)
     init_db(db_path)
-    conn = get_connection(db_path)
-
-    try:
+    write_lock = threading.Lock()
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = []
         for line in in_stream:
             line = line.strip()
             if not line:
                 continue
-            handle_line(repo_root, conn, line, out_stream)
-    finally:
-        conn.close()
+            futures.append(executor.submit(_handle_line_with_fresh_connection, repo_root, db_path, line, out_stream, write_lock))
+        for future in futures:
+            future.result()

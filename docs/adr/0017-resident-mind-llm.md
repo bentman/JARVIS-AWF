@@ -20,6 +20,9 @@ context. Corrective update, 2026-08-12: hosted completions now use a distinct
 while local loopback/Ollama completions use `llm_complete@1.0.0`.
 `resident-mind@1.0.0` also ships as a resolvable config Model Profile on a
 fresh checkout.
+The shipped `assistant-default@1.0.0` workflow now routes its
+`assistant_reply` activity through that Model Profile and the Model Gateway
+instead of returning a canned deterministic string.
 
 ## Context
 

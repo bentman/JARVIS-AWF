@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-12 14:17
+  - Host class(es): Windows AMD64 focused backend/frontend validation
+  - Summary: Wired execution memory retrieval, made the default assistant workflow model-backed, moved voice default workflow handling into core, added stdio event snapshots with concurrent request handling, and enabled browser speech recognition for live GUI push-to-talk.
+  - Scope: `backend/src/awf/{engine/agent_step.py,workflow/{activities.py,engine.py},cli/core_ops.py,server/stdio.py}`, `frontend/shared`, `frontend/gui/src/{main,preload,renderer}`, focused backend/frontend tests, `config/app_registry/capabilities/assistant_reply/1.0.0.yaml`, `docs/adr/{0016,0017,0018,0020,0023,0024}*.md`, `CHANGE_LOG.md`.
+  - Validation: Focused backend pytest passed (`27 passed`); backend unit validation passed (`311 passed`, report `reports/validation/20260812191805-unit.txt`); GUI voice-focused tests passed (`14 passed`); shared protocol tests passed (`12 passed`).
+  - Notes: Direct pytest emitted the known Windows sandbox `.pytest_cache` warning; the pre-existing hardware-probe activity test can stall in sandbox and was excluded from the focused backend batch.
+
 - Timestamp: 2026-08-12 13:39
   - Host class(es): Windows AMD64 focused backend validation
   - Summary: Fixed registry model-profile defaults, workflow self-digest enforcement, conn-less registry integrity checks, and distinct hosted LLM completion authorization.

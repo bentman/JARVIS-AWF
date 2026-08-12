@@ -4,7 +4,8 @@ import json
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.run import create_run
-from awf.server.stdio import handle_line
+from awf.events.writer import write_event
+from awf.server.stdio import handle_line, serve_stdio
 
 
 def make_repo(tmp_path):
@@ -60,12 +61,42 @@ def test_missing_required_param_returns_internal_error_not_crash(tmp_path):
     assert response["id"] == 3
 
 
-def test_events_subscribe_reports_unsupported(tmp_path):
+def test_events_subscribe_returns_event_snapshot(tmp_path):
     repo_root, conn = make_repo(tmp_path)
+    create_run(conn, run_id="run-1", workflow_ref="demo@1.0.0")
+    write_event(conn, run_id="run-1", new_status="RUNNING", actor="test", reason_code="demo")
 
-    response = send(repo_root, conn, {"jsonrpc": "2.0", "id": 4, "method": "awf/events.subscribe", "params": {}})
+    response = send(
+        repo_root,
+        conn,
+        {"jsonrpc": "2.0", "id": 4, "method": "awf/events.subscribe", "params": {"runId": "run-1"}},
+    )
 
-    assert response["error"]["code"] == -32601
+    assert response["result"]["streaming"] is False
+    assert any(event["reason_code"] == "demo" for event in response["result"]["events"])
+
+
+def test_serve_stdio_accepts_multiple_requests_in_one_stream(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+    create_run(conn, run_id="run-1", workflow_ref="demo@1.0.0")
+    conn.close()
+    in_stream = io.StringIO(
+        "\n".join(
+            [
+                json.dumps({"jsonrpc": "2.0", "id": 1, "method": "awf/run.status", "params": {"runId": "run-1"}}),
+                json.dumps({"jsonrpc": "2.0", "id": 2, "method": "awf/events.subscribe", "params": {"runId": "run-1"}}),
+                "",
+            ]
+        )
+    )
+    out_stream = io.StringIO()
+
+    serve_stdio(repo_root, in_stream=in_stream, out_stream=out_stream)
+
+    responses = [json.loads(line) for line in out_stream.getvalue().splitlines()]
+    assert {response["id"] for response in responses} == {1, 2}
+    assert any(response["id"] == 1 and response["result"]["run_id"] == "run-1" for response in responses)
+    assert any(response["id"] == 2 and response["result"]["streaming"] is False for response in responses)
 
 
 def test_control_center_methods_over_jsonrpc(tmp_path, monkeypatch):

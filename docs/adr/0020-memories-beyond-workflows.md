@@ -4,6 +4,14 @@
 
 Implemented.
 
+Corrective update, 2026-08-12: agent execution now retrieves memory context
+by default through `retrieve_memory_context(repo_root, conn, query=objective,
+profile_ref="default@1.0.0")` during prompt-envelope assembly. Retrieved
+semantic memories render as untrusted `memory/context` segments and episodic
+hits render as untrusted `retrieval/context` segments before the current
+`user/input`. Retrieval failures are logged as `memory_retrieval_skipped` and
+do not fail the agent step.
+
 ## Context
 
 `docs/archives/ProjectVisionAWF.md` defines the third promise as memory beyond
@@ -347,8 +355,9 @@ Rules:
 - episodic retrieval renders as `PromptSegment("retrieval", "context", False, ...)`;
 - each segment includes memory ref, digest, provenance, confidence, and source;
 - token and item caps are enforced before rendering;
-- memory is injected only when a caller explicitly requests memory retrieval
-  for an invocation.
+- memory is injected for agent invocations by default using
+  `default@1.0.0`; callers may override the profile with
+  `constraints.memory_profile_ref`.
 
 ### Task G — CLI, JSON-RPC, and frontend app flow
 

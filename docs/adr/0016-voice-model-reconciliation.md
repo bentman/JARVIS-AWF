@@ -4,6 +4,11 @@
 
 Implemented.
 
+Corrective update, 2026-08-12: live GUI push-to-talk now consumes browser
+speech recognition results when available. The deterministic
+`awf-speech round-trip` file path remains the fixture/debug path and is not
+the only way recognized text can reach `voice.submitText`.
+
 ## Context
 
 ADR-0007 established `awf-speech models sync` as the voice acquisition path,

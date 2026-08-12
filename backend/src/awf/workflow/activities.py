@@ -10,7 +10,13 @@ durable way to invoke the Hardware Profiler mid-Run, not just at voice setup.
 
 import sqlite3
 from collections.abc import Callable
+from pathlib import Path
 
+from awf.cognition.envelope import PromptEnvelope, PromptSegment
+from awf.cognition.render import render_chat
+from awf.gateway.client import LLM_COMPLETE_CAPABILITY_REF, complete
+from awf.registry.model_profile import load_model_profile
+from awf.registry.resolve import resolve_registry_object
 from awf.hardware.gpu_sampler import sample_gpu_utilization
 from awf.hardware.profiler import run_hardware_profiler
 
@@ -29,12 +35,36 @@ def _assistant_reply(conn: sqlite3.Connection, args: dict) -> dict:
     objective = str(args.get("objective", "")).strip()
     if not objective:
         return {"response_text": "I am ready. Send a request or choose a workflow to run."}
+    context = args.get("_awf") if isinstance(args.get("_awf"), dict) else {}
+    repo_root = Path(str(context.get("repo_root"))) if context.get("repo_root") else None
+    run_id = str(context.get("run_id")) if context.get("run_id") else None
+    step_id = str(context.get("step_id")) if context.get("step_id") else None
+    if repo_root is None or run_id is None:
+        raise RuntimeError("assistant_reply requires AWF run context")
+    name, version = "resident-mind", "1.0.0"
+    path, _source = resolve_registry_object(repo_root, "model-profiles", name, version, conn=conn)
+    profile = load_model_profile(path)
+    envelope = PromptEnvelope(
+        segments=(
+            PromptSegment(
+                "application",
+                "instruction",
+                True,
+                "Answer the operator directly and concisely as the AWF resident mind.",
+            ),
+            PromptSegment("user", "input", False, objective),
+        )
+    )
     return {
-        "response_text": (
-            f"I received your request: {objective}\n\n"
-            "This local assistant workflow confirmed that AWF accepted the request, created a durable Run, "
-            "and returned operator-visible response text. Choose a specialized workflow when you want AWF "
-            "to perform implementation or review work."
+        "response_text": complete(
+            profile,
+            render_chat(envelope).messages,
+            conn=conn,
+            run_id=run_id,
+            step_id=step_id,
+            actor="assistant_reply",
+            repo_root=repo_root,
+            agent_allowlist=[LLM_COMPLETE_CAPABILITY_REF],
         )
     }
 

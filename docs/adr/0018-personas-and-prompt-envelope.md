@@ -6,6 +6,13 @@ Implemented.
 
 Acceptance run: `scripts/validate_backend.py lint` passed; `scripts/validate_backend.py runtime` -> 17 passed, 1 skipped; `scripts/validate_backend.py ci` -> 509 passed, 18 deselected. Focused prompt/persona coverage is included in the backend test suite.
 
+Corrective update, 2026-08-12: agent-step envelope assembly now includes
+bounded memory retrieval. Segment order is application instruction, persona
+style, skill instructions, untrusted memory/retrieval context, then current
+user input. Only trusted `application`/`persona`/`contract` segments can be
+promoted to the chat system message; memory and retrieval remain user-side
+context.
+
 Two tasks. Task A adds the Persona registry kind. Task B adds the prompt
 envelope. Task B depends on Task A.
 

@@ -230,3 +230,46 @@ def test_real_agent_allowlist_allows_a_listed_capability(repo_and_worktree, conn
     assert output["status"] == "COMPLETED"
     row = conn.execute("SELECT status FROM steps WHERE step_id = 'step-1'").fetchone()
     assert row["status"] == "SUCCEEDED"
+
+
+def test_agent_step_injects_memory_context_before_user_input(repo_and_worktree, conn, monkeypatch):
+    repo_root, worktree = repo_and_worktree
+    (repo_root / "config" / "app_registry" / "memory-profiles" / "default").mkdir(parents=True)
+    (repo_root / "config" / "app_registry" / "memory-profiles" / "default" / "1.0.0.yaml").write_text(
+        "apiVersion: awf/v1\n"
+        "kind: MemoryProfile\n"
+        "metadata: {name: default, version: 1.0.0, digest: sha256:default}\n"
+        "spec:\n"
+        "  enabled: true\n"
+        "  maximum_data_class: internal\n"
+        "  retrieval: {maxItems: 1, maxTokens: 100, includeEpisodic: true, includeSemantic: false, minConfidence: 0.0}\n"
+        "  retention: {activeSessionTtlHours: 72, requireExplicitSemanticPublish: true}\n"
+        "  embedding: {enabled: false, modelProfileRef: null, version: none}\n"
+    )
+
+    from awf.cognition.envelope import PromptSegment
+
+    monkeypatch.setattr(
+        "awf.memory.context.retrieve_memory_context",
+        lambda repo_root, conn, *, query, profile_ref: (PromptSegment("retrieval", "context", False, "prior run context"),),
+    )
+    captured = {}
+
+    def adapter_fn(invocation: AgentInvocation) -> AgentResult:
+        captured["objective"] = invocation.objective
+        return AgentResult(status=AgentStatus.COMPLETED, output={}, termination_reason="success")
+
+    invocation = AgentInvocation(objective="do the current task", inputs={}, workspace_root=worktree)
+    run_agent_step(
+        conn,
+        step_id="step-1",
+        run_id="run-1",
+        worktree_path=worktree,
+        invocation=invocation,
+        adapter_fn=adapter_fn,
+        commit_message="agent: memory context",
+        repo_root=repo_root,
+    )
+
+    assert "[retrieval/context, untrusted]\nprior run context" in captured["objective"]
+    assert captured["objective"].rstrip().endswith("[user/input, untrusted]\ndo the current task")

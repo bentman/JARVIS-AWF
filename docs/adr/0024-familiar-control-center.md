@@ -9,6 +9,13 @@ passed, 1 skipped, 7 warnings; `backend/.venv/bin/python -m ruff check .`
 passed; `npm --prefix frontend run build --workspaces` passed; `npm --prefix
 frontend test --workspaces` -> shared 12 passed, CLI 41 passed, GUI 39 passed.
 
+Corrective update, 2026-08-12: `awf serve --stdio` now dispatches requests
+through a bounded thread pool with a fresh SQLite connection per request, so
+a long-running `awf/run.start` no longer prevents the server from accepting
+other request lines. `awf/events.subscribe` is implemented over this
+request/response transport as a non-streaming event snapshot
+(`streaming: false`), exposed through the shared protocol client.
+
 ## Context
 
 `docs/archives/ProjectVisionAWF.md` defines the seventh promise as a familiar
@@ -43,9 +50,9 @@ Important gaps remain:
 - LLM server/model state exists in backend core operations, but is not exposed
   through the Section 16.3 JSON-RPC method list or GUI IPC surface.
 - Hardware/profile readiness is not exposed as a GUI-readable protocol shape.
-- `awf/events.subscribe` is listed in the shared protocol, but the current
-  stdio server rejects it because request/response stdio is not a streaming
-  transport.
+- `awf/events.subscribe` is listed in the shared protocol. Over
+  request/response stdio it returns an event snapshot with `streaming: false`;
+  true server-push remains a future streaming transport concern.
 - Registry Skills are listable through `/skills`; they are not yet executable
   slash commands with capability/approval handling.
 
@@ -101,11 +108,10 @@ layout should keep the existing panels but reorganize them around:
   capabilities, model profiles, and voice profiles;
 - conversation transcript as one panel, not the whole application.
 
-**Event streaming is not assumed until the transport supports it.** The first
-implementation uses explicit refresh and read-only timeline/detail calls.
-`awf/events.subscribe` remains unavailable over request/response stdio until a
-streaming protocol is implemented. The GUI may poll focused summary methods;
-it must not pretend that server-push exists.
+**Event streaming is not assumed until the transport supports it.** The stdio
+implementation uses explicit refresh, read-only timeline/detail calls, and
+`awf/events.subscribe` snapshots. The GUI may poll focused summary methods or
+event snapshots; it must not pretend that server-push exists.
 
 **Terminal and desktop are peers.** The CLI keeps the fixed slash-command
 surface and adds registry-backed Skill command discovery. A Skill can appear as
@@ -263,7 +269,8 @@ and leaves a clean seam for later streaming.
   Skill registry object.
 - No frontend owns durable state or authorization logic.
 - R2+ approval confirmation remains exact-action and screen-confirmed.
-- `awf/events.subscribe` is not claimed as working over request/response stdio.
+- `awf/events.subscribe` works over request/response stdio as a snapshot, not
+  as server-push streaming.
 - Tests cover backend core ops, JSON-RPC dispatch, shared client methods, GUI
   rendering, GUI IPC wiring, and CLI command dispatch.
 

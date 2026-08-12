@@ -207,7 +207,7 @@ def test_op_run_start_preserves_allowed_assistant_metadata_when_adapting_objecti
     assert json.loads(input_json) == {"topic": "SQLite WAL", "voiceSessionId": "vs-1"}
 
 
-def test_op_run_start_runs_shipped_default_assistant_workflow(tmp_path, repo_root):
+def test_op_run_start_runs_shipped_default_assistant_workflow(tmp_path, repo_root, monkeypatch):
     test_repo_root, conn = make_git_awf_repo(tmp_path)
     shutil.copytree(
         repo_root / "config" / "app_registry" / "workflows" / "assistant-default",
@@ -217,6 +217,11 @@ def test_op_run_start_runs_shipped_default_assistant_workflow(tmp_path, repo_roo
         repo_root / "config" / "app_registry" / "capabilities" / "assistant_reply",
         test_repo_root / "config" / "app_registry" / "capabilities" / "assistant_reply",
     )
+    shutil.copytree(
+        repo_root / "config" / "app_registry" / "model-profiles" / "resident-mind",
+        test_repo_root / "config" / "app_registry" / "model-profiles" / "resident-mind",
+    )
+    monkeypatch.setattr("awf.workflow.activities.complete", lambda *args, **kwargs: "Model says: show failed runs.")
 
     result = op_run_start(
         test_repo_root,
@@ -226,8 +231,7 @@ def test_op_run_start_runs_shipped_default_assistant_workflow(tmp_path, repo_roo
     )
 
     assert result["status"] == "SUCCEEDED"
-    assert "show failed runs" in result["outputs"]["response_text"]
-    assert result["outputs"]["response_text"].startswith("I received your request")
+    assert result["outputs"]["response_text"] == "Model says: show failed runs."
 
 
 def test_op_run_start_escalates_risky_gate_to_high_risk_tier(tmp_path):

@@ -263,6 +263,11 @@ export interface LlmServeStatus {
   [key: string]: unknown;
 }
 
+export interface EventsSnapshot {
+  events: Record<string, unknown>[];
+  streaming: false;
+}
+
 export interface ControlSummary {
   runs: RunSummary[];
   approvals: Approval[];

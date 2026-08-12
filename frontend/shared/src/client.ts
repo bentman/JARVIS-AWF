@@ -12,6 +12,7 @@ import {
   type LlmModelsReport,
   type LlmServeStatus,
   type LlmServersReport,
+  type EventsSnapshot,
   type MachineActionPreview,
   type MemorySearchResult,
   type MethodName,
@@ -276,7 +277,7 @@ export class ProtocolClient {
   voiceSubmitText(options: {
     voiceSessionId: string;
     text: string;
-    workflowRef: string;
+    workflowRef?: string;
     voiceProfileRef?: string;
     turnId?: string;
   }): Promise<VoiceSubmitTextResult> {
@@ -325,6 +326,10 @@ export class ProtocolClient {
 
   llmServeStatus(): Promise<LlmServeStatus> {
     return this.call("awf/llm.serveStatus", {});
+  }
+
+  eventsSubscribe(options: { runId?: string; limit?: number } = {}): Promise<EventsSnapshot> {
+    return this.call("awf/events.subscribe", options);
   }
 
   close(): void {

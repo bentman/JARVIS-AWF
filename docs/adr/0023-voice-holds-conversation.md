@@ -10,6 +10,13 @@ ruff check .` passed; `npm --prefix frontend run build --workspaces` passed;
 `npm --prefix frontend test --workspaces` passed; `backend/.venv/bin/python -m
 awf.speech.cli models verify` passed with configured TTS/VAD/wake artifacts OK.
 
+Corrective update, 2026-08-12: `voice.submitText` no longer requires the GUI
+to provide a workflow ref. The core defaults missing `workflowRef` to
+`assistant-default@1.0.0`, advances idle/listening sessions through the same
+visible frame sequence used by push-to-talk, then submits the turn. The GUI
+push-to-talk path now uses browser speech recognition when available to fill
+the final recognized text field; manual text entry remains the fallback.
+
 ## Context
 
 `docs/archives/ProjectVisionAWF.md` defines the sixth promise as the move from
@@ -265,7 +272,9 @@ Add main-process session orchestration with explicit IPC:
 - `awf:voiceSpeakText`
 
 The renderer receives state changes for UI display. Browser microphone access
-is used for push-to-talk permission and capture lifecycle; the implemented
+is used for push-to-talk permission and capture lifecycle. Browser speech
+recognition is used when available to produce final/interim text; the
+implemented
 submission path uses final text rather than streamed audio frames.
 
 ### Task D — Interruption and recovery

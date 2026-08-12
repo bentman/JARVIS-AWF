@@ -1,5 +1,35 @@
 import React, { useRef, useState } from "react";
 
+type SpeechRecognitionResultEvent = Event & {
+  resultIndex: number;
+  results: {
+    length: number;
+    [index: number]: {
+      isFinal: boolean;
+      [index: number]: { transcript: string };
+    };
+  };
+};
+
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionResultEvent) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
+
 export type VoiceSessionState =
   | "idle"
   | "armed"
@@ -34,7 +64,7 @@ export interface VoiceActivationProps {
   onSubmitText: (
     voiceSessionId: string,
     text: string,
-    workflowRef: string,
+    workflowRef: string | undefined,
     voiceProfileRef: string | undefined,
     turnId: string,
   ) => Promise<VoiceSubmitTextResult>;
@@ -82,6 +112,7 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   const updateFrom = (result: VoiceSessionResult | VoiceSubmitTextResult) => {
     setState(result.state);
@@ -112,6 +143,30 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
       if (navigator.mediaDevices?.getUserMedia) {
         streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
+      const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+      if (Recognition) {
+        const recognition = new Recognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "en-US";
+        recognition.onresult = (event: SpeechRecognitionResultEvent) => {
+          let finalText = "";
+          let interimText = "";
+          for (let index = event.resultIndex; index < event.results.length; index += 1) {
+            const result = event.results[index];
+            const text = result[0]?.transcript ?? "";
+            if (result.isFinal) finalText += text;
+            else interimText += text;
+          }
+          if (finalText.trim()) {
+            setRecognizedText((current) => `${current} ${finalText}`.trim());
+          }
+          setPartialText(interimText.trim());
+        };
+        recognition.onerror = () => setError("Live speech recognition failed. Type or retry the final text.");
+        recognition.start();
+        recognitionRef.current = recognition;
+      }
       const nextTurn = nextTurnId();
       setTurnId(nextTurn);
       setPartialText("");
@@ -121,6 +176,8 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
   const stopPushToTalk = () =>
     withBusy(async () => {
       if (!voiceSessionId) return;
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       updateFrom(await onPushToTalkStop(voiceSessionId, turnId));
@@ -130,11 +187,10 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
   const submitText = () =>
     withBusy(async () => {
       if (!voiceSessionId) return;
-      if (!workflowRef) throw new Error("Set a default workflow before submitting voice text.");
       const result = await onSubmitText(
         voiceSessionId,
         recognizedText,
-        workflowRef,
+        workflowRef || undefined,
         voiceProfileRef || undefined,
         turnId,
       );
@@ -145,6 +201,8 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
   const interrupt = () =>
     withBusy(async () => {
       if (!voiceSessionId) return;
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       updateFrom(await onInterrupt(voiceSessionId, turnId));

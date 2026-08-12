@@ -75,7 +75,7 @@ contextBridge.exposeInMainWorld("awf", {
   voiceSubmitText: (
     voiceSessionId: string,
     text: string,
-    workflowRef: string,
+    workflowRef: string | undefined,
     voiceProfileRef?: string,
     turnId?: string,
   ) => ipcRenderer.invoke(VOICE_SESSION_CHANNELS.submitText, voiceSessionId, text, workflowRef, voiceProfileRef, turnId),

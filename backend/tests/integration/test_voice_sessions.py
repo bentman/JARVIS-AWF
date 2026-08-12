@@ -145,12 +145,28 @@ def test_voice_submit_text_starts_default_workflow_and_persists_turn(tmp_path):
     assert "voice_response" in kinds
 
 
-def test_voice_submit_text_requires_workflow_ref(tmp_path):
+def test_voice_submit_text_defaults_to_assistant_workflow(tmp_path, monkeypatch):
     repo_root, conn = make_git_awf_repo(tmp_path)
+    _publish_persona_and_voice(repo_root)
     sid = op_voice_session_start(conn)["voice_session_id"]
+    captured = {}
 
-    with pytest.raises(CoreOpError, match="workflowRef"):
-        op_voice_submit_text(repo_root, conn, voice_session_id=sid, text="hello", workflow_ref=None)
+    def fake_run_start(repo_root, conn, *, workflow_ref, input_data):
+        captured["workflow_ref"] = workflow_ref
+        captured["input_data"] = input_data
+        return {
+            "run_id": "run-default",
+            "status": "SUCCEEDED",
+            "outputs": {"response_text": "default response"},
+        }
+
+    monkeypatch.setattr("awf.cli.core_ops.op_run_start", fake_run_start)
+
+    result = op_voice_submit_text(repo_root, conn, voice_session_id=sid, text="hello", workflow_ref=None)
+
+    assert captured["workflow_ref"] == "assistant-default@1.0.0"
+    assert captured["input_data"]["objective"] == "hello"
+    assert result["response_text"] == "default response"
 
 
 def test_voice_json_rpc_methods_dispatch(tmp_path):

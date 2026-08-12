@@ -263,5 +263,9 @@ describe("ProtocolClient", () => {
     void client.llmServeStatus();
     expect(transport.lastRequest().method).toBe("awf/llm.serveStatus");
     expect(transport.lastRequest().params).toEqual({});
+
+    void client.eventsSubscribe({ runId: "run-1", limit: 10 });
+    expect(transport.lastRequest().method).toBe("awf/events.subscribe");
+    expect(transport.lastRequest().params).toEqual({ runId: "run-1", limit: 10 });
   });
 });

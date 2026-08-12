@@ -223,6 +223,11 @@ def make_activity_node_executor(
             **node,
             "args": _render_input_templates_in_value(node.get("args", {}), dict(workflow_input or {})),
         }
+        if repo_root is not None:
+            rendered_node["args"] = {
+                **rendered_node["args"],
+                "_awf": {"repo_root": str(repo_root), "run_id": run_id, "step_id": step_id},
+            }
         if repo_root is not None and node["function"] in {"fs_read", "fs_write", "fs_delete", "command_run", "network_fetch"}:
             from awf.machine.activities import run_machine_activity
 

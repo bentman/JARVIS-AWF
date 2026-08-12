@@ -3,7 +3,7 @@ kind: Workflow
 metadata:
   name: example_research-build-review
   version: 1.0.0
-  digest: "6dc55dd4cb95d0086ac99baace9fcc5344fb731c1782e8521dace7e1af484d44"
+  digest: "sha256:b6cb2f68809fa8f511c1cd5f832efb5d5ba82c115ffea4fe30af69e0d35fb4f1"
 spec:
   inputSchema:
     type: object

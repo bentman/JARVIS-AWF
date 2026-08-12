@@ -84,6 +84,37 @@ def test_registry_publish_rejects_stale_workflow_metadata_digest(tmp_path):
         op_registry_publish(repo_root, conn, path=source, kind="workflows")
 
 
+def test_registry_validate_rejects_present_malformed_workflow_metadata_digest(tmp_path):
+    source = tmp_path / "malformed-digest-workflow.yaml"
+    source.write_text(
+        "\n".join(
+            [
+                "apiVersion: awf/v1",
+                "kind: Workflow",
+                "metadata:",
+                "  name: malformed-digest",
+                "  version: 1.0.0",
+                "  digest: not-prefixed",
+                "spec:",
+                "  inputSchema: {}",
+                "  outputSchema: {}",
+                "  budgets: {}",
+                "  nodes:",
+                "    - id: check",
+                "      type: gate",
+                "      checkCommand: 'true'",
+                "      next: null",
+                "  outputs: {}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CoreOpError, match=r"metadata\.digest must be a sha256:<hex> string"):
+        op_registry_validate(source, kind="workflows")
+
+
 def test_registry_validate_representative_shipped_kinds(repo_root):
     agent = op_registry_validate(repo_root / "config" / "app_registry" / "agents" / "builder" / "1.0.0.md")
     mcp = op_registry_validate(repo_root / "config" / "app_registry" / "mcp" / "context7" / "1.0.0.yaml")

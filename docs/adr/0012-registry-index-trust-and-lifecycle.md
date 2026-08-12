@@ -107,6 +107,11 @@ Workflow whose `metadata.digest` does not match its normalized payload is
 rejected before it can be published. This is distinct from the registry index
 digest, which pins the exact bytes stored on disk after publication.
 
+Corrective update, 2026-08-12: a present-but-malformed Workflow
+`metadata.digest` is now rejected. Missing digest remains a Workflow schema
+error; a present value must be a `sha256:<hex>` string before normalized
+self-digest comparison runs.
+
 ## Rationale
 
 The index is the shape a catalog needs and currently performs no function.

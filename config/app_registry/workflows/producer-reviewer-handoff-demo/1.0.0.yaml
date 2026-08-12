@@ -3,7 +3,7 @@ kind: Workflow
 metadata:
   name: producer-reviewer-handoff-demo
   version: 1.0.0
-  digest: "a87a9696da1e065cd3fd14db06759891d3aaac243201c74d72e9e13746eb2bc9"
+  digest: "sha256:08def104baea4712c6751d7277f280a11863a6ade4199debeba15102470327f7"
 spec:
   inputSchema:
     type: object

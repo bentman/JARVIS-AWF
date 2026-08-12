@@ -10,6 +10,8 @@ has a pre-tool Capability Guard hook. In the current codebase that guarded
 path is GitHub Copilot CLI only (`copilot_guard_hook.py`). `claude-code`,
 `codex`, `cline`, and `antigravity` retain renderer code, but `agent_step`
 denies `mcp_refs` for them before the adapter starts.
+This is a safety posture, not full governance parity: those adapters cannot
+use MCP under AWF today until equivalent pre-tool Guard hooks exist.
 
 ## Context
 

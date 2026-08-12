@@ -16,6 +16,11 @@ to provide a workflow ref. The core defaults missing `workflowRef` to
 visible frame sequence used by push-to-talk, then submits the turn. The GUI
 push-to-talk path now uses browser speech recognition when available to fill
 the final recognized text field; manual text entry remains the fallback.
+Browser interim recognition text is currently renderer-local UI state, not a
+backend `stt.partial` stream. The backend receives `stt.final` during
+`voice.submitText`; browser SpeechRecognition availability depends on
+Electron/Chromium and may require a network speech service, so the textarea
+path remains the reliable fallback.
 
 ## Context
 

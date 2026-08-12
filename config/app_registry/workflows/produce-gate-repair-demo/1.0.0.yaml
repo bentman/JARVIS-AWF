@@ -3,7 +3,7 @@ kind: Workflow
 metadata:
   name: produce-gate-repair-demo
   version: 1.0.0
-  digest: "887e7ff8510184b8f07a811f6764ac05d04b7e17cd9441483521b4b323e6c0ee"
+  digest: "sha256:301f66e8a61205750f457f49ec1cd7233810b92cfccce4ec04f0f0130334c817"
 spec:
   inputSchema:
     type: object

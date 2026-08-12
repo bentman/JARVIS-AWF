@@ -1009,7 +1009,11 @@ def _workflow_declared_digest(raw: dict) -> str | None:
     if not isinstance(metadata, dict):
         return None
     declared = metadata.get("digest")
-    return declared if isinstance(declared, str) and declared.startswith("sha256:") else None
+    if declared is None:
+        return None
+    if not isinstance(declared, str) or not declared.startswith("sha256:"):
+        raise CoreOpError("metadata.digest must be a sha256:<hex> string")
+    return declared
 
 
 def _workflow_digest_payload(raw: dict) -> bytes:

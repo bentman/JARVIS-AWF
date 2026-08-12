@@ -123,7 +123,8 @@ def test_default_profile_is_committed_to_the_repo_not_the_operators_home_dir():
     # Section 10.2: "a named profile committed to the repository (not the
     # operator's home directory) so it travels with config/".
     assert DEFAULT_PROFILE_PATH.is_file()
-    assert "config/codex" in str(DEFAULT_PROFILE_PATH)
+    assert DEFAULT_PROFILE_PATH.parent.name == "codex"
+    assert DEFAULT_PROFILE_PATH.parent.parent.name == "config"
     assert ".codex" not in DEFAULT_PROFILE_PATH.parts  # not $CODEX_HOME
 
 

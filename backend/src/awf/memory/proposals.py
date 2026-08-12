@@ -37,7 +37,7 @@ def propose_semantic_memory(repo_root: Path, conn: sqlite3.Connection, *, path: 
     draft_path = proposals_dir(repo_root) / "semantic-memories" / proposal_id / memory.metadata.name / f"{memory.metadata.version}.yaml"
     draft_path.parent.mkdir(parents=True, exist_ok=True)
     draft_path.write_bytes(content)
-    rel_path = str(draft_path.relative_to(repo_root))
+    rel_path = draft_path.relative_to(repo_root).as_posix()
     now = utc_now_rfc3339()
     conn.execute(
         "INSERT INTO registry_proposals "

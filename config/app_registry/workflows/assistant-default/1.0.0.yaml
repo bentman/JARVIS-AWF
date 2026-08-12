@@ -3,7 +3,7 @@ kind: Workflow
 metadata:
   name: assistant-default
   version: 1.0.0
-  digest: "sha256:assistant-default-1.0.0"
+  digest: "sha256:fc4f3c90e4dfe8529caa0e03ace882b941a7736e5ff6c97a1292f7c115ccda71"
 spec:
   inputSchema:
     type: object

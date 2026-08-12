@@ -19,6 +19,20 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-12 13:39
+  - Host class(es): Windows AMD64 focused backend validation
+  - Summary: Fixed registry model-profile defaults, workflow self-digest enforcement, conn-less registry integrity checks, and distinct hosted LLM completion authorization.
+  - Scope: `backend/src/awf/{registry/kinds.py,registry/resolve.py,cli/core_ops.py,gateway/client.py}`, `backend/tests/{unit,integration}`, `config/app_registry/{model-profiles/resident-mind/1.0.0.yaml,capabilities/hosted_llm_complete/1.0.0.yaml,workflows/*/1.0.0.yaml}`, `docs/adr/{0001,0012,0017,0019}*.md`, `CHANGE_LOG.md`.
+  - Validation: Focused registry/authoring/gateway pytest passed (`56 passed`); gateway-focused pytest passed (`22 passed`); backend unit validation passed (`311 passed`, report `reports/validation/20260812183947-unit.txt`).
+  - Notes: Pytest emitted the known Windows sandbox `.pytest_cache` write warning; test results were green.
+
+- Timestamp: 2026-08-12 13:21
+  - Host class(es): Windows AMD64 backend validation
+  - Summary: Aligned Win/Linux path handling and registry skill fixture placement, using portable relative metadata paths and config-owned demo skills.
+  - Scope: `backend/src/awf/{adapters/copilot_cli.py,authoring/workflow.py,cli/core_ops.py,machine/policy.py,memory/proposals.py,registry/index.py}`, `backend/tests/{unit,integration}`, `config/app_registry/skills/demo-skill/1.0.0/SKILL.md`, `docs/adr/0004-skills-registry-schema.md`, `CHANGE_LOG.md`.
+  - Validation: Focused registry/skill tests passed (`37 passed`); full backend unit validation passed (`309 passed`, report `reports/validation/20260812181832-unit.txt`).
+  - Notes: Lint remains blocked by pre-existing Ruff formatting drift outside this focused change.
+
 - Timestamp: 2026-08-11 23:59
   - Host class(es): Windows AMD64 syntax and tee smoke validation
   - Summary: Fixed Windows bootstrap reports to capture native command stdout/stderr with `Tee-Object` instead of relying on `Start-Transcript`.

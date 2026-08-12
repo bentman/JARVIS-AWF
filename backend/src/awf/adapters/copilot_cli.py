@@ -62,7 +62,7 @@ def _write_hook_files(workspace_root: Path) -> tuple[Path, ...]:
         workspace_root / HOOK_BASH_RELATIVE,
         workspace_root / HOOK_POWERSHELL_RELATIVE,
     )
-    existing = [str(path.relative_to(workspace_root)) for path in paths if path.exists()]
+    existing = [path.relative_to(workspace_root).as_posix() for path in paths if path.exists()]
     if existing:
         raise CopilotAdapterError(f"refusing to overwrite existing Copilot hook files: {', '.join(existing)}")
 

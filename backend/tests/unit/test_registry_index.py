@@ -3,7 +3,7 @@ import pytest
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.registry.index import compute_digest, index_row, latest_version, reindex, set_trust_status
-from awf.registry.kinds import CAPABILITIES, KINDS
+from awf.registry.kinds import CAPABILITIES, KINDS, MODEL_PROFILES
 from awf.registry.resolve import (
     RegistryBlockedError,
     RegistryIntegrityError,
@@ -30,6 +30,27 @@ def _write_capability(root, name, version, text="identity: {}\n"):
     return target
 
 
+def _write_model_profile(root, name, version):
+    target = root / "model-profiles" / name / f"{version}.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "\n".join(
+            [
+                f"name: {name}",
+                f"version: {version}",
+                "purpose: general-reasoning",
+                "privacy: {maximum_data_class: internal, local_only: true}",
+                "candidates:",
+                "  - {provider: ollama, model: local, priority: 1, enabled: true}",
+                "fallback: {mode: none, allow_quality_degrade: false}",
+                "limits: {max_input_tokens_per_call: 1, max_output_tokens_per_call: 1, max_cost_usd_per_call: 0}",
+                "",
+            ]
+        )
+    )
+    return target
+
+
 def test_reindex_covers_both_roots_and_all_kinds(tmp_path):
     repo_root, conn = make_repo(tmp_path)
     _write_capability(repo_root / "data" / "registry", "demo", "1.0.0")
@@ -41,6 +62,28 @@ def test_reindex_covers_both_roots_and_all_kinds(tmp_path):
     assert set(counts.keys()) == {kind.key for kind in KINDS}
     assert index_row(conn, "capabilities", "demo", "1.0.0") is not None
     assert index_row(conn, "capabilities", "other", "1.0.0") is not None
+
+
+def test_reindex_covers_config_model_profiles(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+    path = _write_model_profile(repo_root / "config" / "app_registry", "resident-mind", "1.0.0")
+
+    counts = reindex(repo_root, conn)
+
+    assert counts["model-profiles"] == {"config": 1, "data": 0}
+    row = index_row(conn, "model-profiles", "resident-mind", "1.0.0")
+    assert row["source"] == "config"
+    assert row["digest"] == compute_digest(path, MODEL_PROFILES)
+
+
+def test_reindex_stores_portable_relative_paths(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+    _write_capability(repo_root / "data" / "registry", "demo", "1.0.0")
+
+    reindex(repo_root, conn)
+
+    row = index_row(conn, "capabilities", "demo", "1.0.0")
+    assert row["path"] == "data/registry/capabilities/demo/1.0.0.yaml"
 
 
 def test_reindex_preserves_an_existing_non_default_trust_status(tmp_path):
@@ -64,6 +107,16 @@ def test_resolution_fails_with_integrity_error_after_the_file_is_mutated(tmp_pat
 
     with pytest.raises(RegistryIntegrityError):
         resolve_registry_object(repo_root, "capabilities", "demo", "1.0.0", conn=conn)
+
+
+def test_resolution_without_explicit_connection_uses_existing_index(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+    path = _write_capability(repo_root / "data" / "registry", "demo", "1.0.0")
+    reindex(repo_root, conn)
+    path.write_text("identity: {mutated: true}\n")
+
+    with pytest.raises(RegistryIntegrityError):
+        resolve_registry_object(repo_root, "capabilities", "demo", "1.0.0")
 
 
 def test_resolution_succeeds_after_reindex_accepts_the_new_content(tmp_path):

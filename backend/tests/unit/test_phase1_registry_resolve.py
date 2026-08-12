@@ -52,12 +52,13 @@ def test_raises_when_absent_from_both(tmp_path):
         resolve_registry_object(tmp_path, "capabilities", "missing", "1.0.0")
 
 
-def test_model_profiles_never_falls_back_to_config(tmp_path):
-    (tmp_path / "config/app_registry/model-profiles/demo").mkdir(parents=True)
-    (tmp_path / "config/app_registry/model-profiles/demo/1.0.0.yaml").write_text("x: 1\n")
+def test_model_profiles_resolve_from_config_when_only_config_has_it(tmp_path):
+    expected = _make_object(tmp_path, "config/app_registry", "model-profiles", "demo", "1.0.0")
 
-    with pytest.raises(RegistryObjectNotFoundError):
-        resolve_registry_object(tmp_path, "model-profiles", "demo", "1.0.0")
+    path, source = resolve_registry_object(tmp_path, "model-profiles", "demo", "1.0.0")
+
+    assert path == expected
+    assert source == "config"
 
 
 def test_skills_resolve_to_skill_md(tmp_path):

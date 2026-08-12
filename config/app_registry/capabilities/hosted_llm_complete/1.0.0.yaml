@@ -1,0 +1,5 @@
+identity: {type: activity, provider: awf, name: hosted_llm_complete, version: 1.0.0}
+schema: {input: "", output: ""}
+effects: {operation: read, reversible: true, idempotent: false, external_side_effect: true}
+risk_class: R2
+approval: per-invocation

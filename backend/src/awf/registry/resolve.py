@@ -10,8 +10,10 @@ back to `config/app_registry/<kind>/<name>/`.
 import sqlite3
 from pathlib import Path
 
+from awf.db.connection import get_connection
 from awf.paths import CONFIG_REGISTRY_RELATIVE as CONFIG_ROOT
 from awf.paths import DATA_REGISTRY_RELATIVE as DATA_ROOT
+from awf.paths import db_path
 from awf.registry.kinds import by_key, version_names
 from awf.registry.kinds import object_path as _object_path
 
@@ -59,7 +61,14 @@ def resolve_registry_object(
 
 def _verify(conn, path: Path, kind: str, name: str, version: str, registry_kind) -> Path:
     if conn is None:
-        return path
+        existing_db = db_path(_repo_root_for_path(path))
+        if not existing_db.is_file():
+            return path
+        auto_conn = get_connection(existing_db)
+        try:
+            return _verify(auto_conn, path, kind, name, version, registry_kind)
+        finally:
+            auto_conn.close()
 
     from awf.registry import index  # local import: index.py imports this module
 
@@ -75,3 +84,11 @@ def _verify(conn, path: Path, kind: str, name: str, version: str, registry_kind)
             f"{kind}/{name}@{version}: digest mismatch - indexed {row['digest']}, actual {actual_digest}, path {path}"
         )
     return path
+
+
+def _repo_root_for_path(path: Path) -> Path:
+    parts = path.parts
+    for anchor in ("app_registry", "registry"):
+        if anchor in parts:
+            return Path(*parts[: parts.index(anchor) - 1])
+    return path.parent

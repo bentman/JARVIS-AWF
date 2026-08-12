@@ -950,6 +950,29 @@ def _resolve_validate_publish_kind(path: Path, kind: str | None) -> str:
     return derived
 
 
+def _workflow_declared_digest(raw: dict) -> str | None:
+    metadata = raw.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    declared = metadata.get("digest")
+    return declared if isinstance(declared, str) and declared.startswith("sha256:") else None
+
+
+def _workflow_digest_payload(raw: dict) -> bytes:
+    normalized = json.loads(json.dumps(raw))
+    normalized.setdefault("metadata", {})["digest"] = ""
+    return yaml.safe_dump(normalized, sort_keys=False).encode("utf-8")
+
+
+def _verify_workflow_declared_digest(path: Path, raw: dict) -> None:
+    declared = _workflow_declared_digest(raw)
+    if declared is None:
+        return
+    actual = f"sha256:{hashlib.sha256(_workflow_digest_payload(raw)).hexdigest()}"
+    if declared != actual:
+        raise CoreOpError(f"{path}: metadata.digest mismatch - declared {declared}, actual {actual}")
+
+
 def op_registry_validate(path: Path, *, kind: str | None = None) -> dict:
     registry_kind = kind_by_key(_resolve_validate_publish_kind(path, kind))
 
@@ -970,6 +993,7 @@ def op_registry_validate(path: Path, *, kind: str | None = None) -> dict:
 
     if registry_kind is WORKFLOWS:
         workflow = parse_workflow(raw)
+        _verify_workflow_declared_digest(path, raw)
         return {"kind": "Workflow", "ref": workflow.ref, "valid": True}
     if registry_kind is CAPABILITIES:
         record = parse_capability_record(raw)
@@ -1016,7 +1040,7 @@ def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path
             "VALUES ('skills', ?, ?, ?, 'data', ?, 'local', ?) "
             "ON CONFLICT(kind, name, version) DO UPDATE SET "
             "digest=excluded.digest, path=excluded.path, indexed_at=excluded.indexed_at",
-            (skill.name, skill.version, digest, str(target_dir.relative_to(repo_root)), utc_now_rfc3339()),
+            (skill.name, skill.version, digest, target_dir.relative_to(repo_root).as_posix(), utc_now_rfc3339()),
         )
         conn.commit()
         return {
@@ -1037,6 +1061,7 @@ def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path
 
         if registry_kind is WORKFLOWS:
             workflow = parse_workflow(raw)
+            _verify_workflow_declared_digest(path, raw)
             name, version = workflow.metadata.name, workflow.metadata.version
         elif registry_kind is CAPABILITIES:
             record = parse_capability_record(raw)
@@ -1080,7 +1105,7 @@ def op_registry_publish(repo_root: Path, conn: sqlite3.Connection, *, path: Path
         "VALUES (?, ?, ?, ?, 'data', ?, 'local', ?) "
         "ON CONFLICT(kind, name, version) DO UPDATE SET "
         "digest=excluded.digest, path=excluded.path, indexed_at=excluded.indexed_at",
-        (kind, name, version, digest, str(target_path.relative_to(repo_root)), utc_now_rfc3339()),
+        (kind, name, version, digest, target_path.relative_to(repo_root).as_posix(), utc_now_rfc3339()),
     )
     conn.commit()
     return {"kind": kind, "name": name, "version": version, "digest": digest, "path": str(target_path)}
@@ -1697,7 +1722,7 @@ def _doctor_env(repo_root: Path) -> dict:
 def _doctor_paths(repo_root: Path) -> dict:
     cache_temp = repo_root / "cache" / "temp"
     cache_sandbox = repo_root / "cache" / "sandbox"
-    missing = [str(path.relative_to(repo_root)) for path in (cache_temp, cache_sandbox) if not path.is_dir()]
+    missing = [path.relative_to(repo_root).as_posix() for path in (cache_temp, cache_sandbox) if not path.is_dir()]
     if missing:
         return _doctor_check(
             "local_paths",

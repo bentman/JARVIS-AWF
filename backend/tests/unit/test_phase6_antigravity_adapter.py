@@ -43,7 +43,7 @@ def test_invoke_builds_sandboxed_accept_edits_command_bound_to_workspace(monkeyp
         "--output-format",
         "json",
         "--add-dir",
-        "/tmp/does-not-matter",
+        str(Path("/tmp/does-not-matter")),
         "--new-project",
     ]
     assert result.status == AgentStatus.COMPLETED

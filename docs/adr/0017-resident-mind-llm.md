@@ -15,7 +15,11 @@ a local placeholder API key in the Model Gateway so LiteLLM/OpenAI client setup
 does not reject local llama.cpp before the request reaches the server.
 Model Gateway candidate calls now route through the Capability Guard when run
 context is supplied, and non-loopback candidates fail closed without run
-context.
+context. Corrective update, 2026-08-12: hosted completions now use a distinct
+`hosted_llm_complete@1.0.0` capability (`R2`, `approval: per-invocation`),
+while local loopback/Ollama completions use `llm_complete@1.0.0`.
+`resident-mind@1.0.0` also ships as a resolvable config Model Profile on a
+fresh checkout.
 
 ## Context
 
@@ -33,12 +37,13 @@ already running.
 Nothing starts one. No module in the package spawns, probes, or stops a model
 server process, and no command reports whether one is reachable.
 
-Model Profiles are data-only: `registry/kinds.py` declares
-`MODEL_PROFILES = RegistryKind("model-profiles", "yaml", True)`, and
-`resolve_registry_object` refuses to resolve a `data_only` kind from
-`config/app_registry/`. The five profiles under
-`config/app_registry/model-profiles/` are reference examples a Run never
-resolves. Two already name a local endpoint — `example-ollama-general` with
+Model Profiles are no longer data-only: `registry/kinds.py` declares
+`MODEL_PROFILES = RegistryKind("model-profiles", "yaml", False)`, and
+`resolve_registry_object` can resolve config-root Model Profiles when no
+operator-owned data profile shadows the name. The examples under
+`config/app_registry/model-profiles/` are resolvable registry objects, and the
+default `resident-mind@1.0.0` profile ships there for fresh checkouts. Two
+examples already name a local endpoint — `example-ollama-general` with
 `api_base: "http://localhost:11434"` and `example-llamacpp-coding` with
 `api_base: "http://127.0.0.1:8080/v1"` — so the shape for reaching a local
 server exists and has never been driven.
@@ -82,10 +87,11 @@ it, and stops it. `ollama` and `openai-compatible` are operator-run: AWF
 probes them and never starts or stops them. `openai-compatible` is the entry
 for `llama.app` and any other server exposing `/v1/chat/completions`.
 
-**Selection is an operator act recorded in the registry.** `awf llm select`
-writes a `resident-mind` Model Profile into `data/registry/model-profiles/`
-through the existing publish path. Resolution, the Gateway, and the Guard are
-unchanged.
+**Selection is an operator act recorded in the registry.** Fresh checkouts
+resolve the shipped config `resident-mind@1.0.0` profile. `awf llm select`
+writes an operator-owned `resident-mind` Model Profile into
+`data/registry/model-profiles/` through the existing publish path, shadowing
+the config default by normal registry precedence.
 
 **`models/llm/<model-name>/<files>` returns.** Discovery scans it; a model is
 selectable when its directory holds at least one `.gguf`. AWF never acquires a
@@ -115,10 +121,13 @@ back to that host class's CPU default, then to the first configured default.
 **Each turn is isolated.** Whatever a profile's launch block says, the sidecar
 starts with no reusable prompt cache, one slot, and continuous batching off.
 
-**Model calls are Guard-governed when they leave the local loopback path.**
-`gateway.complete` and `gateway.complete_structured` authorize each candidate
-call with `llm_complete@1.0.0` when run context is supplied. Non-loopback
-remote candidates without run context are refused before `litellm.completion`.
+**Model calls are Guard-governed by locality.** Local loopback/Ollama
+candidates authorize with `llm_complete@1.0.0` when run context is supplied.
+Non-loopback hosted candidates authorize with
+`hosted_llm_complete@1.0.0`, require run context, and require the caller's
+allowlist to include that hosted capability. The hosted capability is R2 with
+per-invocation approval, so cloud escalation is a distinct risk decision
+before `litellm.completion`.
 
 ## Rationale
 
@@ -150,8 +159,9 @@ which the durability contract does not admit.
 | Section 7 repository layout | adds `runtimes/llama.cpp/<profile-id>/` and `config/llm/`, and reinstates `models/llm/` | `runtimes/` is gitignored in full and holds only acquired binaries; `config/llm/servers.yaml` follows the `config/voice/*.yaml` shape already in use; `models/llm/` returns under the same per-directory allowlist as the four speech directories |
 | ADR-0010 Task B, which removed `models/llm/` as a directory for a function this repository does not have | reinstated | the function now exists: `models/llm/<model-name>/` is where the operator places the GGUF weights `llama-server` loads |
 
-Section 11's Model Profile schema, the Gateway, resolution precedence, and the
-Capability Guard are unchanged.
+Section 11's Model Profile schema and resolution precedence are unchanged in
+shape, but Model Profiles now have a config-root fallback. The Gateway now
+chooses separate local and hosted completion capabilities.
 
 ## Mechanism
 
@@ -522,17 +532,22 @@ limits: {max_input_tokens_per_call: 8192, max_output_tokens_per_call: 1024, max_
 
 The repository ships
 `config/app_registry/model-profiles/example-resident-mind/1.0.0.yaml` as a
-sixth reference example. It is never resolved, matching ADR-0001.
+reference example and
+`config/app_registry/model-profiles/resident-mind/1.0.0.yaml` as the default
+authoring profile. The latter is resolved by default; an operator-authored
+data profile shadows it.
 
 ### Part G — Gateway Guard checks
 
 `config/app_registry/capabilities/llm_complete/1.0.0.yaml` declares an R1
-read capability for model completion. `gateway.complete` and
-`gateway.complete_structured` call `authorize` for every candidate when
-`run_id` is supplied. The event payload records provider, model, API base, and
-whether the endpoint is loopback. Non-loopback candidates are refused without
-run context; loopback and Ollama candidates remain usable in deterministic
-tests and local tooling.
+read capability for local model completion.
+`config/app_registry/capabilities/hosted_llm_complete/1.0.0.yaml` declares an
+R2 per-invocation capability for hosted model completion. `gateway.complete`
+and `gateway.complete_structured` call `authorize` for every run-scoped
+candidate. The event payload records provider, model, API base, and whether
+the endpoint is loopback. Non-loopback candidates are refused without run
+context; loopback and Ollama candidates remain usable in deterministic tests
+and local tooling.
 
 ### Part H — activity, events, and CLI
 
@@ -571,6 +586,7 @@ config/
   app_registry/
     capabilities/llm_server_ensure/1.0.0.yaml       (new)
     model-profiles/example-resident-mind/1.0.0.yaml (new)
+    model-profiles/resident-mind/1.0.0.yaml         (new)
 models/
   llm/.gitkeep                                      (reinstated)
 runtimes/
@@ -628,8 +644,8 @@ backend/src/awf/
 10. Add the `awf llm` command group and the two event writes.
 11. Reinstate `models/llm/`, add `runtimes/llama.cpp/`, and their `.gitignore`
     rules.
-12. Add `llm_complete@1.0.0` and Gateway authorization around completion
-    candidate calls.
+12. Add `llm_complete@1.0.0`, `hosted_llm_complete@1.0.0`, and Gateway
+    authorization around completion candidate calls.
 13. Tests: the manifest parses and an artifact key outside
     `CANONICAL_PROFILES` fails naming the key; `artifact_for` returns `None`
     for an undeclared host; `build_command` covers every flag-table row,
@@ -675,8 +691,9 @@ backend/src/awf/
   `Degraded-no-local-model-artifact`; with the model and binary present it
   returns `gpu.cuda`.
 - The `hardware_profile_resolved` payload carries five readiness entries.
-- Non-loopback Model Gateway candidates require run context and write a Guard
-  decision event before calling LiteLLM.
+- Non-loopback Model Gateway candidates require run context, require the
+  hosted capability in the caller allowlist, and write a Guard decision event
+  before calling LiteLLM.
 - `pytest backend/tests` matches or exceeds the pre-change pass count with the
   same or fewer skips.
 

@@ -8,7 +8,7 @@ Implemented.
 
 Section 9.3 specifies the `skills` registry kind at `skills/<name>/<version>/SKILL.md` (+ optional `scripts/`, `references/`, `assets/`), one of the two kinds shaped as a directory rather than a single file (`skills` shares this with the earlier-established pattern for Markdown-bodied objects). Section 5 pins the format: the Agent Skills open standard (`agentskills.io`, Apache-2.0, stewarded via the Agentic AI Foundation) - `SKILL.md` YAML frontmatter (`name`, `description` required; `license`, `compatibility`, `metadata`, `allowed-tools` optional) followed by a Markdown body, with progressive disclosure into `scripts/`/`references/`/`assets/` only as needed. Section 12.2's citation of `/skills` states each registry Skill "is also directly invocable as `/<skill-name>`" in AWF's own CLI, and that this is the single source of truth for custom commands - there is no second, AWF-specific command file format.
 
-`registry/resolve.py` and `cli/core_ops.py` already special-case `kind == "skills"` as a directory (`<name>/<version>/SKILL.md`, not `<version>.yaml`), `op_registry_list`/`op_registry_get` work end-to-end, and a real `data/registry/skills/demo-skill/1.0.0/SKILL.md` exists. But no `registry/skill.py` loader exists (unlike `capability_record.py`, `agent_manifest.py`, `mcp_server.py`), `AgentManifest` has no `skills` field, and `adapters/base.py`'s `AgentInvocation.skills: tuple[str, ...] = ()` - present in the envelope since Section 12.2 requires it ("available skills") - has no resolver populating it and no consumer reading it. This is the same "schema with no caller" state `mcp` was in before ADR-0003.
+`registry/resolve.py` and `cli/core_ops.py` already special-case `kind == "skills"` as a directory (`<name>/<version>/SKILL.md`, not `<version>.yaml`), `op_registry_list`/`op_registry_get` work end-to-end, and the shipped minimal fixture lives at `config/app_registry/skills/demo-skill/1.0.0/SKILL.md`. `data/registry/skills/` is reserved for operator-local skills and overrides, not repo-owned demos. But no `registry/skill.py` loader exists (unlike `capability_record.py`, `agent_manifest.py`, `mcp_server.py`), `AgentManifest` has no `skills` field, and `adapters/base.py`'s `AgentInvocation.skills: tuple[str, ...] = ()` - present in the envelope since Section 12.2 requires it ("available skills") - has no resolver populating it and no consumer reading it. This is the same "schema with no caller" state `mcp` was in before ADR-0003.
 
 Unlike `mcp`, the registry format here is not something AWF has to translate per adapter - `SKILL.md` is already the literal shared interchange format. Verified live against the same four installed CLIs used in ADR-0003:
 
@@ -64,7 +64,7 @@ AWF's own added identity is the directory itself: `name`/`version` are read from
 
 Trust status is not a file field: it lives in `registry_index`, same as every other kind (Section 9.3).
 
-No default Skill ships this pass. `demo-skill` (`data/registry/skills/demo-skill/1.0.0/`) exists only to prove `op_registry_list` enumerates the kind and predates this ADR; it is not a template for a real one.
+The repo ships one minimal Skill fixture, `config/app_registry/skills/demo-skill/1.0.0/SKILL.md`, to prove validation, loading, listing, and indexing of the directory-shaped kind. It is a demo/example fixture, not a template for production skills. Operator-created skills belong under `data/registry/skills/` and may shadow config entries by the normal registry-resolution rules.
 
 ## The tradeoff accepted
 

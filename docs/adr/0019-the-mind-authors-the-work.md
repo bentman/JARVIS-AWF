@@ -4,6 +4,12 @@
 
 Implemented. Acceptance evidence: focused backend authoring/gateway/CLI/JSON-RPC/bootstrap tests passed, frontend shared/CLI/GUI tests passed, frontend build passed, Ruff passed, and whitespace checks passed on 2026-08-09.
 
+Corrective update, 2026-08-12: the default authoring profile
+`resident-mind@1.0.0` is now shipped under
+`config/app_registry/model-profiles/resident-mind/1.0.0.yaml` and resolves on
+a fresh checkout. Operator-authored `data/registry/model-profiles/resident-mind/`
+profiles still shadow the config default.
+
 ## Context
 
 `docs/archives/ProjectVisionAWF.md` defines the second promise as authorship:
@@ -25,6 +31,9 @@ The current implementation already has most of the required control points:
 - `awf.cognition` provides the ADR-0018 prompt envelope.
 - `awf.gateway.client.complete` routes model calls through LiteLLM and Model
   Profiles.
+- `resident-mind@1.0.0` is a resolvable config Model Profile, so
+  `workflow.authorDraft` no longer requires an operator to author that exact
+  profile before the command can find its default.
 
 The current implementation does not have a proposal object, a generated
 Workflow draft path, or an approval boundary that binds publication to the
@@ -234,7 +243,8 @@ def mark_published(
 
 `author_workflow_draft`:
 
-1. Resolves the Model Profile.
+1. Resolves the Model Profile, defaulting to the shipped
+   `resident-mind@1.0.0` unless the operator passes another profile ref.
 2. Builds a `PromptEnvelope` with:
    - application instructions for AWF Workflow authorship;
    - contract text naming the JSON output schema;

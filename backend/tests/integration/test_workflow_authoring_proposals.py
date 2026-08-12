@@ -88,6 +88,13 @@ def test_author_workflow_draft_stores_valid_proposal(monkeypatch, tmp_path):
     assert proposal["events"][0]["event_type"] == "created"
 
 
+def test_default_author_profile_resolves_from_shipped_config_profile(repo_root):
+    profile = workflow_authoring._load_profile(repo_root, workflow_authoring.DEFAULT_AUTHOR_PROFILE)
+
+    assert profile.ref == workflow_authoring.DEFAULT_AUTHOR_PROFILE
+    assert profile.privacy.local_only is True
+
+
 def test_update_then_publish_requires_current_digest_and_uses_registry(monkeypatch, tmp_path):
     repo_root, conn = make_repo(tmp_path)
     monkeypatch.setattr(workflow_authoring, "complete_structured", lambda *args, **kwargs: authoring_payload())

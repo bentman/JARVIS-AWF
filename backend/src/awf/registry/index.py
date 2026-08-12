@@ -67,7 +67,7 @@ def _upsert(
             version,
             digest,
             source,
-            str(path.relative_to(repo_root)),
+            path.relative_to(repo_root).as_posix(),
             _DEFAULT_TRUST_STATUS[source],
             utc_now_rfc3339(),
         ),

@@ -196,7 +196,7 @@ def author_workflow_draft(
     path.write_bytes(content)
 
     now = utc_now_rfc3339()
-    rel_path = str(path.relative_to(repo_root))
+    rel_path = path.relative_to(repo_root).as_posix()
     conn.execute(
         "INSERT INTO registry_proposals "
         "(proposal_id, kind, name, version, status, draft_digest, draft_path, summary, created_at, updated_at) "
@@ -271,13 +271,13 @@ def update_proposal(
             workflow.metadata.name,
             workflow.metadata.version,
             draft_digest,
-            str(path.relative_to(repo_root)),
+            path.relative_to(repo_root).as_posix(),
             summary if summary is not None else current["summary"],
             now,
             proposal_id,
         ),
     )
-    _event(conn, proposal_id, "updated", {"draft_digest": draft_digest, "path": str(path.relative_to(repo_root))})
+    _event(conn, proposal_id, "updated", {"draft_digest": draft_digest, "path": path.relative_to(repo_root).as_posix()})
     conn.commit()
     return get_proposal(repo_root, conn, proposal_id=proposal_id)
 

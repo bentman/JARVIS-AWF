@@ -3,7 +3,7 @@ kind: Workflow
 metadata:
   name: self-improvement
   version: 1.0.0
-  digest: "sha256:self-improvement-v1"
+  digest: "sha256:328eb8af11e753d916340d0d6c4e95342284e3837e133c47ffc6ef6a85304664"
 spec:
   inputSchema:
     type: object

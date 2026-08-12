@@ -86,11 +86,9 @@ def test_load_rejects_name_directory_mismatch(tmp_path):
         load_skill(skill_dir / "SKILL.md")
 
 
-@pytest.mark.live
 def test_load_the_real_shipped_demo_skill(repo_file_present, repo_root):
-    relative_path = "data/registry/skills/demo-skill/1.0.0/SKILL.md"
-    if not repo_file_present(relative_path):
-        pytest.skip("demo-skill fixture not present on this host")
+    relative_path = "config/app_registry/skills/demo-skill/1.0.0/SKILL.md"
+    assert repo_file_present(relative_path)
     skill = load_skill(repo_root / relative_path)
     assert skill.ref == "demo-skill@1.0.0"
 

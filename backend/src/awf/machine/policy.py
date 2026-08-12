@@ -45,6 +45,10 @@ def _matches_any(path: str, patterns: list[str] | tuple[str, ...]) -> bool:
     return any(fnmatch.fnmatch(path, pattern) for pattern in patterns)
 
 
+def _policy_path(path: Path) -> str:
+    return path.as_posix()
+
+
 def resolve_allowed_path(
     *,
     repo_root: Path,
@@ -65,9 +69,9 @@ def resolve_allowed_path(
         raise MachinePolicyError(f"path outside allowed roots: {relative_or_absolute}")
 
     try:
-        display_path = str(candidate.relative_to(worktree.resolve(strict=False)))
+        display_path = _policy_path(candidate.relative_to(worktree.resolve(strict=False)))
     except ValueError:
-        display_path = str(candidate)
+        display_path = _policy_path(candidate)
     denied = list(DENIED_RELATIVE_GLOBS) + list(constraints.get("deniedGlobs", []))
     if _matches_any(display_path, denied):
         raise MachinePolicyError(f"path denied by policy: {display_path}")

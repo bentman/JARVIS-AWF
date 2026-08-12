@@ -56,6 +56,10 @@ def test_filesystem_policy_blocks_worktree_escape_and_denied_globs(tmp_path):
     external_file = external_root / "allowed.txt"
     external_file.write_text("allowed\n")
     (worktree / ".env").write_text("secret\n")
+    (worktree / "data" / "awf_db").mkdir(parents=True)
+    (worktree / "data" / "awf_db" / "awf.db").write_text("sqlite\n")
+    (worktree / "src").mkdir()
+    (worktree / "src" / "allowed.py").write_text("print('ok')\n")
 
     with pytest.raises(MachinePolicyError, match="outside allowed roots"):
         resolve_allowed_path(
@@ -75,6 +79,28 @@ def test_filesystem_policy_blocks_worktree_escape_and_denied_globs(tmp_path):
             constraints={"allowedRoots": ["worktree"]},
             must_exist=True,
         )
+
+    with pytest.raises(MachinePolicyError, match="path denied"):
+        resolve_allowed_path(
+            repo_root=repo_root,
+            worktree=worktree,
+            run_id="run-1",
+            relative_or_absolute="data/awf_db/awf.db",
+            constraints={"allowedRoots": ["worktree"]},
+            must_exist=True,
+        )
+
+    assert (
+        resolve_allowed_path(
+            repo_root=repo_root,
+            worktree=worktree,
+            run_id="run-1",
+            relative_or_absolute="src/allowed.py",
+            constraints={"allowedRoots": ["worktree"], "allowedGlobs": ["src/**"]},
+            must_exist=True,
+        )
+        == worktree / "src" / "allowed.py"
+    )
 
     assert (
         resolve_allowed_path(

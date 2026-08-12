@@ -22,6 +22,7 @@ from awf.registry.model_profile import Candidate, ModelProfile
 from awf.secrets.store import get_secret
 
 LLM_COMPLETE_CAPABILITY_REF = "llm_complete@1.0.0"
+HOSTED_LLM_COMPLETE_CAPABILITY_REF = "hosted_llm_complete@1.0.0"
 
 
 class GatewayError(RuntimeError):
@@ -36,8 +37,9 @@ def _litellm_completion(**kwargs):
     return litellm.completion(**kwargs)
 
 
-def _load_llm_complete_capability(repo_root: Path = REPO_ROOT):
-    return load_capability_record(repo_root / "config" / "app_registry" / "capabilities" / "llm_complete" / "1.0.0.yaml")
+def _load_completion_capability(candidate: Candidate, repo_root: Path = REPO_ROOT):
+    name = "llm_complete" if _is_local_candidate(candidate) else "hosted_llm_complete"
+    return load_capability_record(repo_root / "config" / "app_registry" / "capabilities" / name / "1.0.0.yaml")
 
 
 def _resolve_api_key(
@@ -74,6 +76,7 @@ def _authorize_completion_call(
     step_id: str | None,
     actor: str,
     repo_root: Path,
+    agent_allowlist: list[str] | None = None,
 ) -> None:
     if conn is None:
         if _is_local_candidate(candidate):
@@ -84,11 +87,11 @@ def _authorize_completion_call(
             return
         raise GatewayError("remote model completion requires run_id for Capability Guard authorization")
 
-    capability = _load_llm_complete_capability(repo_root)
+    capability = _load_completion_capability(candidate, repo_root)
     decision = authorize(
         conn,
         capability=capability,
-        agent_allowlist=[capability.ref],
+        agent_allowlist=agent_allowlist or [LLM_COMPLETE_CAPABILITY_REF],
         run_id=run_id,
         actor=actor,
         step_id=step_id,
@@ -128,6 +131,7 @@ def complete(
     step_id: str | None = None,
     actor: str = "model-gateway",
     repo_root: Path = REPO_ROOT,
+    agent_allowlist: list[str] | None = None,
 ) -> str:
     candidates = profile.enabled_candidates_by_priority()
     if not candidates:
@@ -136,7 +140,13 @@ def complete(
     last_error: Exception | None = None
     for candidate in candidates:
         _authorize_completion_call(
-            candidate, conn=conn, run_id=run_id, step_id=step_id, actor=actor, repo_root=repo_root
+            candidate,
+            conn=conn,
+            run_id=run_id,
+            step_id=step_id,
+            actor=actor,
+            repo_root=repo_root,
+            agent_allowlist=agent_allowlist,
         )
         api_key = _resolve_api_key(candidate, conn, secret_key)
         kwargs = _candidate_kwargs(profile, candidate, api_key)
@@ -165,6 +175,7 @@ def complete_structured(
     step_id: str | None = None,
     actor: str = "model-gateway",
     repo_root: Path = REPO_ROOT,
+    agent_allowlist: list[str] | None = None,
 ) -> dict:
     candidates = profile.enabled_candidates_by_priority()
     if not candidates:
@@ -173,7 +184,13 @@ def complete_structured(
     last_error: Exception | None = None
     for candidate in candidates:
         _authorize_completion_call(
-            candidate, conn=conn, run_id=run_id, step_id=step_id, actor=actor, repo_root=repo_root
+            candidate,
+            conn=conn,
+            run_id=run_id,
+            step_id=step_id,
+            actor=actor,
+            repo_root=repo_root,
+            agent_allowlist=agent_allowlist,
         )
         api_key = _resolve_api_key(candidate, conn, secret_key)
         kwargs = _candidate_kwargs(profile, candidate, api_key)
@@ -213,6 +230,7 @@ def complete_envelope(
     step_id: str | None = None,
     actor: str = "model-gateway",
     repo_root: Path = REPO_ROOT,
+    agent_allowlist: list[str] | None = None,
 ) -> str:
     chat = render_chat(envelope)
     return complete(
@@ -224,4 +242,5 @@ def complete_envelope(
         step_id=step_id,
         actor=actor,
         repo_root=repo_root,
+        agent_allowlist=agent_allowlist,
     )

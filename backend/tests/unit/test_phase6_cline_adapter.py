@@ -53,7 +53,7 @@ def test_invoke_builds_headless_command_and_no_yolo(monkeypatch):
         "--auto-approve",
         "true",
         "--cwd",
-        "/tmp/does-not-matter",
+        str(Path("/tmp/does-not-matter")),
     ]
     assert "--yolo" not in captured["command"]
     assert "--dangerously-skip-permissions" not in captured["command"]

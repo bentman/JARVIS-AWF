@@ -52,14 +52,54 @@ def test_registry_publish_rejects_kind_mismatch(tmp_path, fixtures_dir):
         op_registry_publish(repo_root, conn, path=source, kind="mcp")
 
 
+def test_registry_publish_rejects_stale_workflow_metadata_digest(tmp_path):
+    repo_root, conn = make_awf_repo(tmp_path)
+    source = tmp_path / "stale-workflow.yaml"
+    source.write_text(
+        "\n".join(
+            [
+                "apiVersion: awf/v1",
+                "kind: Workflow",
+                "metadata:",
+                "  name: stale",
+                "  version: 1.0.0",
+                "  digest: sha256:not-real",
+                "spec:",
+                "  inputSchema: {}",
+                "  outputSchema: {}",
+                "  budgets: {}",
+                "  nodes:",
+                "    - id: check",
+                "      type: gate",
+                "      checkCommand: 'true'",
+                "      next: null",
+                "  outputs: {}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CoreOpError, match="metadata.digest mismatch"):
+        op_registry_publish(repo_root, conn, path=source, kind="workflows")
+
+
 def test_registry_validate_representative_shipped_kinds(repo_root):
     agent = op_registry_validate(repo_root / "config" / "app_registry" / "agents" / "builder" / "1.0.0.md")
     mcp = op_registry_validate(repo_root / "config" / "app_registry" / "mcp" / "context7" / "1.0.0.yaml")
-    skill = op_registry_validate(repo_root / "data" / "registry" / "skills" / "demo-skill" / "1.0.0")
+    skill = op_registry_validate(repo_root / "config" / "app_registry" / "skills" / "demo-skill" / "1.0.0")
+    model_profile = op_registry_validate(
+        repo_root / "config" / "app_registry" / "model-profiles" / "resident-mind" / "1.0.0.yaml"
+    )
+    workflow = op_registry_validate(
+        repo_root / "config" / "app_registry" / "workflows" / "assistant-default" / "1.0.0.yaml"
+    )
 
     assert agent["kind"] == "AgentManifest"
     assert mcp["kind"] == "McpServer"
     assert skill["kind"] == "Skill"
+    assert model_profile["ref"] == "resident-mind@1.0.0"
+    assert workflow["ref"] == "assistant-default@1.0.0"
 
 
 def test_registry_retire_then_trust_restores_resolution(tmp_path, fixtures_dir):
@@ -82,7 +122,7 @@ def test_registry_retire_then_trust_restores_resolution(tmp_path, fixtures_dir):
     assert resolve_registry_object(repo_root, "capabilities", published["name"], published["version"], conn=conn)[1] == "data"
 
 
-def test_registry_reindex_and_config_model_profile_exclusion(tmp_path, repo_root):
+def test_registry_reindex_and_config_model_profiles_are_resolvable(tmp_path, repo_root):
     from awf.db.schema import DDL_STATEMENTS
 
     conn = get_connection(":memory:")
@@ -93,9 +133,26 @@ def test_registry_reindex_and_config_model_profile_exclusion(tmp_path, repo_root
 
     assert counts["agents"]["config"] >= 3
     assert counts["mcp"]["config"] >= 1
+    assert counts["model-profiles"]["config"] >= 7
 
     fake_root, _conn = make_awf_repo(tmp_path)
     example_dir = fake_root / "config" / "app_registry" / "model-profiles" / "example-demo"
     example_dir.mkdir(parents=True)
-    (example_dir / "1.0.0.yaml").write_text("purpose: coding\n")
-    assert op_registry_list(fake_root, kind="model-profiles") == []
+    (example_dir / "1.0.0.yaml").write_text(
+        "\n".join(
+            [
+                "name: example-demo",
+                "version: 1.0.0",
+                "purpose: coding",
+                "privacy: {maximum_data_class: internal, local_only: true}",
+                "candidates:",
+                "  - {provider: ollama, model: local, priority: 1, enabled: true}",
+                "fallback: {mode: none, allow_quality_degrade: false}",
+                "limits: {max_input_tokens_per_call: 1, max_output_tokens_per_call: 1, max_cost_usd_per_call: 0}",
+                "",
+            ]
+        )
+    )
+    assert op_registry_list(fake_root, kind="model-profiles") == [
+        {"source": "config", "kind": "model-profiles", "name": "example-demo", "version": "1.0.0"}
+    ]

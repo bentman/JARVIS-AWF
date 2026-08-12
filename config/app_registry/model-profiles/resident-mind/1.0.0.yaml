@@ -1,0 +1,8 @@
+name: resident-mind
+version: 1.0.0
+purpose: general-reasoning
+privacy: {maximum_data_class: internal, local_only: true}
+candidates:
+  - {provider: openai, model: Qwen3-4B-Q4_K_M.gguf, priority: 1, enabled: true, api_base: "http://127.0.0.1:8080/v1"}
+fallback: {mode: none, allow_quality_degrade: false}
+limits: {max_input_tokens_per_call: 8192, max_output_tokens_per_call: 1024, max_cost_usd_per_call: 0.0}

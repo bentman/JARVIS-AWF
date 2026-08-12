@@ -28,11 +28,12 @@ indexes over.
 
 ## Context
 
-**`registry_index` is written and never read.** The table carries `kind`,
-`name`, `version`, `digest`, `source`, `path`, `trust_status`, and
-`indexed_at`, keyed on `(kind, name, version)`. The only writer is
-`core_ops.op_registry_publish`. Resolution walks the filesystem and never
-consults it. Consequences, all currently true:
+**`registry_index` is an integrity and trust ledger.** The table carries
+`kind`, `name`, `version`, `digest`, `source`, `path`, `trust_status`, and
+`indexed_at`, keyed on `(kind, name, version)`. Current writers are
+`core_ops.op_registry_publish` and `registry reindex`. Resolution walks the
+filesystem, then verifies an indexed row when a connection is supplied or the
+repo DB already exists. Historical consequences from the pre-ADR state were:
 
 - `digest` is computed at publish and compared against nothing afterward.
 - `trust_status` is written as the literal `'local'` at every publish. The
@@ -67,9 +68,10 @@ retire a version.
 "source", "content"}` where `content` is `path.read_text()`. A caller that
 wants structure re-parses.
 
-**A workflow declares a digest nothing checks.** `WorkflowMetadata` requires
-`digest`, and `parse_workflow` requires it to be present. Nothing compares it
-to anything.
+**A workflow declares a self-digest.** `WorkflowMetadata` requires `digest`,
+and current `op_registry_validate` / `op_registry_publish` compare it against
+the SHA-256 of the normalized Workflow YAML with `metadata.digest` blanked.
+The registry index still records the SHA-256 of the final file bytes.
 
 ## Decision
 
@@ -99,6 +101,11 @@ reference.
 version `blocked`; the file stays for audit.
 
 **`op_registry_get` returns the parsed object alongside the raw text.**
+
+**Workflow declared digests are enforced at validate/publish time.** A
+Workflow whose `metadata.digest` does not match its normalized payload is
+rejected before it can be published. This is distinct from the registry index
+digest, which pins the exact bytes stored on disk after publication.
 
 ## Rationale
 
@@ -148,17 +155,19 @@ every other kind it is the SHA-256 of the file bytes, matching what
 `awf registry reindex` exposes it. `op_registry_publish` keeps writing its own
 row, so a publish never requires a rebuild.
 
-**Integrity on resolution.** `resolve_registry_object` gains an optional
-connection. When one is supplied and a row exists for the resolved
-`(kind, name, version)`, the file's digest is recomputed and compared:
+**Integrity on resolution.** `resolve_registry_object` has an optional
+connection. When one is supplied, or when none is supplied but the repository
+DB already exists, and a row exists for the resolved `(kind, name, version)`,
+the file's digest is recomputed and compared:
 
 - match — resolution proceeds;
 - mismatch — `RegistryIntegrityError`, naming both digests and the path;
 - `trust_status == "blocked"` — `RegistryBlockedError`, naming the object;
-- no row — resolution proceeds unchecked, which is today's behavior.
+- no row — resolution proceeds unchecked, preserving bootstrap/fresh-checkout
+  behavior before the object is indexed.
 
-Callers that already hold a connection pass it. Callers that do not are
-unchanged.
+Callers that already hold a connection pass it. Conn-less callers still get
+index enforcement whenever `data/awf_db/awf.db` exists.
 
 **Shadowing on objects, not files.** The `any(data_dir.iterdir())` test
 becomes `any(version_names(data_dir, kind))` — a name is operator-owned when
@@ -241,9 +250,9 @@ config/app_registry/
 
 ## The tradeoffs accepted
 
-- The digest check costs one file read and one hash per resolution that
-  supplies a connection. Registry objects are small, and the check is skipped
-  entirely when no row exists.
+- The digest check costs one file read and one hash per indexed resolution
+  with a supplied or auto-opened connection. Registry objects are small, and
+  the check is skipped entirely when no row exists or no repo DB exists yet.
 - Two shipped schemas gain required fields, so an existing operator-authored
   Voice Profile or Model Profile fails to load until the two lines are added.
   The failure names the missing field and the file.
@@ -317,7 +326,7 @@ config/app_registry/
 
 ## Open decisions
 
-- **`WorkflowMetadata.digest`.** Every Workflow declares one and nothing
-  compares it to anything. What it is meant to cover — the `spec` block, the
-  file, or something else — determines whether `reindex` can verify it or
-  whether the field should be dropped. Left unchanged by this record.
+- **`WorkflowMetadata.digest` scope beyond publish/validate.** Current code
+  treats it as a normalized YAML self-digest with the digest field blanked,
+  enforced by validate and publish. The registry index remains the runtime
+  integrity check for exact file bytes.

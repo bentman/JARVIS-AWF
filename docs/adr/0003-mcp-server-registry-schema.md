@@ -10,8 +10,9 @@ has a pre-tool Capability Guard hook. In the current codebase that guarded
 path is GitHub Copilot CLI only (`copilot_guard_hook.py`). `claude-code`,
 `codex`, `cline`, and `antigravity` retain renderer code, but `agent_step`
 denies `mcp_refs` for them before the adapter starts.
-This is a safety posture, not full governance parity: those adapters cannot
-use MCP under AWF today until equivalent pre-tool Guard hooks exist.
+This is a safety posture, not full governance parity: MCP tool calls remain
+ungoverned inside those adapters, so AWF denies MCP for them until equivalent
+pre-tool Guard hooks exist.
 
 ## Context
 
@@ -180,9 +181,10 @@ or invoking the adapter.
 
 A manifest with `mcp: [context7@1.0.0]` is executable only through the
 guarded Copilot path. The same workflow with the field omitted renders
-nothing. A quarantined ref is skipped before render. An unguarded adapter
-with any `mcp_refs` is denied before it starts. `events` shows the rendered
-set only for guarded execution that reaches render.
+nothing. A quarantined ref is skipped before render. An adapter whose MCP
+tool calls would be ungoverned is denied before it starts when any
+`mcp_refs` are present. `events` shows the rendered set only for guarded
+execution that reaches render.
 
 ## Consequences
 

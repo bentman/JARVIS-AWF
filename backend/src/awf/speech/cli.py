@@ -137,7 +137,9 @@ def _run_synthesize(args: argparse.Namespace, repo_root: Path) -> int:
         voices_path=tts_paths["voices-v1.0.bin"],
     )
     write_wav(samples, sample_rate, Path(args.response_audio_out))
-    print(json.dumps({"response_text": args.text, "voice_id": voice_id, "response_audio_path": args.response_audio_out}))
+    print(
+        json.dumps({"response_text": args.text, "voice_id": voice_id, "response_audio_path": args.response_audio_out})
+    )
     return 0
 
 

@@ -89,8 +89,9 @@ def test_qnn_activation_registers_linux_provider_without_preloading_qnn_skel_lib
     )
     ort = SimpleNamespace(
         get_available_providers=lambda: list(providers),
-        register_execution_provider_library=lambda name, path: registered.append((name, path))
-        or providers.append("QNNExecutionProvider"),
+        register_execution_provider_library=lambda name, path: (
+            registered.append((name, path)) or providers.append("QNNExecutionProvider")
+        ),
     )
 
     monkeypatch.setattr(preflight.platform, "system", lambda: "Linux")

@@ -5,6 +5,7 @@ export class FakeTransport implements Transport {
   sent: string[] = [];
   private lineHandlers: Array<(line: string) => void> = [];
   private exitHandlers: Array<(code: number | null) => void> = [];
+  private errorHandlers: Array<(error: Error) => void> = [];
 
   send(line: string): void {
     this.sent.push(line);
@@ -18,6 +19,10 @@ export class FakeTransport implements Transport {
     this.exitHandlers.push(handler);
   }
 
+  onError(handler: (error: Error) => void): void {
+    this.errorHandlers.push(handler);
+  }
+
   close(): void {}
 
   /** Test helper: simulate the core process writing a response line. */
@@ -28,6 +33,10 @@ export class FakeTransport implements Transport {
 
   emitExit(code: number | null): void {
     for (const handler of this.exitHandlers) handler(code);
+  }
+
+  emitError(error: Error): void {
+    for (const handler of this.errorHandlers) handler(error);
   }
 
   lastRequest(): { jsonrpc: string; id: number; method: string; params?: Record<string, unknown> } {

@@ -4,6 +4,7 @@ from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.executor import StepFailure
 from awf.engine.run import create_run, create_step
+from awf.memory.sessions import append_entry, start_session
 from awf.workflow.activities import UnknownActivityError
 from awf.workflow.engine import make_activity_node_executor
 
@@ -60,6 +61,54 @@ def test_assistant_reply_activity_uses_model_gateway(conn, repo_root, monkeypatc
     row = conn.execute("SELECT status, output_json FROM steps WHERE step_id = 'step-1'").fetchone()
     assert row["status"] == "SUCCEEDED"
     assert "Model response" in row["output_json"]
+
+
+def test_assistant_reply_includes_recent_session_and_memory(conn, repo_root, monkeypatch):
+    create_step(conn, step_id="step-1", run_id="run-1", node_id="reply")
+    session = start_session(conn, title="chat")
+    append_entry(
+        conn,
+        session_id=session["session_id"],
+        role="operator",
+        content={"text": "my name is Casey"},
+        summary="my name is Casey",
+    )
+    append_entry(conn, session_id=session["session_id"], role="assistant", content={"text": "Noted."}, summary="Noted.")
+    captured = {}
+
+    def fake_complete(profile, messages, **kwargs):
+        captured["messages"] = messages
+        return "Your name is Casey."
+
+    from awf.cognition.envelope import PromptSegment
+
+    monkeypatch.setattr("awf.workflow.activities.complete", fake_complete)
+    monkeypatch.setattr(
+        "awf.workflow.activities.retrieve_memory_context",
+        lambda repo_root, conn, *, query, profile_ref: (
+            PromptSegment("memory", "context", False, "operator prefers brief answers"),
+        ),
+    )
+    executor = make_activity_node_executor(repo_root=repo_root)
+
+    output = executor(
+        conn,
+        "run-1",
+        "step-1",
+        {
+            "id": "reply",
+            "type": "activity",
+            "function": "assistant_reply",
+            "args": {"objective": "what is my name?", "sessionId": session["session_id"]},
+        },
+    )
+
+    assert output["response_text"] == "Your name is Casey."
+    user_content = captured["messages"][-1]["content"]
+    assert "my name is Casey" in user_content
+    assert "Noted." in user_content
+    assert "operator prefers brief answers" in user_content
+    assert user_content.rstrip().endswith("[user/input, untrusted]\nwhat is my name?")
 
 
 def test_unknown_activity_name_raises_with_invalid_input_failure_class(conn):

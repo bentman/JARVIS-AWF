@@ -101,7 +101,9 @@ def parse_semantic_memory(raw: dict) -> SemanticMemory:
         raise SemanticMemoryValidationError("semantic memory confidence must be between 0.0 and 1.0")
 
     provenance = MemoryProvenance(
-        source_type=_require_enum(_require(provenance_raw, "sourceType", "spec.provenance"), SOURCE_TYPES, "sourceType"),
+        source_type=_require_enum(
+            _require(provenance_raw, "sourceType", "spec.provenance"), SOURCE_TYPES, "sourceType"
+        ),
         source_ref=str(_require(provenance_raw, "sourceRef", "spec.provenance")),
         artifact_id=provenance_raw.get("artifactId"),
         run_id=provenance_raw.get("runId"),

@@ -68,19 +68,24 @@ def test_voice_session_accepts_normal_turn_sequence_and_records_events(tmp_path)
     voice_session_id = started["voice_session_id"]
     assert started["state"] == "idle"
 
-    assert op_voice_session_event(conn, voice_session_id=voice_session_id, frame_type="vad.speech_started")[
-        "state"
-    ] == "listening"
-    assert op_voice_session_event(conn, voice_session_id=voice_session_id, frame_type="vad.speech_stopped")[
-        "state"
-    ] == "transcribing"
-    assert op_voice_session_event(
-        conn,
-        voice_session_id=voice_session_id,
-        frame_type="stt.final",
-        payload={"text": "run the demo"},
-        turn_id="turn-1",
-    )["state"] == "submitting"
+    assert (
+        op_voice_session_event(conn, voice_session_id=voice_session_id, frame_type="vad.speech_started")["state"]
+        == "listening"
+    )
+    assert (
+        op_voice_session_event(conn, voice_session_id=voice_session_id, frame_type="vad.speech_stopped")["state"]
+        == "transcribing"
+    )
+    assert (
+        op_voice_session_event(
+            conn,
+            voice_session_id=voice_session_id,
+            frame_type="stt.final",
+            payload={"text": "run the demo"},
+            turn_id="turn-1",
+        )["state"]
+        == "submitting"
+    )
 
     rows = conn.execute(
         "SELECT payload_json FROM events WHERE reason_code = 'voice_session_frame' ORDER BY occurred_at"

@@ -61,7 +61,9 @@ def _proposal_path(repo_root: Path, proposal_id: str, name: str, version: str) -
     return proposals_dir(repo_root) / "workflows" / proposal_id / name / f"{version}.yaml"
 
 
-def _event(conn: sqlite3.Connection, proposal_id: str, event_type: str, payload: dict, *, actor: str = "operator") -> None:
+def _event(
+    conn: sqlite3.Connection, proposal_id: str, event_type: str, payload: dict, *, actor: str = "operator"
+) -> None:
     conn.execute(
         "INSERT INTO registry_proposal_events "
         "(event_id, proposal_id, event_type, occurred_at, actor, payload_json) "
@@ -120,7 +122,9 @@ def _registry_context(repo_root: Path) -> str:
     return "\n".join(lines) if lines else "- no published workflows found"
 
 
-def _authoring_envelope(*, objective: str, name: str | None, version: str | None, registry_context: str) -> PromptEnvelope:
+def _authoring_envelope(
+    *, objective: str, name: str | None, version: str | None, registry_context: str
+) -> PromptEnvelope:
     requested_identity = {
         "name": name or "choose a concise kebab-case workflow name",
         "version": version or DEFAULT_DRAFT_VERSION,
@@ -282,9 +286,7 @@ def update_proposal(
     return get_proposal(repo_root, conn, proposal_id=proposal_id)
 
 
-def reject_proposal(
-    repo_root: Path, conn: sqlite3.Connection, *, proposal_id: str, reason: str | None = None
-) -> dict:
+def reject_proposal(repo_root: Path, conn: sqlite3.Connection, *, proposal_id: str, reason: str | None = None) -> dict:
     current = get_proposal(repo_root, conn, proposal_id=proposal_id)
     if current["status"] != "draft":
         raise ProposalError(f"proposal {proposal_id} is not draft (status={current['status']})")
@@ -321,13 +323,13 @@ def verify_workflow_proposal(repo_root: Path, conn: sqlite3.Connection, *, propo
         name = capability.get("name")
         version = capability.get("version")
         if not name or not version:
-            raise ProposalError(f"workflow proposal verifier rejected activity node {node['id']}: invalid capability ref")
+            raise ProposalError(
+                f"workflow proposal verifier rejected activity node {node['id']}: invalid capability ref"
+            )
         try:
             resolve_registry_object(repo_root, "capabilities", name, version, conn=conn)
         except Exception as exc:
-            raise ProposalError(
-                f"workflow proposal verifier rejected activity node {node['id']}: {exc}"
-            ) from exc
+            raise ProposalError(f"workflow proposal verifier rejected activity node {node['id']}: {exc}") from exc
         checked_capabilities.append(f"{name}@{version}")
 
     result = {

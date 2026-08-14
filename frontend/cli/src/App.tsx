@@ -2,38 +2,13 @@ import type { ProtocolClient } from "@awf/protocol-client";
 import { Box, Static, Text, useApp } from "ink";
 import TextInput from "ink-text-input";
 import React, { useRef, useState } from "react";
-import { CommandError, dispatchAssistantInput, dispatchCommand } from "./commands.js";
+import { COMMAND_NAMES, CommandError, dispatchAssistantInput, dispatchCommand } from "./commands.js";
 import type { Settings } from "./settings.js";
 
 interface LogEntry {
   id: number;
   text: string;
 }
-
-const COMMAND_NAMES = [
-  "help",
-  "run",
-  "status",
-  "runs",
-  "resume",
-  "approvals",
-  "approve",
-  "reject",
-  "artifacts",
-  "agents",
-  "skills",
-  "workflows",
-  "capabilities",
-  "mcp",
-  "model",
-  "voices",
-  "secrets",
-  "settings",
-  "theme",
-  "keybindings",
-  "clear",
-  "quit",
-];
 
 export interface AppProps {
   client: ProtocolClient;

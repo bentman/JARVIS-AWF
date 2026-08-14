@@ -15,10 +15,13 @@ from pathlib import Path
 from awf.cognition.envelope import PromptEnvelope, PromptSegment
 from awf.cognition.render import render_chat
 from awf.gateway.client import LLM_COMPLETE_CAPABILITY_REF, complete
-from awf.registry.model_profile import load_model_profile
-from awf.registry.resolve import resolve_registry_object
 from awf.hardware.gpu_sampler import sample_gpu_utilization
 from awf.hardware.profiler import run_hardware_profiler
+from awf.memory.context import retrieve_memory_context
+from awf.memory.sessions import SessionError, show_session
+from awf.registry.model_profile import load_model_profile
+from awf.registry.persona import compile_persona, load_persona
+from awf.registry.resolve import resolve_registry_object
 
 ActivityFn = Callable[[sqlite3.Connection, dict], dict]
 
@@ -44,17 +47,40 @@ def _assistant_reply(conn: sqlite3.Connection, args: dict) -> dict:
     name, version = "resident-mind", "1.0.0"
     path, _source = resolve_registry_object(repo_root, "model-profiles", name, version, conn=conn)
     profile = load_model_profile(path)
-    envelope = PromptEnvelope(
-        segments=(
-            PromptSegment(
-                "application",
-                "instruction",
-                True,
-                "Answer the operator directly and concisely as the AWF resident mind.",
-            ),
-            PromptSegment("user", "input", False, objective),
+    segments: list[PromptSegment] = [
+        PromptSegment(
+            "application",
+            "instruction",
+            True,
+            "Answer the operator directly and concisely as the AWF resident mind.",
         )
-    )
+    ]
+    persona_ref = args.get("personaRef")
+    if isinstance(persona_ref, str) and persona_ref.strip():
+        persona_name, _, persona_version = persona_ref.partition("@")
+        persona_path, _persona_source = resolve_registry_object(repo_root, "personas", persona_name, persona_version)
+        persona = compile_persona(load_persona(persona_path))
+        if persona.system_text.strip():
+            segments.append(PromptSegment("persona", "style", True, persona.system_text))
+    session_id = args.get("voiceSessionId") or args.get("sessionId")
+    if isinstance(session_id, str) and session_id.strip():
+        try:
+            session = show_session(conn, session_id=session_id)
+            for entry in session["entries"][-12:]:
+                summary = entry.get("summary")
+                content = entry.get("content") if isinstance(entry.get("content"), dict) else {}
+                text = summary or content.get("text")
+                if isinstance(text, str) and text.strip():
+                    segments.append(PromptSegment("session", "context", False, f"{entry['role']}: {text.strip()}"))
+        except SessionError:
+            pass
+    memory_profile_ref = str(args.get("memoryProfileRef") or "default@1.0.0")
+    try:
+        segments.extend(retrieve_memory_context(repo_root, conn, query=objective, profile_ref=memory_profile_ref))
+    except Exception:
+        pass
+    segments.append(PromptSegment("user", "input", False, objective))
+    envelope = PromptEnvelope(segments=tuple(segments))
     return {
         "response_text": complete(
             profile,

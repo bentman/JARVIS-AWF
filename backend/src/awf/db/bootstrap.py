@@ -22,9 +22,7 @@ def _apply_column_migrations(conn) -> None:
 
 
 def _registry_proposals_accepts_semantic_memories(conn) -> bool:
-    row = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'registry_proposals'"
-    ).fetchone()
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'registry_proposals'").fetchone()
     return row is None or "semantic-memories" in (row[0] or "")
 
 
@@ -143,8 +141,7 @@ def _migrate_registry_proposal_events_verified_constraint(conn) -> None:
     )
     conn.execute("DROP TABLE registry_proposal_events_old")
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_registry_proposal_events_proposal_id "
-        "ON registry_proposal_events (proposal_id)"
+        "CREATE INDEX IF NOT EXISTS idx_registry_proposal_events_proposal_id ON registry_proposal_events (proposal_id)"
     )
     conn.commit()
     if foreign_keys_enabled:

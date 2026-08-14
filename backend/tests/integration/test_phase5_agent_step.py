@@ -1,3 +1,4 @@
+import json
 import subprocess
 
 import pytest
@@ -176,6 +177,139 @@ def test_capability_guard_allows_r1_capability_and_adapter_runs(repo_and_worktre
     assert row["status"] == "SUCCEEDED"
 
 
+def test_agent_result_output_is_persisted_and_cached_resume_skips_commit(repo_and_worktree, conn, monkeypatch):
+    repo_root, worktree = repo_and_worktree
+    adapter_calls = []
+    commit_calls = []
+
+    def adapter_fn(invocation: AgentInvocation) -> AgentResult:
+        adapter_calls.append(invocation)
+        return AgentResult(
+            status=AgentStatus.COMPLETED,
+            output={"result": "agent wrote a useful summary"},
+            usage={"input_tokens": 10, "output_tokens": 4},
+            findings=({"severity": "info", "message": "ok"},),
+            artifact_candidates=("report.md",),
+            termination_reason="success",
+        )
+
+    import awf.engine.agent_step as agent_step_module
+
+    monkeypatch.setattr(
+        agent_step_module, "commit_all_changes", lambda *a, **k: commit_calls.append((a, k)) or "abc123"
+    )
+
+    invocation = AgentInvocation(objective="summarize", inputs={}, workspace_root=worktree)
+    output = run_agent_step(
+        conn,
+        step_id="step-1",
+        run_id="run-1",
+        worktree_path=worktree,
+        invocation=invocation,
+        adapter_fn=adapter_fn,
+        commit_message="agent: summarize",
+        repo_root=repo_root,
+    )
+    cached_output = run_agent_step(
+        conn,
+        step_id="step-1",
+        run_id="run-1",
+        worktree_path=worktree,
+        invocation=invocation,
+        adapter_fn=adapter_fn,
+        commit_message="agent: summarize again",
+        repo_root=repo_root,
+    )
+
+    assert len(adapter_calls) == 1
+    assert len(commit_calls) == 1
+    assert output["result_text"] == "agent wrote a useful summary"
+    assert output["usage"] == {"input_tokens": 10, "output_tokens": 4}
+    assert output["findings"] == [{"severity": "info", "message": "ok"}]
+    assert output["artifact_candidates"] == ["report.md"]
+    assert cached_output["result_text"] == "agent wrote a useful summary"
+    row = conn.execute("SELECT output_json FROM steps WHERE step_id = 'step-1'").fetchone()
+    persisted = json.loads(row["output_json"])
+    assert persisted["result_text"] == "agent wrote a useful summary"
+
+
+def test_agent_oversized_output_spills_to_artifact(repo_and_worktree, conn, monkeypatch):
+    repo_root, worktree = repo_and_worktree
+    large_text = "x" * 9000
+
+    def adapter_fn(invocation: AgentInvocation) -> AgentResult:
+        return AgentResult(status=AgentStatus.COMPLETED, output={"result": large_text}, termination_reason="success")
+
+    import awf.engine.agent_step as agent_step_module
+
+    monkeypatch.setattr(agent_step_module, "commit_all_changes", lambda *a, **k: "abc123")
+
+    output = run_agent_step(
+        conn,
+        step_id="step-1",
+        run_id="run-1",
+        worktree_path=worktree,
+        invocation=AgentInvocation(objective="long", inputs={}, workspace_root=worktree),
+        adapter_fn=adapter_fn,
+        commit_message="agent: long output",
+        repo_root=repo_root,
+    )
+
+    assert len(output["result_text"]) == 8192
+    assert output["output_artifact_id"]
+    artifact = conn.execute("SELECT * FROM artifacts WHERE artifact_id = ?", (output["output_artifact_id"],)).fetchone()
+    assert artifact is not None
+
+
+def test_r2_agent_step_waits_for_approval_then_resumes(repo_and_worktree, conn, monkeypatch):
+    repo_root, worktree = repo_and_worktree
+    adapter_calls = []
+
+    def adapter_fn(invocation: AgentInvocation) -> AgentResult:
+        adapter_calls.append(invocation)
+        return AgentResult(status=AgentStatus.COMPLETED, output={"result": "approved"}, termination_reason="success")
+
+    import awf.engine.agent_step as agent_step_module
+
+    monkeypatch.setattr(agent_step_module, "commit_all_changes", lambda *a, **k: "abc123")
+    capability = _capability("R2", "per-invocation")
+    invocation = AgentInvocation(objective="needs approval", inputs={}, workspace_root=worktree)
+
+    waiting = run_agent_step(
+        conn,
+        step_id="step-1",
+        run_id="run-1",
+        worktree_path=worktree,
+        invocation=invocation,
+        adapter_fn=adapter_fn,
+        commit_message="agent: approved",
+        capability=capability,
+        agent_allowlist=[capability.ref],
+        repo_root=repo_root,
+    )
+    assert waiting["waiting_input"] is True
+    assert adapter_calls == []
+    assert conn.execute("SELECT status FROM steps WHERE step_id = 'step-1'").fetchone()["status"] == "WAITING_APPROVAL"
+
+    conn.execute("UPDATE approvals SET status = 'approved' WHERE approval_id = ?", (waiting["approval_id"],))
+    conn.commit()
+    output = run_agent_step(
+        conn,
+        step_id="step-1",
+        run_id="run-1",
+        worktree_path=worktree,
+        invocation=invocation,
+        adapter_fn=adapter_fn,
+        commit_message="agent: approved",
+        capability=capability,
+        agent_allowlist=[capability.ref],
+        repo_root=repo_root,
+    )
+
+    assert len(adapter_calls) == 1
+    assert output["result_text"] == "approved"
+
+
 def test_real_agent_allowlist_denies_a_capability_not_listed(repo_and_worktree, conn):
     # ADR-0002: a non-singleton allowlist must be able to fail - the
     # pre-ADR-0002 default (agent_allowlist=None) fell back to a
@@ -251,7 +385,9 @@ def test_agent_step_injects_memory_context_before_user_input(repo_and_worktree, 
 
     monkeypatch.setattr(
         "awf.memory.context.retrieve_memory_context",
-        lambda repo_root, conn, *, query, profile_ref: (PromptSegment("retrieval", "context", False, "prior run context"),),
+        lambda repo_root, conn, *, query, profile_ref: (
+            PromptSegment("retrieval", "context", False, "prior run context"),
+        ),
     )
     captured = {}
 

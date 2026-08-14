@@ -397,7 +397,10 @@ def _opencl_qualcomm_name() -> str | None:
             for platform_id in platforms:
                 for param in (0x0902, 0x0903):  # CL_PLATFORM_VENDOR, CL_PLATFORM_NAME
                     size = ctypes.c_size_t(0)
-                    if library.clGetPlatformInfo(platform_id, param, 0, None, ctypes.byref(size)) != 0 or size.value <= 1:
+                    if (
+                        library.clGetPlatformInfo(platform_id, param, 0, None, ctypes.byref(size)) != 0
+                        or size.value <= 1
+                    ):
                         continue
                     buffer = ctypes.create_string_buffer(size.value)
                     if library.clGetPlatformInfo(platform_id, param, size.value, buffer, None) != 0:
@@ -429,7 +432,12 @@ def _gpu_from_linux_sysfs() -> dict | None:
         cards = sorted(p for p in drm_root.glob("card[0-9]*") if (p / "device/vendor").is_file())
     except OSError:
         return None
-    pci_vendors = {"0x10de": "nvidia", "0x1002": "amd", "0x8086": "intel", **{v: "qualcomm" for v in _QUALCOMM_VENDOR_IDS}}
+    pci_vendors = {
+        "0x10de": "nvidia",
+        "0x1002": "amd",
+        "0x8086": "intel",
+        **{v: "qualcomm" for v in _QUALCOMM_VENDOR_IDS},
+    }
     for card in cards:
         try:
             vendor_id = (card / "device/vendor").read_text(encoding="utf-8").strip().lower()

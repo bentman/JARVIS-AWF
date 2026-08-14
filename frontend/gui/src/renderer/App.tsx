@@ -26,6 +26,7 @@ export interface PendingApproval {
   approvalId: string;
   actionDigest: string;
   riskClass: RiskClass;
+  preview?: { machine_action?: Record<string, unknown>; machine_action_digest?: string } | null;
 }
 
 export interface VoiceSessionFns {
@@ -36,7 +37,7 @@ export interface VoiceSessionFns {
   onVoiceSubmitText?: (
     voiceSessionId: string,
     text: string,
-    workflowRef: string,
+    workflowRef: string | undefined,
     voiceProfileRef: string | undefined,
     turnId: string,
   ) => Promise<VoiceSubmitTextResult>;
@@ -68,6 +69,7 @@ export interface AppProps extends VoiceSessionFns {
   onTextSubmit?: (text: string, workflowRef: string) => Promise<TextSubmitResult>;
   onRunList?: () => Promise<RunSummary[]>;
   onApprovalList?: () => Promise<ApprovalSummary[]>;
+  onApprovalDetail?: (approvalId: string) => Promise<{ approval: ApprovalSummary; preview?: PendingApproval["preview"] }>;
   onImprovementList?: () => Promise<ImprovementSummary[]>;
   onControlSummary?: () => Promise<ControlSummary>;
   onControlRunDetail?: (runId: string) => Promise<ControlRunDetail>;
@@ -102,6 +104,7 @@ function toPendingApproval(approval: ApprovalSummary): PendingApproval {
     approvalId: approval.approval_id,
     actionDigest: approval.action_digest,
     riskClass: (approval.risk_class as RiskClass | null) ?? "R2",
+    preview: approval.preview,
   };
 }
 
@@ -120,6 +123,7 @@ export function App({
   onVoiceSpeakText,
   onRunList,
   onApprovalList,
+  onApprovalDetail,
   onImprovementList,
   onControlSummary,
   onControlRunDetail,
@@ -154,6 +158,7 @@ export function App({
   const [workflowOptions, setWorkflowOptions] = useState<string[]>([DEFAULT_CHAT_WORKFLOW_REF]);
   const [chatSubmitting, setChatSubmitting] = useState(false);
   const [chatSubmitError, setChatSubmitError] = useState<string | null>(null);
+  const [approvalPreview, setApprovalPreview] = useState<PendingApproval["preview"]>(undefined);
 
   const refresh = async () => {
     if (!onControlSummary && !onRunList && !onApprovalList && !onImprovementList) return;
@@ -203,7 +208,7 @@ export function App({
   const handleVoiceSubmit = async (
     voiceSessionId: string,
     text: string,
-    workflowRef: string,
+    workflowRef: string | undefined,
     voiceProfileRef: string | undefined,
     turnId: string,
   ) => {
@@ -283,6 +288,14 @@ export function App({
   // of truth); otherwise the first real pending approval from the fetched
   // list is what the operator actually sees and can act on.
   const effectivePendingApproval = pendingApproval ?? (approvals.length > 0 ? toPendingApproval(approvals[0]) : undefined);
+
+  useEffect(() => {
+    setApprovalPreview(undefined);
+    if (!effectivePendingApproval || effectivePendingApproval.preview || !onApprovalDetail) return;
+    void onApprovalDetail(effectivePendingApproval.approvalId)
+      .then((detail) => setApprovalPreview(detail.preview ?? null))
+      .catch(() => setApprovalPreview(null));
+  }, [effectivePendingApproval?.approvalId, effectivePendingApproval?.preview, onApprovalDetail]);
 
   const statusAvailable = !!(onControlSummary || onRunList || onApprovalList || onImprovementList);
   const runsAvailable = statusAvailable;
@@ -474,6 +487,7 @@ export function App({
           approvalId={effectivePendingApproval.approvalId}
           actionDigest={effectivePendingApproval.actionDigest}
           riskClass={effectivePendingApproval.riskClass}
+          preview={effectivePendingApproval.preview ?? approvalPreview}
           voiceConfirmed={voiceConfirmed}
           onApprove={handleApprove}
           onReject={handleReject}

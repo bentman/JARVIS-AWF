@@ -1,5 +1,6 @@
 """Voice Profile schema, loading, and validation (Section 16.5)."""
 
+import sqlite3
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -116,15 +117,15 @@ def parse_voice_profile(raw: dict) -> VoiceProfile:
     )
 
 
-def _resolve_persona(repo_root: Path, persona_ref: str) -> Persona:
+def _resolve_persona(repo_root: Path, persona_ref: str, conn: sqlite3.Connection | None = None) -> Persona:
     name, sep, version = persona_ref.partition("@")
     if not sep or not name or not version:
         raise VoiceProfileValidationError(f"voice profile persona_ref must be '<name>@<version>', got {persona_ref!r}")
-    path, _source = resolve_registry_object(repo_root, "personas", name, version)
+    path, _source = resolve_registry_object(repo_root, "personas", name, version, conn=conn)
     return load_persona(path)
 
 
-def load_voice_profile(repo_root: Path, path: Path) -> VoiceProfile:
+def load_voice_profile(repo_root: Path, path: Path, conn: sqlite3.Connection | None = None) -> VoiceProfile:
     """`path` is `voice-profiles/<name>/<version>.yaml` - the parsed `name`
     and `version` MUST match the containing directory and the file's own
     stem, per the rule `load_skill` already applies to `SKILL.md`."""
@@ -143,7 +144,7 @@ def load_voice_profile(repo_root: Path, path: Path) -> VoiceProfile:
         raise VoiceProfileValidationError(
             f"voice profile version '{profile.version}' does not match its file name '{expected_version}'"
         )
-    persona = _resolve_persona(repo_root, profile.persona_ref)
+    persona = _resolve_persona(repo_root, profile.persona_ref, conn=conn)
     return VoiceProfile(
         name=profile.name,
         version=profile.version,

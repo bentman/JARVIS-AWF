@@ -7,8 +7,14 @@ from cryptography.fernet import Fernet
 from awf.cognition.envelope import PromptEnvelope, PromptSegment
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
-from awf.gateway.client import GatewayError, complete, complete_envelope, complete_structured
-from awf.gateway.client import HOSTED_LLM_COMPLETE_CAPABILITY_REF, LLM_COMPLETE_CAPABILITY_REF
+from awf.gateway.client import (
+    HOSTED_LLM_COMPLETE_CAPABILITY_REF,
+    LLM_COMPLETE_CAPABILITY_REF,
+    GatewayError,
+    complete,
+    complete_envelope,
+    complete_structured,
+)
 from awf.registry.model_profile import (
     ModelProfileValidationError,
     load_model_profile,
@@ -173,7 +179,9 @@ def test_complete_structured_passes_json_schema_and_validates_response(monkeypat
 
     monkeypatch.setattr("awf.gateway.client._litellm_completion", fake_completion)
 
-    result = complete_structured(profile, [{"role": "user", "content": "ping"}], schema_name="demo_schema", schema=schema)
+    result = complete_structured(
+        profile, [{"role": "user", "content": "ping"}], schema_name="demo_schema", schema=schema
+    )
 
     assert result == {"answer": "ok"}
     assert captured["response_format"] == {

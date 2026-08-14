@@ -15,7 +15,9 @@ if TYPE_CHECKING:
 ORT_EXTRAS = ("hw-ort-cpu", "hw-ort-cuda", "hw-ort-directml", "hw-ort-qnn")
 
 
-def resolve_required_extras(inventory: "HardwareInventory", *, include_speech: bool = True, include_dev: bool = True) -> list[str]:
+def resolve_required_extras(
+    inventory: "HardwareInventory", *, include_speech: bool = True, include_dev: bool = True
+) -> list[str]:
     extras = [resolve_ort_extra(inventory)]
     if include_speech:
         extras.append("speech")

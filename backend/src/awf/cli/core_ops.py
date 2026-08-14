@@ -14,6 +14,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import threading
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
@@ -85,6 +86,8 @@ ADAPTER_REGISTRY = {
     "copilot": copilot_invoke,
     "cline": cline_invoke,
 }
+
+_MAP_ITEM_DB_LOCK = threading.Lock()
 
 DEFAULT_ASSISTANT_WORKFLOW_REF = "assistant-default@1.0.0"
 
@@ -173,7 +176,11 @@ def _make_check_fn(node: dict, worktree: Path, repo_root: Path):
             return True
         if args == ["__awf_false__"]:
             return False
-        result = subprocess.run(args, cwd=worktree, capture_output=True, text=True)
+        timeout = int(node.get("timeoutSeconds", 300))
+        try:
+            result = subprocess.run(args, cwd=worktree, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return False
         return result.returncode == 0
 
     return check_fn
@@ -272,7 +279,7 @@ def _make_run_child(worktree: Path, artifacts_root: Path, repo_root: Path):
     def run_child(conn: sqlite3.Connection, workflow_ref: str, input_data: dict) -> tuple[str, dict]:
         import json
 
-        child_workflow = _resolve_workflow(repo_root, workflow_ref)
+        child_workflow = _resolve_workflow(repo_root, workflow_ref, conn=conn)
         child_run_id = uuid7()
         create_run(conn, run_id=child_run_id, workflow_ref=child_workflow.ref, input_json=json.dumps(input_data))
         child_scratch_dir = create_scratch_dir(repo_root, child_run_id)
@@ -307,47 +314,65 @@ def _make_run_map_item(artifacts_root: Path, repo_root: Path):
     # across threads. `map_node.py` merges each successful item's commits
     # back into the parent worktree itself, in order, once every item has
     # finished - this function only runs one item to completion.
-    def run_map_item(parent_head: str, index: int, workflow_ref: str, item) -> tuple[str, Path, dict]:
+    def run_map_item(
+        parent_head: str,
+        index: int,
+        workflow_ref: str,
+        item,
+        item_conn_override: sqlite3.Connection | None = None,
+    ) -> tuple[str, Path, dict]:
         import json
 
         from awf.db.connection import get_connection
 
         db_path = resolve_db_path(repo_root)
-        item_conn = get_connection(db_path)
-        try:
-            child_workflow = _resolve_workflow(repo_root, workflow_ref)
-            child_run_id = uuid7()
-            create_run(
-                item_conn,
-                run_id=child_run_id,
-                workflow_ref=child_workflow.ref,
-                input_json=json.dumps({"item": item, "index": index}),
-            )
-            item_worktree = create_worktree(repo_root, child_run_id, base_ref=parent_head)
-            item_scratch_dir = create_scratch_dir(repo_root, child_run_id)
+        with _MAP_ITEM_DB_LOCK:
+            close_item_conn = item_conn_override is None
+            if item_conn_override is None:
+                try:
+                    item_conn = get_connection(db_path, enable_wal=False)
+                except sqlite3.OperationalError as exc:
+                    raise RuntimeError(f"map item {index}: database connection failed: {exc}") from exc
+            else:
+                item_conn = item_conn_override
             try:
-                item_executors = _build_node_executors(
-                    child_workflow,
-                    item_worktree,
-                    artifacts_root,
-                    repo_root,
-                    item_scratch_dir,
-                    {"item": item, "index": index},
-                )
-                result = _run_workflow_safely(
-                    item_conn, run_id=child_run_id, workflow=child_workflow, node_executors=item_executors
-                )
-            except Exception as exc:
-                item_conn.execute(
-                    "UPDATE runs SET status = 'FAILED', updated_at = ? WHERE run_id = ?",
-                    (utc_now_rfc3339(), child_run_id),
-                )
-                item_conn.commit()
-                result = {"status": "FAILED", "error": str(exc)}
-            remove_scratch_dir(repo_root, child_run_id)
-            return child_run_id, item_worktree, result
-        finally:
-            item_conn.close()
+                try:
+                    child_workflow = _resolve_workflow(repo_root, workflow_ref, conn=item_conn)
+                    child_run_id = uuid7()
+                    create_run(
+                        item_conn,
+                        run_id=child_run_id,
+                        workflow_ref=child_workflow.ref,
+                        input_json=json.dumps({"item": item, "index": index}),
+                    )
+                    item_worktree = create_worktree(repo_root, child_run_id, base_ref=parent_head)
+                    item_scratch_dir = create_scratch_dir(repo_root, child_run_id)
+                except sqlite3.OperationalError as exc:
+                    raise RuntimeError(f"map item {index}: child run setup failed: {exc}") from exc
+                try:
+                    item_executors = _build_node_executors(
+                        child_workflow,
+                        item_worktree,
+                        artifacts_root,
+                        repo_root,
+                        item_scratch_dir,
+                        {"item": item, "index": index},
+                    )
+                    result = _run_workflow_safely(
+                        item_conn, run_id=child_run_id, workflow=child_workflow, node_executors=item_executors
+                    )
+                except Exception as exc:
+                    item_conn.execute(
+                        "UPDATE runs SET status = 'FAILED', updated_at = ? WHERE run_id = ?",
+                        (utc_now_rfc3339(), child_run_id),
+                    )
+                    item_conn.commit()
+                    result = {"status": "FAILED", "error": str(exc)}
+                remove_scratch_dir(repo_root, child_run_id)
+                return child_run_id, item_worktree, result
+            finally:
+                if close_item_conn:
+                    item_conn.close()
 
     return run_map_item
 
@@ -364,7 +389,9 @@ def _build_node_executors(
     run_map_item = _make_run_map_item(artifacts_root, repo_root)
     executors = {
         "agent": make_agent_node_executor(ADAPTER_REGISTRY, worktree, repo_root, workflow_input),
-        "activity": make_activity_node_executor(repo_root=repo_root, worktree_path=worktree, workflow_input=workflow_input),
+        "activity": make_activity_node_executor(
+            repo_root=repo_root, worktree_path=worktree, workflow_input=workflow_input
+        ),
         "approval": make_approval_node_executor(),
         "subworkflow": make_subworkflow_node_executor(run_child),
         "map": make_map_node_executor(run_map_item, worktree_path=worktree, repo_root=repo_root),
@@ -407,11 +434,14 @@ def _retain_worktree_for_improvement(workflow_ref: str, input_data: dict) -> boo
 
 
 def _cleanup_run_workspace(repo_root: Path, run_id: str, result: dict, *, retain_worktree: bool = False) -> None:
-    # Cache state is ephemeral by design (Section 7/10.4) - reclaim it once
-    # a Run reaches a terminal state. FAILED keeps its worktree/scratch dir
-    # around for post-mortem inspection; only SUCCEEDED is cleaned up here.
-    if result.get("status") == "SUCCEEDED" and not retain_worktree:
+    # Cache state is ephemeral by design (Section 7/10.4). Keep failed
+    # worktrees for inspection, but never retain scratch state after a
+    # terminal run because adapter homes may contain temporary credential
+    # links or locked-down copies.
+    status = result.get("status")
+    if status == "SUCCEEDED" and not retain_worktree:
         remove_worktree(repo_root, run_id)
+    if status in {"SUCCEEDED", "FAILED", "CANCELED"}:
         remove_scratch_dir(repo_root, run_id)
 
 
@@ -552,8 +582,12 @@ def op_run_outcome(conn: sqlite3.Connection, *, run_id: str) -> dict:
         raise CoreOpError(f"no such run: {run_id}")
     run = dict(run_row)
     steps = [dict(row) for row in conn.execute("SELECT * FROM steps WHERE run_id = ? ORDER BY started_at", (run_id,))]
-    artifacts = [dict(row) for row in conn.execute("SELECT * FROM artifacts WHERE run_id = ? ORDER BY created_at", (run_id,))]
-    approvals = [dict(row) for row in conn.execute("SELECT * FROM approvals WHERE run_id = ? ORDER BY requested_at", (run_id,))]
+    artifacts = [
+        dict(row) for row in conn.execute("SELECT * FROM artifacts WHERE run_id = ? ORDER BY created_at", (run_id,))
+    ]
+    approvals = [
+        dict(row) for row in conn.execute("SELECT * FROM approvals WHERE run_id = ? ORDER BY requested_at", (run_id,))
+    ]
     return _run_outcome_from_parts(run, steps, artifacts, approvals)
 
 
@@ -830,9 +864,7 @@ def op_improvement_request_merge(repo_root: Path, conn: sqlite3.Connection, *, i
         raise CoreOpError(str(exc)) from exc
 
 
-def op_improvement_merge(
-    repo_root: Path, conn: sqlite3.Connection, *, improvement_id: str, approval_id: str
-) -> dict:
+def op_improvement_merge(repo_root: Path, conn: sqlite3.Connection, *, improvement_id: str, approval_id: str) -> dict:
     try:
         return improvement_proposals.merge(repo_root, conn, improvement_id=improvement_id, approval_id=approval_id)
     except improvement_proposals.ImprovementProposalError as exc:
@@ -1262,10 +1294,12 @@ def op_proposal_publish(
         raise CoreOpError(
             f"proposal {proposal_id} draft file digest mismatch: expected {digest}, actual {actual_digest}"
         )
-    try:
-        verification = workflow_authoring.verify_workflow_proposal(repo_root, conn, proposal_id=proposal_id)
-    except workflow_authoring.ProposalError as exc:
-        raise CoreOpError(str(exc)) from exc
+    verification = None
+    if proposal["kind"] == "workflows":
+        try:
+            verification = workflow_authoring.verify_workflow_proposal(repo_root, conn, proposal_id=proposal_id)
+        except workflow_authoring.ProposalError as exc:
+            raise CoreOpError(str(exc)) from exc
     published = op_registry_publish(repo_root, conn, path=draft_path, kind=proposal["kind"])
     try:
         marked = workflow_authoring.mark_published(
@@ -1346,9 +1380,7 @@ def op_memory_block(conn: sqlite3.Connection, *, ref: str) -> dict:
     return op_registry_retire(conn, kind="semantic-memories", name=name, version=version)
 
 
-def op_session_start(
-    conn: sqlite3.Connection, *, title: str | None = None, expires_at: str | None = None
-) -> dict:
+def op_session_start(conn: sqlite3.Connection, *, title: str | None = None, expires_at: str | None = None) -> dict:
     from awf.memory.sessions import start_session
 
     return start_session(conn, title=title, expires_at=expires_at)
@@ -1403,15 +1435,17 @@ def op_episodic_timeline(conn: sqlite3.Connection, *, run_id: str) -> dict:
         raise CoreOpError(str(exc)) from exc
 
 
-def _resolve_voice_profile(repo_root: Path, voice_profile_ref: str | None = None) -> dict:
+def _resolve_voice_profile(
+    repo_root: Path, voice_profile_ref: str | None = None, conn: sqlite3.Connection | None = None
+) -> dict:
     from awf.registry.voice_profile import DEFAULT_VOICE_PROFILE_REF
 
     ref = voice_profile_ref or DEFAULT_VOICE_PROFILE_REF
     name, sep, version = ref.partition("@")
     if not sep or not name or not version:
         raise CoreOpError(f"voice profile ref must be '<name>@<version>', got {ref!r}")
-    path, _source = resolve_registry_object(repo_root, "voice-profiles", name, version)
-    profile = load_voice_profile(repo_root, path)
+    path, _source = resolve_registry_object(repo_root, "voice-profiles", name, version, conn=conn)
+    profile = load_voice_profile(repo_root, path, conn=conn)
     candidates = profile.enabled_candidates_by_priority()
     if not candidates:
         raise CoreOpError(f"voice profile '{profile.ref}' has no enabled TTS candidates")
@@ -1488,7 +1522,7 @@ def op_voice_submit_text(
     if not text.strip():
         raise CoreOpError("voice.submitText requires non-empty text")
 
-    voice_profile = _resolve_voice_profile(repo_root, voice_profile_ref)
+    voice_profile = _resolve_voice_profile(repo_root, voice_profile_ref, conn=conn)
     session = current_voice_session(conn, voice_session_id=voice_session_id)
     if session.state in {"idle", "armed"}:
         op_voice_session_event(
@@ -1575,7 +1609,9 @@ def op_events_snapshot(conn: sqlite3.Connection, *, run_id: str | None = None, l
             (run_id, limit),
         ).fetchall()
     else:
-        rows = conn.execute("SELECT * FROM events ORDER BY occurred_at DESC, event_id DESC LIMIT ?", (limit,)).fetchall()
+        rows = conn.execute(
+            "SELECT * FROM events ORDER BY occurred_at DESC, event_id DESC LIMIT ?", (limit,)
+        ).fetchall()
     return {"events": [dict(row) for row in reversed(rows)], "streaming": False}
 
 
@@ -1767,7 +1803,9 @@ def _doctor_registry(repo_root: Path) -> dict:
                 detail={"path": str(path), "kind": kind, "error": str(exc)},
                 next_action="Fix or restore the invalid default registry object.",
             )
-    return _doctor_check("registry", "ok", "Default assistant workflow and capability validate.", detail={"validated": results})
+    return _doctor_check(
+        "registry", "ok", "Default assistant workflow and capability validate.", detail={"validated": results}
+    )
 
 
 def _doctor_database(repo_root: Path) -> dict:

@@ -65,7 +65,9 @@ def _outcome_from_result(result: dict) -> dict:
         "run_id": result.get("run_id"),
         "workflow_ref": result.get("workflow_ref"),
         "status": result.get("status"),
-        "response_text": result.get("outputs", {}).get("response_text") if isinstance(result.get("outputs"), dict) else "",
+        "response_text": result.get("outputs", {}).get("response_text")
+        if isinstance(result.get("outputs"), dict)
+        else "",
         "evidence": [],
         "failures": [],
         "pending_approvals": [],
@@ -90,7 +92,9 @@ def _format_approvals(approvals: list[dict]) -> str:
     lines = ["Pending approvals:"]
     for approval in approvals:
         risk = approval.get("risk_class") or "risk?"
-        lines.append(f"  - {approval.get('approval_id')} {risk} run={approval.get('run_id')} digest={approval.get('action_digest')}")
+        lines.append(
+            f"  - {approval.get('approval_id')} {risk} run={approval.get('run_id')} digest={approval.get('action_digest')}"
+        )
     return "\n".join(lines)
 
 
@@ -147,7 +151,11 @@ def cmd_status(args: argparse.Namespace, repo_root: Path, conn) -> int:
 
 def cmd_resume(args: argparse.Namespace, repo_root: Path, conn) -> int:
     results = ops.op_run_resume(repo_root, conn)
-    text = "No incomplete runs to resume." if not results else "\n\n".join(_format_outcome(_outcome_from_result(item)) for item in results)
+    text = (
+        "No incomplete runs to resume."
+        if not results
+        else "\n\n".join(_format_outcome(_outcome_from_result(item)) for item in results)
+    )
     _print_or_json(args, results, text)
     return 0
 
@@ -339,7 +347,9 @@ def cmd_session_start(args: argparse.Namespace, repo_root: Path, conn) -> int:
 
 def cmd_session_append(args: argparse.Namespace, repo_root: Path, conn) -> int:
     content = json.loads(Path(args.json).read_text(encoding="utf-8"))
-    _print(ops.op_session_append(conn, session_id=args.session_id, role=args.role, content=content, summary=args.summary))
+    _print(
+        ops.op_session_append(conn, session_id=args.session_id, role=args.role, content=content, summary=args.summary)
+    )
     return 0
 
 
@@ -514,7 +524,9 @@ def build_parser() -> argparse.ArgumentParser:
     author_workflow_parser.add_argument("--objective", required=True)
     author_workflow_parser.add_argument("--name", required=False, default=None)
     author_workflow_parser.add_argument("--version", required=False, default=None)
-    author_workflow_parser.add_argument("--profile", required=False, default=ops.workflow_authoring.DEFAULT_AUTHOR_PROFILE)
+    author_workflow_parser.add_argument(
+        "--profile", required=False, default=ops.workflow_authoring.DEFAULT_AUTHOR_PROFILE
+    )
     author_workflow_parser.set_defaults(func=cmd_author_workflow)
 
     proposal_parser = sub.add_parser("proposal")

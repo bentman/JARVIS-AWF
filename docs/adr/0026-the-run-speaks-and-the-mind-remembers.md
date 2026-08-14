@@ -2,7 +2,26 @@
 
 ## Status
 
-Proposed.
+Accepted.
+
+Implemented on 2026-08-14 in branch
+`adr/0026-the-run-speaks-and-the-mind-remembers`. The implementation keeps
+`awf/events.subscribe` as snapshot polling, persists bounded agent output in
+step output, reuses the existing approval record/action-preview bridge for
+agent approvals, makes the assistant read recent session and memory context,
+and applies the adjacent Windows/SQLite/pathing correctness fixes described
+below.
+
+Change entry, 2026-08-14: final implementation alignment records that the
+shared adapter runner preserves each adapter's existing command-line prompt
+delivery rather than moving prompts to stdin/temp files; CLI and GUI status
+surfaces gained readable summaries and post-request run detail, but continuous
+frontend polling during an in-flight `run.start` remains deferred. Related ADR
+corrections from this pass: ADR-0021 now notes that ADR-0026 extends the
+approval bridge to agent nodes, while ADR-0023's SpeechRecognition caveat,
+ADR-0024's snapshot-only `events.subscribe`, ADR-0017's resident-mind/default
+assistant state, and ADR-0018/0020 memory-envelope notes already match current
+repo truth.
 
 This record was produced from an external code audit of the repository at
 commit `e126629` (four independent review passes: engine/adapters/gates,
@@ -93,16 +112,15 @@ invocation would otherwise be written five times.
 `run_cli(argv, invocation, *, extra_env) -> AgentResult | CompletedProcess`
 and a shared `parse_jsonl_events`. The runner owns: env merge,
 `stdin=subprocess.DEVNULL` (today the Claude adapter alone omits it,
-`claude_code.py:47-54`), delivery of the prompt envelope via stdin or temp
-file rather than a single argv element (the current path breaks on Windows'
-~32K command-line limit once a manifest carries a few skills plus memory),
-`start_new_session=True` with process-group kill on timeout (today
-`subprocess.run(timeout=...)` orphans agent-spawned grandchildren that keep
+`claude_code.py:47-54`), process-group cleanup on timeout (today
+`subprocess.run(timeout=...)` can orphan agent-spawned grandchildren that keep
 writing into the worktree after the step is recorded), and
 `FileNotFoundError` caught and returned as
-`AgentResult(FAILED, termination_reason="agent CLI '<name>' not installed —
-run `awf doctor` or select another adapter")`. Each adapter shrinks to
-command construction and result mapping. Net LOC goes down.
+`AgentResult(FAILED, ...)` with a termination reason naming the missing CLI
+and the `awf doctor` remedy. Each adapter keeps its current
+command flags and prompt-delivery shape; avoiding Windows command-line length
+limits by moving large envelopes to stdin or temp files remains a future
+adapter-contract refinement.
 
 **The run speaks.** The agent step persists a bounded result text and
 `usage` into the step output and `node_output_context`, spilling large
@@ -113,18 +131,20 @@ event carrying the reason. A run that returns `WAITING_INPUT` persists that
 status to the `runs` table (today `workflow/engine.py:336-337` returns it
 without writing it, so an exhausted handoff shows `RUNNING` forever).
 
-**The run shows progress.** Both frontends consume the already-shipped
-`awf/events.subscribe` and poll `run.status`, rendering live step chips in
-the chat transcript. The transport gains a `child.on("error")` handler with a
-readable "backend not installed — run scripts/bootstrap.sh" message, forwards
-child stderr to a diagnostic channel, and applies per-call timeouts with
-method-aware defaults. Slash-command and GUI output move from
-`JSON.stringify` to one formatter per record type, extending the existing
-`formatOutcome` pattern; raw payloads stay reachable behind `--json`.
-`COMMAND_NAMES`, `HELP_TEXT`, and the dispatch chain derive from a single
-command table (today 22 of ~45 commands autocomplete, and the lists live in
-different files). Server-push streaming remains parked where ADR-0024 left
-it; polling over the existing protocol is sufficient for this record.
+**The run shows progress through status surfaces.** The already-shipped
+`awf/events.subscribe` stays a request/response snapshot endpoint, and
+`awf/run.status` plus run outcome responses carry step/output detail suitable
+for CLI and GUI summaries. The transport gains a `child.on("error")` handler
+with a readable `failed to start awf core` message, stderr capture, and
+per-call timeouts with method-aware defaults. Slash-command and GUI output
+move from broad `JSON.stringify`/`<pre>` rendering toward focused formatters
+for approvals, control, LLM status, memory search, run status, and event/run
+snapshots; raw payloads remain available on JSON-oriented paths. `COMMAND_NAMES`
+is derived from `HELP_TEXT` so autocomplete stays aligned with the help text.
+True live frontend polling while a synchronous `run.start` request is still
+executing remains deferred until the frontend run-start path is split into
+start-and-poll or another async interaction shape. Server-push streaming
+remains parked where ADR-0024 left it.
 
 **The mind remembers.** `_assistant_reply` resolves the voice profile's
 persona via `compile_persona`, appends recent session entries as
@@ -193,8 +213,10 @@ they carry their own tradeoffs and deserve their own records:
 - **Session/memory schema.** Persist `summarize_session` output, enforce or
   delete `active_session_ttl_hours` and the unused embedding config (an
   ADR-0020 amendment).
-- **Streaming transport.** ADR-0024 parked it; polling suffices until it
-  demonstrably doesn't.
+- **Streaming/live progress transport.** ADR-0024 parked server-push, and this
+  implementation keeps `events.subscribe` as snapshot polling. Continuous
+  frontend progress updates during an in-flight synchronous `run.start` remain
+  deferred.
 - **CI graduation.** Every CHANGE_LOG entry already cites test counts — the
   validation culture is CI-shaped and runs by hand. A minimal
   `.github/workflows/ci.yml` (ruff, `pytest -m "not live and not slow"`,
@@ -203,8 +225,8 @@ they carry their own tradeoffs and deserve their own records:
 
 ## The tradeoffs accepted
 
-- Polling instead of push. Live step chips arrive on a timer, not a stream,
-  in exchange for zero protocol changes.
+- Snapshot polling instead of push. Run and event detail are visible through
+  explicit status/snapshot calls without introducing a streaming protocol.
 - Bounded result persistence. Step outputs store a capped text plus an
   artifact spill, not the full agent transcript, in exchange for a readable
   `steps` table.
@@ -222,11 +244,12 @@ they carry their own tradeoffs and deserve their own records:
   step whose reason names the missing CLI and the remedy — not `INTERNAL`
   `[Errno 2]`.
 - Killing the backend mid-session produces a readable message in both
-  frontends within the call timeout; first-run without a venv names
-  `scripts/bootstrap.sh`.
-- During a running agent step, the GUI chat bubble and the CLI transcript
-  show at least: current node, step state, and elapsed time, updating without
-  operator action.
+  frontends within the call timeout, including captured stderr where
+  available.
+- After `run.start` returns, `awf/run.status`, the CLI `/status` formatter,
+  and GUI run detail expose step state and bounded output without raw DB
+  inspection. Automatic live progress polling during the same in-flight
+  request is not part of the implemented surface.
 - A voice exchange of "my name is X" followed by "what is my name?" answers
   correctly from session context, with the active persona's tone.
 - An R2 capability on an `agent` node parks the run in `WAITING_APPROVAL`,
@@ -238,12 +261,13 @@ they carry their own tradeoffs and deserve their own records:
   without `--json`.
 - Every dropped MCP ref during envelope assembly has a matching
   `mcp_ref_skipped` event.
-- Backend and frontend suites pass; net adapter LOC decreases.
+- Backend and frontend suites pass, with adapter invocation behavior
+  centralized in `adapters/base.py`.
 
 ## Consequences
 
-- Runs become self-explanatory: what the agent said, why it stopped, and what
-  it's doing right now are all visible where the operator already looks.
+- Runs become more self-explanatory: what the agent said, why it stopped, and
+  the recorded step state are visible where the operator already looks.
 - The five adapters converge on one invocation path, so the next adapter —
   and the next invocation bug — is written once.
 - The assistant graduates from a stateless form-submitter to a conversation

@@ -35,7 +35,9 @@ def test_op_run_start_fails_cleanly_for_an_unknown_activity_name(tmp_path):
     result = op_run_start(repo_root, conn, workflow_ref="bad-activity@1.0.0", input_data={})
 
     assert result["status"] == "FAILED"
-    assert conn.execute("SELECT status FROM runs WHERE run_id = ?", (result["run_id"],)).fetchone()["status"] == "FAILED"
+    assert (
+        conn.execute("SELECT status FROM runs WHERE run_id = ?", (result["run_id"],)).fetchone()["status"] == "FAILED"
+    )
 
 
 def test_op_run_start_with_bare_name_pins_and_resume_uses_pin(tmp_path):
@@ -44,9 +46,10 @@ def test_op_run_start_with_bare_name_pins_and_resume_uses_pin(tmp_path):
 
     started = op_run_start(repo_root, conn, workflow_ref="resume-demo", input_data={})
     assert started["status"] == "SUCCEEDED"
-    assert conn.execute("SELECT workflow_ref FROM runs WHERE run_id = ?", (started["run_id"],)).fetchone()[
-        "workflow_ref"
-    ] == "resume-demo@1.0.0"
+    assert (
+        conn.execute("SELECT workflow_ref FROM runs WHERE run_id = ?", (started["run_id"],)).fetchone()["workflow_ref"]
+        == "resume-demo@1.0.0"
+    )
 
     publish_workflow(
         repo_root,
@@ -268,9 +271,7 @@ def test_op_run_start_escalates_risky_gate_to_high_risk_tier(tmp_path):
     ).fetchone()
     verdict = json.loads((artifacts_dir(repo_root) / verdict_row["relative_path"]).read_text())
     assert verdict["tier"] == "high-risk"
-    event = conn.execute(
-        "SELECT payload_json FROM events WHERE reason_code = 'gate_tier_selected'"
-    ).fetchone()
+    event = conn.execute("SELECT payload_json FROM events WHERE reason_code = 'gate_tier_selected'").fetchone()
     assert event is not None
     assert "check:declared_R2" in event["payload_json"]
 

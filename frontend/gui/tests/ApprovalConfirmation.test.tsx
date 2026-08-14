@@ -19,6 +19,30 @@ describe("ApprovalConfirmation", () => {
     expect(screen.getByText(/R2/)).toBeTruthy();
   });
 
+  it("displays the machine action preview when supplied", () => {
+    render(
+      <ApprovalConfirmation
+        approvalId="ap-1"
+        actionDigest="sha256:deadbeef"
+        riskClass="R2"
+        preview={{
+          machine_action: {
+            kind: "agent_node",
+            capability_ref: "demo_capability@1.0.0",
+            target: { adapter: "codex" },
+          },
+          machine_action_digest: "sha256:deadbeef",
+        }}
+        voiceConfirmed={false}
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Action preview")).toHaveTextContent("agent_node demo_capability@1.0.0");
+    expect(screen.getByText(/codex/)).toBeTruthy();
+  });
+
   it("R2 approval attempted by voice alone is refused - onApprove is never auto-called", () => {
     const onApprove = vi.fn();
     render(

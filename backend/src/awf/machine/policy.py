@@ -62,9 +62,9 @@ def resolve_allowed_path(
     root_paths = [_root_path(repo_root, worktree, run_id, root) for root in roots]
     raw = Path(relative_or_absolute)
     candidate = raw if raw.is_absolute() else worktree / raw
-    candidate = candidate.resolve(strict=must_exist)
-    if candidate.is_symlink() and not constraints.get("followSymlinks", False):
+    if not constraints.get("followSymlinks", False) and candidate.is_symlink():
         raise MachinePolicyError(f"symlink traversal denied: {relative_or_absolute}")
+    candidate = candidate.resolve(strict=must_exist)
     if not any(_is_relative_to(candidate, root) for root in root_paths):
         raise MachinePolicyError(f"path outside allowed roots: {relative_or_absolute}")
 

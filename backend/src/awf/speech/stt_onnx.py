@@ -173,7 +173,9 @@ class QnnWhisperRuntime:
         if "attention_mask" not in decoder_inputs:
             raise SttRuntimeError("QNN Whisper decoder is missing required attention_mask input")
 
-        attention_shape = [1 if dim is None or isinstance(dim, str) else int(dim) for dim in decoder_inputs["attention_mask"].shape]
+        attention_shape = [
+            1 if dim is None or isinstance(dim, str) else int(dim) for dim in decoder_inputs["attention_mask"].shape
+        ]
         if len(attention_shape) != 4 or attention_shape[-1] < 2:
             raise SttRuntimeError(f"unsupported QNN Whisper attention_mask shape {attention_shape}")
 

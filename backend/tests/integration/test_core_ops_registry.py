@@ -164,16 +164,25 @@ def test_registry_retire_then_trust_restores_resolution(tmp_path, fixtures_dir):
         repo_root, conn, path=fixtures_dir / "test_phase1" / "test_phase1_read_file_r0.yaml", kind="capabilities"
     )
 
-    assert op_registry_retire(
-        conn, kind="capabilities", name=published["name"], version=published["version"]
-    )["trust_status"] == "blocked"
+    assert (
+        op_registry_retire(conn, kind="capabilities", name=published["name"], version=published["version"])[
+            "trust_status"
+        ]
+        == "blocked"
+    )
     with pytest.raises(RegistryBlockedError):
         resolve_registry_object(repo_root, "capabilities", published["name"], published["version"], conn=conn)
 
-    assert op_registry_trust(
-        conn, kind="capabilities", name=published["name"], version=published["version"], status="local"
-    )["trust_status"] == "local"
-    assert resolve_registry_object(repo_root, "capabilities", published["name"], published["version"], conn=conn)[1] == "data"
+    assert (
+        op_registry_trust(
+            conn, kind="capabilities", name=published["name"], version=published["version"], status="local"
+        )["trust_status"]
+        == "local"
+    )
+    assert (
+        resolve_registry_object(repo_root, "capabilities", published["name"], published["version"], conn=conn)[1]
+        == "data"
+    )
 
 
 def test_registry_reindex_and_config_model_profiles_are_resolvable(tmp_path, repo_root):

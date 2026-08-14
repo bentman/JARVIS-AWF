@@ -122,20 +122,24 @@ def _synthesized_capability_for_node(node: dict, adapter_name: str) -> Capabilit
     )
 
 
-def _resolve_node_capability(node: dict, repo_root: Path, adapter_name: str) -> CapabilityRecord:
+def _resolve_node_capability(
+    node: dict, repo_root: Path, adapter_name: str, conn: sqlite3.Connection | None = None
+) -> CapabilityRecord:
     declared = node.get("capability")
     if not declared:
         return _synthesized_capability_for_node(node, adapter_name)
-    path, _source = resolve_registry_object(repo_root, "capabilities", declared["name"], declared["version"])
+    path, _source = resolve_registry_object(repo_root, "capabilities", declared["name"], declared["version"], conn=conn)
     return load_capability_record(path)
 
 
-def _resolve_agent_manifest(node: dict, repo_root: Path) -> AgentManifest | None:
+def _resolve_agent_manifest(
+    node: dict, repo_root: Path, conn: sqlite3.Connection | None = None
+) -> AgentManifest | None:
     agent_ref = node.get("agentRef")
     if not agent_ref:
         return None
     name, _, version = agent_ref.partition("@")
-    path, _source = resolve_registry_object(repo_root, "agents", name, version)
+    path, _source = resolve_registry_object(repo_root, "agents", name, version, conn=conn)
     return load_agent_manifest(path)
 
 
@@ -146,7 +150,7 @@ def make_agent_node_executor(
     workflow_input: dict | None = None,
 ) -> NodeExecutor:
     def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
-        manifest = _resolve_agent_manifest(node, repo_root)
+        manifest = _resolve_agent_manifest(node, repo_root, conn=conn)
         adapter_name = node.get("adapter") or (manifest.adapter if manifest else None)
         if not adapter_name:
             raise WorkflowEngineError(f"agent node '{node['id']}': no adapter - declare 'adapter' or 'agentRef'")
@@ -166,7 +170,7 @@ def make_agent_node_executor(
             invocation=invocation,
             adapter_fn=adapter_registry[adapter_name],
             commit_message=f"workflow: {node['id']}",
-            capability=_resolve_node_capability(node, repo_root, adapter_name),
+            capability=_resolve_node_capability(node, repo_root, adapter_name, conn=conn),
             # An empty/undeclared `capabilities` list means this manifest
             # hasn't scoped an allowlist yet, not "allow nothing" - it falls
             # back to the same self-permitting default as no manifest at
@@ -204,9 +208,11 @@ def _synthesized_capability_for_activity(node: dict) -> CapabilityRecord:
     )
 
 
-def _resolve_activity_capability(node: dict, repo_root: Path) -> CapabilityRecord:
+def _resolve_activity_capability(
+    node: dict, repo_root: Path, conn: sqlite3.Connection | None = None
+) -> CapabilityRecord:
     try:
-        path, _source = resolve_registry_object(repo_root, "capabilities", node["function"], "1.0.0")
+        path, _source = resolve_registry_object(repo_root, "capabilities", node["function"], "1.0.0", conn=conn)
     except RegistryObjectNotFoundError:
         return _synthesized_capability_for_activity(node)
     return load_capability_record(path)
@@ -228,10 +234,16 @@ def make_activity_node_executor(
                 **rendered_node["args"],
                 "_awf": {"repo_root": str(repo_root), "run_id": run_id, "step_id": step_id},
             }
-        if repo_root is not None and node["function"] in {"fs_read", "fs_write", "fs_delete", "command_run", "network_fetch"}:
+        if repo_root is not None and node["function"] in {
+            "fs_read",
+            "fs_write",
+            "fs_delete",
+            "command_run",
+            "network_fetch",
+        }:
             from awf.machine.activities import run_machine_activity
 
-            capability = _resolve_activity_capability(node, repo_root)
+            capability = _resolve_activity_capability(node, repo_root, conn=conn)
             return run_machine_activity(
                 conn,
                 repo_root=repo_root,
@@ -247,7 +259,7 @@ def make_activity_node_executor(
             if activity_fn is None:
                 raise UnknownActivityError(f"node '{node['id']}': no registered activity named '{node['function']}'")
             if repo_root is not None:
-                capability = _resolve_activity_capability(node, repo_root)
+                capability = _resolve_activity_capability(node, repo_root, conn=conn)
                 decision = authorize(
                     conn,
                     capability=capability,

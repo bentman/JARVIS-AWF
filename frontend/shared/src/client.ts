@@ -38,13 +38,18 @@ export class ProtocolClient {
   private nextId = 1;
   private pending = new Map<
     number,
-    { resolve: (value: unknown) => void; reject: (reason: unknown) => void }
+    { method: MethodName; resolve: (value: unknown) => void; reject: (reason: unknown) => void; timer: NodeJS.Timeout }
   >();
+  private callTimeoutMs: number;
+  private runCallTimeoutMs: number;
 
-  constructor(transport: Transport) {
+  constructor(transport: Transport, options: { callTimeoutMs?: number; runCallTimeoutMs?: number } = {}) {
     this.transport = transport;
+    this.callTimeoutMs = options.callTimeoutMs ?? 30000;
+    this.runCallTimeoutMs = options.runCallTimeoutMs ?? 600000;
     this.transport.onLine((line) => this.handleLine(line));
     this.transport.onExit((code) => this.handleExit(code));
+    this.transport.onError((error) => this.handleTransportError(error));
   }
 
   private handleLine(line: string): void {
@@ -60,6 +65,7 @@ export class ProtocolClient {
     const pending = this.pending.get(response.id);
     if (!pending) return;
     this.pending.delete(response.id);
+    clearTimeout(pending.timer);
     if (response.error) {
       pending.reject(new ProtocolError(response.error.code, response.error.message));
     } else {
@@ -69,22 +75,38 @@ export class ProtocolClient {
 
   private handleExit(code: number | null): void {
     const error = new Error(`awf core process exited (code=${code}) before responding`);
-    for (const { reject } of this.pending.values()) reject(error);
+    for (const { reject, timer } of this.pending.values()) {
+      clearTimeout(timer);
+      reject(error);
+    }
     this.pending.clear();
   }
 
-  private call<T>(method: MethodName, params?: Record<string, unknown>): Promise<T> {
+  private handleTransportError(error: Error): void {
+    for (const { reject, timer } of this.pending.values()) {
+      clearTimeout(timer);
+      reject(error);
+    }
+    this.pending.clear();
+  }
+
+  private call<T>(method: MethodName, params?: Record<string, unknown>, timeoutMs = this.callTimeoutMs): Promise<T> {
     const id = this.nextId++;
     const request = { jsonrpc: "2.0" as const, id, method, params };
     const promise = new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`awf ${method} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      timer.unref?.();
+      this.pending.set(id, { method, resolve: resolve as (value: unknown) => void, reject, timer });
     });
     this.transport.send(JSON.stringify(request));
     return promise;
   }
 
   runStart(workflowRef: string, input: Record<string, unknown> = {}): Promise<RunStartResult> {
-    return this.call("awf/run.start", { workflow: workflowRef, input });
+    return this.call("awf/run.start", { workflow: workflowRef, input }, this.runCallTimeoutMs);
   }
 
   runStatus(runId: string): Promise<RunStatus> {
@@ -96,7 +118,7 @@ export class ProtocolClient {
   }
 
   runResume(): Promise<RunStartResult[]> {
-    return this.call("awf/run.resume", {});
+    return this.call("awf/run.resume", {}, this.runCallTimeoutMs);
   }
 
   approvalList(): Promise<Approval[]> {

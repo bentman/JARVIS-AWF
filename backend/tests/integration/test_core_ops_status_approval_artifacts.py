@@ -3,6 +3,7 @@ from backend.tests.support import make_awf_repo, seed_approval, seed_run_step
 
 from awf.cli.core_ops import (
     CoreOpError,
+    _cleanup_run_workspace,
     op_approval_approve,
     op_approval_list,
     op_approval_reject,
@@ -37,6 +38,21 @@ def test_run_status_and_list_reflect_real_rows(tmp_path):
     assert status["outcome"]["response_text"] == "Run completed usefully."
     assert [row["run_id"] for row in op_run_list(conn)] == ["run-1"]
     assert op_run_list(conn)[0]["outcome"]["next_action"] == "No operator action required."
+
+
+def test_terminal_failed_run_removes_scratch_but_keeps_worktree(tmp_path):
+    repo_root = tmp_path / "repo"
+    scratch = repo_root / "cache" / "sandbox" / "run-1"
+    worktree = repo_root / "cache" / "worktrees" / "run-1"
+    scratch.mkdir(parents=True)
+    worktree.mkdir(parents=True)
+    (scratch / "auth.json").write_text("temporary credential copy", encoding="utf-8")
+    (worktree / "debug.txt").write_text("keep failed worktree", encoding="utf-8")
+
+    _cleanup_run_workspace(repo_root, "run-1", {"status": "FAILED"})
+
+    assert not scratch.exists()
+    assert worktree.exists()
 
 
 def test_run_status_raises_for_unknown_run(tmp_path):
@@ -85,9 +101,10 @@ def test_artifact_list_and_read(tmp_path):
     )
 
     assert [artifact["artifact_id"] for artifact in op_artifact_list(conn, run_id="run-1")] == [artifact_id]
-    assert '"summary": "ok"' in op_artifact_read(
-        conn, artifact_id=artifact_id, artifacts_root=repo_root / "data" / "artifacts"
-    )["content"]
+    assert (
+        '"summary": "ok"'
+        in op_artifact_read(conn, artifact_id=artifact_id, artifacts_root=repo_root / "data" / "artifacts")["content"]
+    )
 
 
 def test_secret_set_and_list_names_roundtrip(tmp_path):
@@ -204,6 +221,9 @@ def test_system_doctor_reports_operator_next_actions(tmp_path, monkeypatch):
             "tokens": [],
             "readiness": {"stt": {"device": "cpu", "ready": True, "reason": "available"}},
         },
+    )
+    monkeypatch.setattr(
+        "awf.cli.core_ops.op_registry_validate", lambda path, kind=None: {"path": str(path), "kind": kind}
     )
     monkeypatch.setattr("awf.cli.core_ops._command_version", lambda command, *args: (False, None))
 

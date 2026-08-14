@@ -28,7 +28,9 @@ class ImprovementProposalError(RuntimeError):
     pass
 
 
-def _event(conn: sqlite3.Connection, improvement_id: str, event_type: str, payload: dict, *, actor: str = "awf") -> None:
+def _event(
+    conn: sqlite3.Connection, improvement_id: str, event_type: str, payload: dict, *, actor: str = "awf"
+) -> None:
     conn.execute(
         "INSERT INTO improvement_proposal_events "
         "(event_id, improvement_id, event_type, occurred_at, actor, payload_json) "
@@ -240,7 +242,13 @@ def request_merge(repo_root: Path, conn: sqlite3.Connection, *, improvement_id: 
         raise ImprovementProposalError(f"proposal {improvement_id} is not ready_for_review (status={row['status']})")
     _recheck_identities(repo_root, row)
     step_id = _merge_step_id(row["run_id"], improvement_id)
-    create_step(conn, step_id=step_id, run_id=row["run_id"], node_id=MERGE_NODE_ID, input_json=json.dumps(_merge_action_payload(row)))
+    create_step(
+        conn,
+        step_id=step_id,
+        run_id=row["run_id"],
+        node_id=MERGE_NODE_ID,
+        input_json=json.dumps(_merge_action_payload(row)),
+    )
     digest = merge_action_digest(row)
     existing = conn.execute("SELECT * FROM approvals WHERE step_id = ?", (step_id,)).fetchone()
     if existing is not None:
@@ -264,7 +272,9 @@ def request_merge(repo_root: Path, conn: sqlite3.Connection, *, improvement_id: 
         new_status="WAITING_APPROVAL",
         actor="awf",
         reason_code="improvement_merge_approval_requested",
-        payload_json=json.dumps({"approval_id": approval_id, "improvement_id": improvement_id, "merge_action_digest": digest}),
+        payload_json=json.dumps(
+            {"approval_id": approval_id, "improvement_id": improvement_id, "merge_action_digest": digest}
+        ),
     )
     _event(conn, improvement_id, "merge_requested", {"approval_id": approval_id, "merge_action_digest": digest})
     approval = conn.execute("SELECT * FROM approvals WHERE approval_id = ?", (approval_id,)).fetchone()
@@ -315,7 +325,11 @@ def merge(repo_root: Path, conn: sqlite3.Connection, *, improvement_id: str, app
     )
     conn.execute(
         "UPDATE steps SET status = 'SUCCEEDED', output_json = ?, ended_at = ? WHERE step_id = ?",
-        (json.dumps({"merged": True, "merge_commit": merge_commit, "improvement_id": improvement_id}), now, approval["step_id"]),
+        (
+            json.dumps({"merged": True, "merge_commit": merge_commit, "improvement_id": improvement_id}),
+            now,
+            approval["step_id"],
+        ),
     )
     conn.commit()
     _event(conn, improvement_id, "merged", {"approval_id": approval_id, "merge_commit": merge_commit})

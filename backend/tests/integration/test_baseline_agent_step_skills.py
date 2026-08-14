@@ -128,7 +128,7 @@ def test_shared_tier_materializes_claude_and_agents_skills_directories(repo_and_
     assert "Do the demo thing." in seen["invocation"].objective
 
 
-def test_codex_shared_tier_symlinks_scratch_home_to_the_worktree_copy(repo_and_worktree, conn):
+def test_codex_shared_tier_mirrors_scratch_home_to_the_worktree_copy(repo_and_worktree, conn):
     repo_root, worktree = repo_and_worktree
     _write_demo_skill(repo_root)
     seen = {}
@@ -148,7 +148,7 @@ def test_codex_shared_tier_symlinks_scratch_home_to_the_worktree_copy(repo_and_w
 
     home_dir = repo_root / "cache" / "sandbox" / "run-1" / "codex_home" / "codex"
     link_path = home_dir / "skills" / "demo-skill"
-    assert link_path.is_symlink()
+    assert link_path.is_dir()
     assert (link_path / "SKILL.md").read_text() == (
         worktree / ".claude" / "skills" / "demo-skill" / "SKILL.md"
     ).read_text()

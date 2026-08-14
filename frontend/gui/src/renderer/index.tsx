@@ -79,7 +79,7 @@ declare global {
       voiceSubmitText: (
         voiceSessionId: string,
         text: string,
-        workflowRef: string,
+        workflowRef: string | undefined,
         voiceProfileRef?: string,
         turnId?: string,
       ) => Promise<VoiceSubmitTextResult>;
@@ -110,7 +110,7 @@ if (container) {
       onVoiceSubmitText: (
         voiceSessionId: string,
         text: string,
-        workflowRef: string,
+        workflowRef: string | undefined,
         voiceProfileRef: string | undefined,
         turnId: string,
       ) => window.awf.voiceSubmitText(voiceSessionId, text, workflowRef, voiceProfileRef, turnId),
@@ -118,6 +118,8 @@ if (container) {
         window.awf.voiceSpeakText(text, voiceId, responseAudioOutPath),
       onRunList: () => window.awf.runList(),
       onApprovalList: () => window.awf.approvalList(),
+      onApprovalDetail: (approvalId: string) =>
+        window.awf.approvalDetail(approvalId) as Promise<{ approval: ApprovalSummary; preview?: { machine_action?: Record<string, unknown>; machine_action_digest?: string } | null }>,
       onImprovementList: () => window.awf.improvementList(),
       onControlSummary: () => window.awf.controlSummary(),
       onControlRunDetail: (runId: string) => window.awf.controlRunDetail(runId),

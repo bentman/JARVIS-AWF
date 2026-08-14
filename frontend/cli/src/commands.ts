@@ -112,6 +112,10 @@ Plain text                            Ask the default assistant workflow
 /quit                                 Exit
 `.trim();
 
+export const COMMAND_NAMES = HELP_TEXT.split("\n")
+  .map((line) => line.match(/^\/([a-z0-9-]+)/)?.[1])
+  .filter((name): name is string => Boolean(name));
+
 function assistantResponseText(workflowRef: string, result: Record<string, unknown>): string {
   const outputs = result.outputs as Record<string, unknown> | undefined;
   if (typeof outputs?.response_text === "string") return outputs.response_text;
@@ -200,6 +204,64 @@ function formatDoctor(report: Record<string, unknown>): string {
   return lines.join("\n");
 }
 
+function formatApprovals(items: Record<string, unknown>[]): string {
+  if (items.length === 0) return "No pending approvals.";
+  const lines = ["Pending approvals:"];
+  for (const item of items) {
+    const preview = item.preview as Record<string, unknown> | null | undefined;
+    const action = preview?.machine_action as Record<string, unknown> | undefined;
+    lines.push(
+      `  - ${String(item.approval_id)} ${String(item.risk_class ?? "")} run=${String(item.run_id)} digest=${String(item.action_digest)}`.trimEnd(),
+    );
+    if (action) lines.push(`    ${String(action.kind)} ${String(action.capability_ref ?? "")}`.trimEnd());
+  }
+  return lines.join("\n");
+}
+
+function formatApprovalDetail(detail: Record<string, unknown>): string {
+  const approval = detail.approval as Record<string, unknown>;
+  const preview = detail.preview as Record<string, unknown> | null | undefined;
+  const lines = [
+    `Approval: ${String(approval.approval_id)}`,
+    `Status: ${String(approval.status)}`,
+    `Risk: ${String(approval.risk_class ?? "unknown")}`,
+    `Digest: ${String(approval.action_digest)}`,
+  ];
+  const action = preview?.machine_action as Record<string, unknown> | undefined;
+  if (action) {
+    lines.push(`Action: ${String(action.kind)} ${String(action.capability_ref ?? "")}`.trimEnd());
+    lines.push(`Target: ${JSON.stringify(action.target ?? {})}`);
+  }
+  return lines.join("\n");
+}
+
+function formatMemorySearch(result: Record<string, unknown>): string {
+  const semantic = Array.isArray(result.semantic) ? (result.semantic as Record<string, unknown>[]) : [];
+  const episodic = Array.isArray(result.episodic) ? (result.episodic as Record<string, unknown>[]) : [];
+  const lines = [`Memory: ${semantic.length} semantic, ${episodic.length} episodic`];
+  for (const item of semantic.slice(0, 5)) {
+    lines.push(`  - ${String(item.ref ?? item.name ?? "semantic")}: ${String(item.summary ?? item.text ?? "")}`);
+  }
+  for (const item of episodic.slice(0, 5)) {
+    lines.push(`  - ${String(item.run_id ?? item.reason_code ?? "event")}: ${String(item.summary ?? item.reason_code ?? "")}`);
+  }
+  return lines.join("\n");
+}
+
+function formatControlSummary(summary: Record<string, unknown>): string {
+  const runs = Array.isArray(summary.runs) ? summary.runs.length : 0;
+  const approvals = Array.isArray(summary.approvals) ? summary.approvals.length : 0;
+  return [`Control: ${runs} runs, ${approvals} pending approvals`].join("\n");
+}
+
+function formatLlmStatus(report: Record<string, unknown>): string {
+  return [
+    `LLM server: ${String((report.status as Record<string, unknown> | undefined)?.state ?? "unknown")}`,
+    `Default: ${String((report.servers as Record<string, unknown> | undefined)?.default_server ?? "unknown")}`,
+    `Models: ${Array.isArray((report.models as Record<string, unknown> | undefined)?.local_models) ? ((report.models as Record<string, unknown>).local_models as unknown[]).length : 0}`,
+  ].join("\n");
+}
+
 export async function dispatchAssistantInput(
   client: CommandClient,
   text: string,
@@ -258,14 +320,18 @@ export async function dispatchCommand(
       text: results.length === 0 ? "No incomplete runs to resume." : results.map(formatOutcome).join("\n\n"),
     };
   }
-  if (name === "approvals") return { kind: "json", data: await client.approvalList() };
+  if (name === "approvals") {
+    return { kind: "text", text: formatApprovals((await client.approvalList()) as unknown as Record<string, unknown>[]) };
+  }
   if (name === "approval") {
     if (!args[0]) throw new CommandError("usage: /approval <approval-id>");
-    return { kind: "json", data: await client.approvalDetail(args[0]) };
+    return { kind: "text", text: formatApprovalDetail((await client.approvalDetail(args[0])) as unknown as Record<string, unknown>) };
   }
   if (name === "approve") {
     if (!args[0]) throw new CommandError("usage: /approve <approval-id>");
-    return { kind: "json", data: await client.approvalApprove(args[0]) };
+    const detail = (await client.approvalDetail(args[0])) as unknown as Record<string, unknown>;
+    const approved = (await client.approvalApprove(args[0])) as unknown as Record<string, unknown>;
+    return { kind: "text", text: `${formatApprovalDetail(detail)}\nDecision: ${String(approved.status ?? "approved")}` };
   }
   if (name === "reject") {
     if (!args[0] || args.length < 2) throw new CommandError("usage: /reject <approval-id> <reason>");
@@ -318,7 +384,7 @@ export async function dispatchCommand(
   }
   if (name === "memory-search") {
     if (args.length < 1) throw new CommandError("usage: /memory-search <query>");
-    return { kind: "json", data: await client.memorySearch(args.join(" ")) };
+    return { kind: "text", text: formatMemorySearch((await client.memorySearch(args.join(" "))) as unknown as Record<string, unknown>) };
   }
   if (name === "memory") {
     if (!args[0]) throw new CommandError("usage: /memory <name>@<version>");
@@ -356,7 +422,7 @@ export async function dispatchCommand(
     if (!args[0]) throw new CommandError("usage: /episodic <run-id>");
     return { kind: "json", data: await client.episodicTimeline(args[0]) };
   }
-  if (name === "control") return { kind: "json", data: await client.controlSummary() };
+  if (name === "control") return { kind: "text", text: formatControlSummary((await client.controlSummary()) as unknown as Record<string, unknown>) };
   if (name === "readiness") {
     return { kind: "text", text: formatReadiness((await client.systemReadiness()) as unknown as Record<string, unknown>) };
   }
@@ -369,7 +435,7 @@ export async function dispatchCommand(
       client.llmModels(),
       client.llmServeStatus(),
     ]);
-    return { kind: "json", data: { servers, models, status } };
+    return { kind: "text", text: formatLlmStatus({ servers, models, status }) };
   }
   if (name === "skill") {
     if (!args[0]) throw new CommandError("usage: /skill <name>@<version>");

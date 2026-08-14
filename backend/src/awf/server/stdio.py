@@ -7,9 +7,8 @@ method maps 1:1 onto a 16.1 operation or a Section 8 table read (via
 SDK) is a separate presentation layer that can sit on top of these same
 method bodies without changing what each one does.
 
-`awf/events.subscribe` is a server-push stream in the spec; this
-request/response-per-line transport cannot express that, so it responds
-with a method-not-found-shaped error rather than pretending to stream.
+`awf/events.subscribe` is exposed here as a request/response snapshot for
+polling. Server-push streaming remains deferred to a future transport.
 """
 
 import json
@@ -23,6 +22,8 @@ from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.paths import artifacts_dir
 from awf.paths import db_path as resolve_db_path
+
+_CONNECTION_LOCK = threading.Lock()
 
 METHOD_NAMES = (
     "awf/run.start",
@@ -287,7 +288,11 @@ def handle_line(repo_root: Path, conn, line: str, out_stream, write_lock=None) -
     try:
         request = json.loads(line)
     except json.JSONDecodeError:
-        _write(out_stream, {"jsonrpc": "2.0", "id": None, "error": {"code": PARSE_ERROR, "message": "parse error"}}, write_lock)
+        _write(
+            out_stream,
+            {"jsonrpc": "2.0", "id": None, "error": {"code": PARSE_ERROR, "message": "parse error"}},
+            write_lock,
+        )
         return
 
     request_id = request.get("id")
@@ -298,9 +303,17 @@ def handle_line(repo_root: Path, conn, line: str, out_stream, write_lock=None) -
         result = dispatch(repo_root, conn, method, params)
         _write(out_stream, {"jsonrpc": "2.0", "id": request_id, "result": result}, write_lock)
     except JsonRpcError as exc:
-        _write(out_stream, {"jsonrpc": "2.0", "id": request_id, "error": {"code": exc.code, "message": exc.message}}, write_lock)
+        _write(
+            out_stream,
+            {"jsonrpc": "2.0", "id": request_id, "error": {"code": exc.code, "message": exc.message}},
+            write_lock,
+        )
     except Exception as exc:
-        _write(out_stream, {"jsonrpc": "2.0", "id": request_id, "error": {"code": INTERNAL_ERROR, "message": str(exc)}}, write_lock)
+        _write(
+            out_stream,
+            {"jsonrpc": "2.0", "id": request_id, "error": {"code": INTERNAL_ERROR, "message": str(exc)}},
+            write_lock,
+        )
 
 
 def _write(out_stream, payload: dict, write_lock=None) -> None:
@@ -316,7 +329,8 @@ def _write(out_stream, payload: dict, write_lock=None) -> None:
 
 
 def _handle_line_with_fresh_connection(repo_root: Path, db_path: Path, line: str, out_stream, write_lock) -> None:
-    conn = get_connection(db_path)
+    with _CONNECTION_LOCK:
+        conn = get_connection(db_path, enable_wal=False)
     try:
         handle_line(repo_root, conn, line, out_stream, write_lock)
     finally:
@@ -336,6 +350,8 @@ def serve_stdio(repo_root: Path, *, in_stream=None, out_stream=None) -> None:
             line = line.strip()
             if not line:
                 continue
-            futures.append(executor.submit(_handle_line_with_fresh_connection, repo_root, db_path, line, out_stream, write_lock))
+            futures.append(
+                executor.submit(_handle_line_with_fresh_connection, repo_root, db_path, line, out_stream, write_lock)
+            )
         for future in futures:
             future.result()

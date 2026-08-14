@@ -13,11 +13,11 @@ from awf.registry.semantic_memory import SemanticMemory, load_semantic_memory
 DATA_CLASS_RANK = {"public": 0, "internal": 1, "confidential": 2}
 
 
-def _load_profile(repo_root: Path, profile_ref: str) -> MemoryProfile:
+def _load_profile(repo_root: Path, profile_ref: str, conn: sqlite3.Connection | None = None) -> MemoryProfile:
     name, sep, version = profile_ref.partition("@")
     if not sep or not name or not version:
         raise ValueError(f"profile must be '<name>@<version>', got {profile_ref!r}")
-    path, _source = resolve_registry_object(repo_root, "memory-profiles", name, version)
+    path, _source = resolve_registry_object(repo_root, "memory-profiles", name, version, conn=conn)
     return load_memory_profile(path)
 
 
@@ -61,7 +61,7 @@ def search_semantic_memories(
     query: str,
     profile_ref: str = "default@1.0.0",
 ) -> list[dict]:
-    profile = _load_profile(repo_root, profile_ref)
+    profile = _load_profile(repo_root, profile_ref, conn)
     if not profile.enabled or not profile.retrieval.include_semantic:
         return []
 

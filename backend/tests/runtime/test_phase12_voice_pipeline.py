@@ -1,3 +1,6 @@
+import ctypes
+import os
+
 import pytest
 
 from awf.db.bootstrap import init_db
@@ -21,6 +24,11 @@ _MODEL_RELATIVE_PATHS = (
 def _require_voice_models(models_present):
     if not models_present(*_MODEL_RELATIVE_PATHS):
         pytest.skip("voice models not present under models/ - run Phase 12 setup first")
+    if os.name == "nt":
+        try:
+            ctypes.CDLL("cublas64_12.dll")
+        except OSError:
+            pytest.skip("CUDA cuBLAS runtime is unavailable for faster-whisper on this host")
 
 
 @pytest.fixture
@@ -44,6 +52,15 @@ def make_conn(tmp_path):
     return get_connection(db_path)
 
 
+def _run_voice_round_trip_or_skip_cuda(*args, **kwargs):
+    try:
+        return run_voice_round_trip(*args, **kwargs)
+    except RuntimeError as exc:
+        if "cublas64_12.dll" in str(exc):
+            pytest.skip("CUDA cuBLAS runtime is unavailable for faster-whisper on this host")
+        raise
+
+
 def test_full_round_trip_wake_stt_response_tts(tmp_path, repo_root, fixtures_dir, voice_models):
     """Exercises the full chain: the Hardware Profiler, wake-word detection
     on hey_jarvis.wav, VAD + STT on hello_world.wav, a trivial core
@@ -53,7 +70,7 @@ def test_full_round_trip_wake_stt_response_tts(tmp_path, repo_root, fixtures_dir
     def core_fn(command_text: str) -> str:
         return f"Acknowledged: {command_text.strip()}"
 
-    result = run_voice_round_trip(
+    result = _run_voice_round_trip_or_skip_cuda(
         conn,
         repo_root=repo_root,
         wake_audio_path=fixtures_dir / "hey_jarvis.wav",
@@ -93,7 +110,7 @@ def test_round_trip_with_repo_root_verifies_real_pinned_models_and_logs_it(
     # checked against the shipped config/voice/*/linux-x64-*.yaml pins.
     conn = make_conn(tmp_path)
 
-    run_voice_round_trip(
+    _run_voice_round_trip_or_skip_cuda(
         conn,
         repo_root=repo_root,
         wake_audio_path=fixtures_dir / "hey_jarvis.wav",
@@ -131,7 +148,7 @@ def test_round_trip_raises_when_wake_word_does_not_fire(tmp_path, repo_root, fix
         return "unreachable"
 
     with pytest.raises(VoicePipelineError, match="wake word did not fire"):
-        run_voice_round_trip(
+        _run_voice_round_trip_or_skip_cuda(
             conn,
             repo_root=repo_root,
             wake_audio_path=fixtures_dir / "hello_world.wav",  # not a wake-word utterance

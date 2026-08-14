@@ -206,7 +206,9 @@ def test_proposal_get_over_jsonrpc(tmp_path):
     )
     conn.commit()
 
-    response = send(repo_root, conn, {"jsonrpc": "2.0", "id": 7, "method": "awf/proposal.get", "params": {"proposalId": "p1"}})
+    response = send(
+        repo_root, conn, {"jsonrpc": "2.0", "id": 7, "method": "awf/proposal.get", "params": {"proposalId": "p1"}}
+    )
 
     assert response["result"]["proposal_id"] == "p1"
     assert response["result"]["content"] == "apiVersion: awf/v1\n"

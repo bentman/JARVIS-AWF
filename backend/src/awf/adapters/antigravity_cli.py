@@ -22,10 +22,9 @@ operator's desktop.
 """
 
 import json
-import os
 import subprocess
 
-from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
+from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus, run_cli
 
 DEFAULT_TIMEOUT_SECONDS = 300
 REQUIRED_ENV = {"JETSKI_BROWSER_HEADLESS": "true"}
@@ -61,22 +60,15 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
         command += ["--model", model_override]
     command += list(invocation.constraints.get("mcp_extra_args", []))
 
-    try:
-        result = subprocess.run(
-            command,
-            cwd=invocation.workspace_root,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            stdin=subprocess.DEVNULL,
-            env={**os.environ, **invocation.constraints.get("mcp_env_overlay", {}), **REQUIRED_ENV},
-        )
-    except subprocess.TimeoutExpired:
-        return AgentResult(
-            status=AgentStatus.LIMIT_EXCEEDED,
-            output={},
-            termination_reason=f"timed out after {timeout_seconds}s",
-        )
+    result = run_cli(
+        command,
+        invocation,
+        timeout_seconds=timeout_seconds,
+        extra_env=REQUIRED_ENV,
+        run_fn=subprocess.run,
+    )
+    if isinstance(result, AgentResult):
+        return result
 
     try:
         payload = json.loads(result.stdout)

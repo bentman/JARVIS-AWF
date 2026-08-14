@@ -108,7 +108,9 @@ def test_update_then_publish_requires_current_digest_and_uses_registry(monkeypat
     with pytest.raises(CoreOpError, match="draft digest mismatch"):
         op_proposal_publish(repo_root, conn, proposal_id=proposal["proposal_id"], digest=proposal["draft_digest"])
 
-    published = op_proposal_publish(repo_root, conn, proposal_id=proposal["proposal_id"], digest=updated["draft_digest"])
+    published = op_proposal_publish(
+        repo_root, conn, proposal_id=proposal["proposal_id"], digest=updated["draft_digest"]
+    )
 
     assert published["proposal"]["status"] == "published"
     assert published["published"]["kind"] == "workflows"

@@ -66,7 +66,9 @@ def test_run_all_three_flags_invokes_all_in_order(fake_repo, monkeypatch):
 
 
 def test_provision_prints_install_command_that_includes_host_symmetric_extras(fake_repo, monkeypatch, capsys):
-    monkeypatch.setattr(awf_setup, "_resolve_extras", lambda: (["hw-ort-cpu", "speech", "wake-word", "dev"], "test reason"))
+    monkeypatch.setattr(
+        awf_setup, "_resolve_extras", lambda: (["hw-ort-cpu", "speech", "wake-word", "dev"], "test reason")
+    )
 
     exit_code = awf_setup.cmd_provision(fake_repo)
 
@@ -76,7 +78,9 @@ def test_provision_prints_install_command_that_includes_host_symmetric_extras(fa
 
 def test_install_uses_selected_hardware_speech_and_dev_extras(fake_repo, monkeypatch):
     calls = []
-    monkeypatch.setattr(awf_setup, "_resolve_extras", lambda: (["hw-ort-cpu", "speech", "wake-word", "dev"], "test reason"))
+    monkeypatch.setattr(
+        awf_setup, "_resolve_extras", lambda: (["hw-ort-cpu", "speech", "wake-word", "dev"], "test reason")
+    )
 
     def fake_run(args, **kwargs):
         calls.append((args, kwargs))

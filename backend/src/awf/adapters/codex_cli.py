@@ -25,13 +25,11 @@ backend; any other provider (including a custom local `api_base`, e.g.
 point `--local-provider` at an arbitrary endpoint.
 """
 
-import json
-import os
 import subprocess
 import tomllib
 from pathlib import Path
 
-from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
+from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus, parse_jsonl_events, run_cli
 from awf.paths import REPO_ROOT
 
 DEFAULT_TIMEOUT_SECONDS = 300
@@ -46,19 +44,6 @@ class CodexAdapterError(RuntimeError):
 def _load_profile(path: Path) -> dict:
     with path.open("rb") as profile_file:
         return tomllib.load(profile_file)
-
-
-def _parse_events(stdout: str) -> list[dict]:
-    events = []
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return events
 
 
 def _final_agent_message(events: list[dict]) -> str | None:
@@ -98,28 +83,11 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
         command += ["-m", model_override]
     command += list(invocation.constraints.get("mcp_extra_args", []))
 
-    try:
-        result = subprocess.run(
-            command,
-            cwd=invocation.workspace_root,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            stdin=subprocess.DEVNULL,
-            env={
-                **os.environ,
-                **invocation.constraints.get("mcp_env_overlay", {}),
-                **invocation.constraints.get("skill_env_overlay", {}),
-            },
-        )
-    except subprocess.TimeoutExpired:
-        return AgentResult(
-            status=AgentStatus.LIMIT_EXCEEDED,
-            output={},
-            termination_reason=f"timed out after {timeout_seconds}s",
-        )
+    result = run_cli(command, invocation, timeout_seconds=timeout_seconds, run_fn=subprocess.run)
+    if isinstance(result, AgentResult):
+        return result
 
-    events = _parse_events(result.stdout)
+    events = parse_jsonl_events(result.stdout)
     failed_events = [e for e in events if e.get("type") == "turn.failed"]
 
     if result.returncode != 0 or failed_events:

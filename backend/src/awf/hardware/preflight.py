@@ -112,7 +112,9 @@ def _qnn_provider_library_path(module) -> Path | None:
     root = _qnn_package_root(module)
     if root is None:
         return None
-    names = ("onnxruntime_providers_qnn.dll",) if platform.system() == "Windows" else ("libonnxruntime_providers_qnn.so",)
+    names = (
+        ("onnxruntime_providers_qnn.dll",) if platform.system() == "Windows" else ("libonnxruntime_providers_qnn.so",)
+    )
     for name in names:
         candidate = root / name
         if candidate.is_file():
@@ -270,7 +272,10 @@ def _opencl_qualcomm_platform_present() -> bool:
             for platform_id in platforms:
                 for param in (0x0902, 0x0903):  # CL_PLATFORM_VENDOR, CL_PLATFORM_NAME
                     size = ctypes.c_size_t(0)
-                    if library.clGetPlatformInfo(platform_id, param, 0, None, ctypes.byref(size)) != 0 or size.value <= 1:
+                    if (
+                        library.clGetPlatformInfo(platform_id, param, 0, None, ctypes.byref(size)) != 0
+                        or size.value <= 1
+                    ):
                         continue
                     buffer = ctypes.create_string_buffer(size.value)
                     if library.clGetPlatformInfo(platform_id, param, size.value, buffer, None) != 0:

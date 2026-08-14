@@ -196,7 +196,12 @@ def _execute(
 def _fs_read(repo_root: Path, worktree: Path, run_id: str, args: dict, capability: CapabilityRecord) -> dict:
     constraints = constraint_family(capability.constraints, "filesystem")
     path = resolve_allowed_path(
-        repo_root=repo_root, worktree=worktree, run_id=run_id, relative_or_absolute=args["path"], constraints=constraints, must_exist=True
+        repo_root=repo_root,
+        worktree=worktree,
+        run_id=run_id,
+        relative_or_absolute=args["path"],
+        constraints=constraints,
+        must_exist=True,
     )
     max_bytes = int(args.get("maxBytes", constraints.get("maxBytes", 262144)))
     data = path.read_bytes()
@@ -209,12 +214,18 @@ def _fs_read(repo_root: Path, worktree: Path, run_id: str, args: dict, capabilit
 def _fs_write(repo_root: Path, worktree: Path, run_id: str, args: dict, capability: CapabilityRecord) -> dict:
     constraints = constraint_family(capability.constraints, "filesystem")
     path = resolve_allowed_path(
-        repo_root=repo_root, worktree=worktree, run_id=run_id, relative_or_absolute=args["path"], constraints=constraints
+        repo_root=repo_root,
+        worktree=worktree,
+        run_id=run_id,
+        relative_or_absolute=args["path"],
+        constraints=constraints,
     )
     data = args.get("content", "").encode(args.get("encoding", "utf-8"))
     max_bytes = int(args.get("maxBytes", constraints.get("maxBytes", 262144)))
     if len(data) > max_bytes:
-        raise MachineActivityError(f"content exceeds maxBytes ({len(data)} > {max_bytes})", failure_class="POLICY_DENIED")
+        raise MachineActivityError(
+            f"content exceeds maxBytes ({len(data)} > {max_bytes})", failure_class="POLICY_DENIED"
+        )
     tmp = path.with_name(f".{path.name}.awf-tmp")
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp.write_bytes(data)
@@ -225,7 +236,12 @@ def _fs_write(repo_root: Path, worktree: Path, run_id: str, args: dict, capabili
 def _fs_delete(repo_root: Path, worktree: Path, run_id: str, args: dict, capability: CapabilityRecord) -> dict:
     constraints = constraint_family(capability.constraints, "filesystem")
     path = resolve_allowed_path(
-        repo_root=repo_root, worktree=worktree, run_id=run_id, relative_or_absolute=args["path"], constraints=constraints, must_exist=True
+        repo_root=repo_root,
+        worktree=worktree,
+        run_id=run_id,
+        relative_or_absolute=args["path"],
+        constraints=constraints,
+        must_exist=True,
     )
     trash_dir = worktree / ".awf-trash"
     trash_dir.mkdir(exist_ok=True)
@@ -256,7 +272,12 @@ def _command_run(
     validate_command(argv=argv, cwd=cwd, worktree=worktree, constraints=constraints)
     timeout = int(constraints["timeoutSeconds"])
     env = {"PATH": os.environ.get("PATH", os.defpath)}
-    result = subprocess.run(_execution_argv(repo_root, argv), cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
+    try:
+        result = subprocess.run(
+            _execution_argv(repo_root, argv), cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise MachineActivityError(f"command timed out after {timeout}s", failure_class="TIMEOUT") from exc
     stdout = result.stdout.encode("utf-8")
     stderr = result.stderr.encode("utf-8")
     max_output = int(constraints.get("maxOutputBytes", 65536))

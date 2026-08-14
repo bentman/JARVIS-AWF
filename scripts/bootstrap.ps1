@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $VenvPython = Join-Path $RepoRoot "backend\.venv\Scripts\python.exe"
+$VenvRoot = Join-Path $RepoRoot "backend\.venv"
 $VenvAwfSpeech = Join-Path $RepoRoot "backend\.venv\Scripts\awf-speech.exe"
 $VenvAwf = Join-Path $RepoRoot "backend\.venv\Scripts\awf.exe"
 $ReportsDir = Join-Path $RepoRoot "reports\diagnostics"
@@ -57,6 +58,14 @@ function Invoke-Native {
 
 Set-Location $RepoRoot
 New-Item -ItemType Directory -Force -Path (Join-Path $RepoRoot "cache\temp") | Out-Null
+
+$PyVenvCfg = Join-Path $VenvRoot "pyvenv.cfg"
+if ((Test-Path $PyVenvCfg) -and (Test-Path (Join-Path $VenvRoot "bin\python"))) {
+    $Cfg = Get-Content -LiteralPath $PyVenvCfg -Raw
+    if ($Cfg -match "/mnt/" -or $Cfg -match "home = /") {
+        throw "backend\.venv was created by Linux/WSL. Remove backend\.venv and rerun scripts\bootstrap.ps1 from Windows PowerShell."
+    }
+}
 
 if (-not (Test-Path $VenvPython)) {
     Invoke-Step "Create backend venv" {

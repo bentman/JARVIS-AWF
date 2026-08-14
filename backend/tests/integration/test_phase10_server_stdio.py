@@ -102,15 +102,17 @@ def test_serve_stdio_accepts_multiple_requests_in_one_stream(tmp_path):
 def test_control_center_methods_over_jsonrpc(tmp_path, monkeypatch):
     repo_root, conn = make_repo(tmp_path)
     create_run(conn, run_id="run-1", workflow_ref="demo@1.0.0")
-    monkeypatch.setattr("awf.cli.core_ops.op_llm_servers", lambda _repo_root: {"servers": {}})
-    monkeypatch.setattr("awf.cli.core_ops.op_llm_serve", lambda _repo_root, _conn, *, action: {"state": "stopped"})
+    monkeypatch.setattr("awf.cli.core_ops.op_llm_servers", lambda _repo_root, **_kwargs: {"servers": {}})
+    monkeypatch.setattr(
+        "awf.cli.core_ops.op_llm_serve", lambda _repo_root, _conn, *, action, **_kwargs: {"state": "stopped"}
+    )
     monkeypatch.setattr(
         "awf.cli.core_ops.op_system_readiness",
         lambda _repo_root: {"profile_id": "linux-x64-cpu", "readiness": {}},
     )
     monkeypatch.setattr(
         "awf.cli.core_ops.op_system_doctor",
-        lambda _repo_root: {"status": "ok", "checks": [], "next_actions": []},
+        lambda _repo_root, **_kwargs: {"status": "ok", "checks": [], "next_actions": []},
     )
 
     summary = send(repo_root, conn, {"jsonrpc": "2.0", "id": 41, "method": "awf/control.summary", "params": {}})

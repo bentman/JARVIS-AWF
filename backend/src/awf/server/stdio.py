@@ -14,7 +14,6 @@ polling. Server-push streaming remains deferred to a future transport.
 import json
 import sys
 import threading
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from awf.cli import core_ops as ops
@@ -344,14 +343,8 @@ def serve_stdio(repo_root: Path, *, in_stream=None, out_stream=None) -> None:
     db_path = resolve_db_path(repo_root)
     init_db(db_path)
     write_lock = threading.Lock()
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = []
-        for line in in_stream:
-            line = line.strip()
-            if not line:
-                continue
-            futures.append(
-                executor.submit(_handle_line_with_fresh_connection, repo_root, db_path, line, out_stream, write_lock)
-            )
-        for future in futures:
-            future.result()
+    for line in in_stream:
+        line = line.strip()
+        if not line:
+            continue
+        _handle_line_with_fresh_connection(repo_root, db_path, line, out_stream, write_lock)

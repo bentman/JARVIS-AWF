@@ -1871,7 +1871,7 @@ def _doctor_paths(repo_root: Path) -> dict:
     )
 
 
-def _doctor_agent_clis() -> dict:
+def _doctor_agent_clis(*, with_versions: bool = True) -> dict:
     commands = {
         "codex": ("codex", "--version"),
         "claude-code": ("claude", "--version"),
@@ -1881,7 +1881,11 @@ def _doctor_agent_clis() -> dict:
     }
     found = {}
     for adapter, command in commands.items():
-        present, version = _command_version(*command)
+        if with_versions:
+            present, version = _command_version(*command)
+        else:
+            present = shutil.which(command[0]) is not None
+            version = None
         found[adapter] = {"present": present, "version": version}
     if any(item["present"] for item in found.values()):
         return _doctor_check("agent_clis", "ok", "At least one implementation agent CLI is visible.", detail=found)
@@ -1916,8 +1920,8 @@ def _doctor_speech(readiness: dict) -> dict:
     )
 
 
-def op_system_doctor(repo_root: Path) -> dict:
-    readiness = op_system_readiness(repo_root)
+def op_system_doctor(repo_root: Path, *, readiness: dict | None = None, quick: bool = False) -> dict:
+    readiness = readiness or op_system_readiness(repo_root)
     checks = [
         _doctor_python(repo_root),
         _doctor_env(repo_root),
@@ -1925,7 +1929,7 @@ def op_system_doctor(repo_root: Path) -> dict:
         _doctor_paths(repo_root),
         _doctor_registry(repo_root),
         _doctor_node(repo_root),
-        _doctor_agent_clis(),
+        _doctor_agent_clis(with_versions=not quick),
         _doctor_speech(readiness),
     ]
     next_actions = [check["next_action"] for check in checks if check.get("next_action")]
@@ -1943,16 +1947,17 @@ def _control_error(exc: Exception) -> dict:
 
 
 def op_control_center_summary(repo_root: Path, conn: sqlite3.Connection) -> dict:
+    readiness = op_system_readiness(repo_root)
+    host_profile_id = readiness.get("profile_id") if isinstance(readiness, dict) else None
     try:
-        llm_servers = op_llm_servers(repo_root)
+        llm_servers = op_llm_servers(repo_root, host_profile_id=host_profile_id, probe_timeout_seconds=0.25)
     except Exception as exc:
         llm_servers = _control_error(exc)
     try:
-        llm_status = op_llm_serve(repo_root, conn, action="status")
+        llm_status = op_llm_serve(repo_root, conn, action="status", probe_timeout_seconds=0.25)
     except Exception as exc:
         llm_status = _control_error(exc)
-    readiness = op_system_readiness(repo_root)
-    doctor = op_system_doctor(repo_root)
+    doctor = op_system_doctor(repo_root, readiness=readiness, quick=True)
     improvements = op_improvement_list(conn)
     return {
         "runs": op_run_list(conn),
@@ -1985,7 +1990,12 @@ def op_control_center_run_detail(repo_root: Path, conn: sqlite3.Connection, *, r
     }
 
 
-def op_llm_servers(repo_root: Path) -> dict:
+def op_llm_servers(
+    repo_root: Path,
+    *,
+    host_profile_id: str | None = None,
+    probe_timeout_seconds: float = 2.0,
+) -> dict:
     from awf.hardware.profiler import resolve_hardware_profile_id
     from awf.llm.discovery import binary_path, local_models
     from awf.llm.selector import current_selection
@@ -1993,13 +2003,15 @@ def op_llm_servers(repo_root: Path) -> dict:
     from awf.llm.sidecar import probe
 
     default_id, servers = load_servers(repo_root)
-    profile_id, _ = resolve_hardware_profile_id(repo_root)
+    profile_id = host_profile_id
+    if not profile_id:
+        profile_id, _ = resolve_hardware_profile_id(repo_root)
     selection = current_selection(repo_root)
     models = local_models(repo_root)
 
     server_reports = {}
     for s_id, s in servers.items():
-        h = probe(s)
+        h = probe(s, timeout_seconds=probe_timeout_seconds)
         art = artifact_for(s, profile_id)
         bin_p = binary_path(repo_root, profile_id, art) if art else None
 
@@ -2106,7 +2118,13 @@ def op_llm_select(
         raise CoreOpError(str(exc)) from exc
 
 
-def op_llm_serve(repo_root: Path, conn: sqlite3.Connection, *, action: str) -> dict:
+def op_llm_serve(
+    repo_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    action: str,
+    probe_timeout_seconds: float = 2.0,
+) -> dict:
     from dataclasses import asdict
 
     from awf.hardware.profiler import resolve_hardware_profile_id
@@ -2130,7 +2148,7 @@ def op_llm_serve(repo_root: Path, conn: sqlite3.Connection, *, action: str) -> d
         return asdict(st)
 
     if action == "status":
-        st = status(server, repo_root=repo_root)
+        st = status(server, repo_root=repo_root, probe_timeout_seconds=probe_timeout_seconds)
         return asdict(st)
 
     if action == "start":

@@ -33,6 +33,10 @@ git pull
 
 The wrapper creates `backend\.venv` when needed, installs AWF through the repo venv, installs the hardware-selected backend dependencies, bootstraps local state, acquires and verifies speech models, installs frontend dependencies when npm is available, runs `awf doctor`, and prints the first assistant run command. It writes the full transcript to `reports\diagnostics\<datetime>-bootstrap.txt`, including `--provision`, `--install`, `--verify`, model, and doctor output. Use `-SkipSpeech` only when diagnosing a dependency or model-acquisition outage.
 
+The wrapper does not add `awf` to your Windows `PATH`. Use `.\backend\.venv\Scripts\awf.exe` unless you activate the venv or create your own shell alias.
+
+The wrapper also does not acquire the managed LLM sidecar runtime. Run `.\backend\.venv\Scripts\awf.exe llm acquire` after bootstrap when you want AWF to manage `llama-server` itself.
+
 ## Manual setup sequence
 
 ```text
@@ -54,7 +58,7 @@ Python 3.13 or 3.14 work as well. Use `.\backend\.venv\Scripts\python` for every
 .\backend\.venv\Scripts\python -m pip install -e ".[dev]"
 ```
 
-This installs the core, the four console scripts (`awf`, `awf-setup`, `awf-secret`, `awf-speech`), and the dev tooling needed by validation, including pytest and Ruff. Speech packages and the ONNX Runtime build are not part of the base set.
+This installs the core, the four console scripts (`awf`, `awf-setup`, `awf-secret`, `awf-speech`), and the dev tooling needed by validation, including pytest and Ruff. The scripts are created inside `backend\.venv\Scripts`; setup does not install global commands or modify your shell profile. Speech packages and the ONNX Runtime build are not part of the base set.
 
 ### 3. Provision the hardware-appropriate ONNX Runtime
 
@@ -100,7 +104,29 @@ Speech packages are installed by `awf-setup --install` through the host-selected
 
 Windows x64 can use Faster Whisper where CTranslate2 is available. Windows ARM64 avoids the missing CTranslate2 wheel by using the ONNX Whisper CPU floor, with QNN attempted when the QNN provider and model artifacts are present. OpenWakeWord remains part of the normal wake path.
 
-### 6. Validate
+### 6. Acquire the managed LLM runtime, when needed
+
+If you want AWF to start and stop its own `llama-server`, acquire the runtime declared for this host in `config\llm\servers.yaml`:
+
+```powershell
+.\backend\.venv\Scripts\awf.exe llm acquire
+```
+
+For Windows x64 CUDA this populates:
+
+```text
+runtimes\llama.cpp\windows-x64-cuda\llama-server.exe
+```
+
+This does not download GGUF model weights. Managed `llama-server` expects operator-provided `.gguf` files under `models\llm\<model-name>\`.
+
+Skip this step when you use an operator-run endpoint such as Ollama or another OpenAI-compatible server. Select that server instead:
+
+```powershell
+.\backend\.venv\Scripts\awf.exe llm select openai-compatible --model "<server-model-name>"
+```
+
+### 7. Validate
 
 ```powershell
 .\backend\.venv\Scripts\python scripts\validate_backend.py profile
@@ -110,7 +136,7 @@ Windows x64 can use Faster Whisper where CTranslate2 is available. Windows ARM64
 
 `profile` writes a timestamped report to `reports\diagnostics\` naming the resolved hardware profile, the preflight tokens, and the per-function readiness results. `lint` runs Ruff format/check in read-only mode. `ci` runs `lint` first, then everything except the tests marked `live`, and writes its own validation report.
 
-### 7. Frontends
+### 8. Frontends
 
 ```powershell
 npm --prefix frontend install

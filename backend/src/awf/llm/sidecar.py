@@ -127,13 +127,13 @@ class SidecarStatus:
     reason: str | None
 
 
-def probe(server: LlmServer) -> Health:
+def probe(server: LlmServer, *, timeout_seconds: float = 2.0) -> Health:
     last_reason = "No health paths declared"
     for path in server.health_paths:
         url = f"{server.base_url.rstrip('/')}{path}"
         req = urllib.request.Request(url, headers={"User-Agent": "AWF-HealthProbe/1.0"})
         try:
-            with urllib.request.urlopen(req, timeout=2.0) as resp:
+            with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
                 if 200 <= resp.status < 300:
                     return Health(reachable=True, reason=f"{path} reachable")
                 last_reason = f"{path} returned HTTP {resp.status}"
@@ -549,7 +549,12 @@ def stop(conn: Any = None, *, repo_root: Path | None = None) -> SidecarStatus:
     return stopped_status
 
 
-def status(server: LlmServer | None = None, *, repo_root: Path | None = None) -> SidecarStatus:
+def status(
+    server: LlmServer | None = None,
+    *,
+    repo_root: Path | None = None,
+    probe_timeout_seconds: float = 2.0,
+) -> SidecarStatus:
     if _CURRENT_STATUS is not None:
         return _CURRENT_STATUS
 
@@ -557,15 +562,15 @@ def status(server: LlmServer | None = None, *, repo_root: Path | None = None) ->
         stored = _read_state(repo_root)
         if stored is not None:
             if stored.adopted:
-                if server is not None and probe(server).reachable:
+                if server is not None and probe(server, timeout_seconds=probe_timeout_seconds).reachable:
                     return stored
             elif _pid_alive(stored.pid):
-                if server is None or probe(server).reachable:
+                if server is None or probe(server, timeout_seconds=probe_timeout_seconds).reachable:
                     return stored
             _clear_state(repo_root)
 
     if server is not None:
-        h = probe(server)
+        h = probe(server, timeout_seconds=probe_timeout_seconds)
         if h.reachable:
             return SidecarStatus(
                 state="adopted",

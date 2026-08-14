@@ -35,6 +35,10 @@ bash scripts/bootstrap.sh
 
 The wrapper creates `backend/.venv` when needed, installs AWF through the repo venv, installs the hardware-selected backend dependencies, bootstraps local state, acquires and verifies speech models, installs frontend dependencies when npm is available, runs `awf doctor`, and prints the first assistant run command. It writes the full transcript to `reports/diagnostics/<datetime>-bootstrap.txt`, including `--provision`, `--install`, `--verify`, model, and doctor output. Use `--skip-speech` only when diagnosing a dependency or model-acquisition outage.
 
+The wrapper does not add `awf` to your shell `PATH`. Use `backend/.venv/bin/awf` unless you activate the venv or create your own shell alias.
+
+The wrapper also does not acquire the managed LLM sidecar runtime. Run `backend/.venv/bin/awf llm acquire` after bootstrap when you want AWF to manage `llama-server` itself.
+
 ## Manual setup sequence
 
 ```text
@@ -56,7 +60,7 @@ Python 3.13 or 3.14 work as well. Use `backend/.venv/bin/python` for every comma
 backend/.venv/bin/python -m pip install -e ".[dev]"
 ```
 
-This installs the core, the four console scripts (`awf`, `awf-setup`, `awf-secret`, `awf-speech`), and the dev tooling needed by validation, including pytest and Ruff. Speech packages and the ONNX Runtime build are not part of the base set.
+This installs the core, the four console scripts (`awf`, `awf-setup`, `awf-secret`, `awf-speech`), and the dev tooling needed by validation, including pytest and Ruff. The scripts are created inside `backend/.venv/bin`; setup does not install global commands or modify your shell profile. Speech packages and the ONNX Runtime build are not part of the base set.
 
 ### 3. Provision the hardware-appropriate ONNX Runtime
 
@@ -102,7 +106,31 @@ backend/.venv/bin/awf-speech models verify
 
 On Linux/WSL x64 with CUDA, STT can use Faster Whisper when CTranslate2 reports CUDA devices. On Linux/WSL ARM64, setup installs the QNN package family as a candidate so runtime preflight can prove or reject it; STT can use the QNN Whisper artifact under `models/stt/whisper-qualcomm-qnn` only when the QNN provider/backend tokens are present. Adreno/OpenCL is tracked as a separate GPU path for LLM readiness. CPU remains the floor through ONNX Whisper. OpenWakeWord is installed using the sibling-project pattern: AWF installs its usable sibling dependencies (`requests`, `scikit-learn`, `scipy`) with the rest of the selected requirements, then installs `openwakeword` with `--no-deps` to avoid the unavailable `tflite-runtime` metadata dependency and verifies that `openwakeword` and `onnxruntime` actually import.
 
-### 6. Validate
+### 6. Acquire the managed LLM runtime, when needed
+
+If you want AWF to start and stop its own `llama-server`, acquire the runtime declared for this host in `config/llm/servers.yaml`:
+
+```bash
+backend/.venv/bin/awf llm acquire
+```
+
+For Linux x64 CPU this populates:
+
+```text
+runtimes/llama.cpp/linux-x64-cpu/llama-server
+```
+
+Some accelerator entries are declared as manual in `config/llm/servers.yaml`; for those, `llm acquire` reports the runtime directory the operator must populate.
+
+This does not download GGUF model weights. Managed `llama-server` expects operator-provided `.gguf` files under `models/llm/<model-name>/`.
+
+Skip this step when you use an operator-run endpoint such as Ollama or another OpenAI-compatible server. Select that server instead:
+
+```bash
+backend/.venv/bin/awf llm select openai-compatible --model "<server-model-name>"
+```
+
+### 7. Validate
 
 ```bash
 backend/.venv/bin/python scripts/validate_backend.py profile
@@ -112,7 +140,7 @@ backend/.venv/bin/python scripts/validate_backend.py ci
 
 `profile` writes a timestamped report to `reports/diagnostics/` naming the resolved hardware profile, the preflight tokens, and the per-function readiness results. `lint` runs Ruff format/check in read-only mode. `ci` runs `lint` first, then everything except the tests marked `live`, and writes its own validation report.
 
-### 7. Frontends
+### 8. Frontends
 
 ```bash
 npm --prefix frontend install

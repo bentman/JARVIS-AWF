@@ -61,55 +61,55 @@ export const DEFAULT_ASSISTANT_WORKFLOW_REF = "assistant-default@1.0.0";
 
 export const HELP_TEXT = `
 Plain text                            Ask the default assistant workflow
-/help                                 List commands and keybindings
-/run <workflow>@<version>             Start a Run
-/status <run-id>                      Run state, step progress, budgets
-/runs                                 List Runs
-/resume                               Trigger the startup recovery scan
-/approvals                            Approval queue
+/agents                               Registered Agent Manifests
 /approval <id>                        Approval detail and machine-action preview
+/approvals                            Approval queue
 /approve <id>                         Approve a pending approval
-/reject <id> <reason>                 Reject a pending approval
 /artifacts <run-id>                   List artifacts for a Run
-/improvements                         List Improvement Proposals
-/improvement <id>                     Show an Improvement Proposal
-/improvement-prepare <run-id>         Create/update an Improvement Proposal
-/improvement-request-merge <id>       Request merge approval
-/improvement-merge <id> <approval-id> Merge after approval
-/improvement-reject <id> <reason>     Reject an Improvement Proposal
 /author-workflow <objective>          Draft a Workflow proposal
-/proposal <id>                        Show a Workflow proposal
-/proposal-publish <id> <digest>       Publish a draft proposal
-/proposal-reject <id> <reason>        Reject a draft proposal
-/memory-search <query>                Search semantic and episodic memory
+/capabilities                         Capability Records with risk classes
+/clear                                Clear the scrollback
+/control                              Control-center overview
+/doctor                               Install and operator readiness checks
+/episodic <run-id>                    Show a Run timeline
+/episodic-search <query>              Search event history
+/help                                 List commands and keybindings
+/improvement <id>                     Show an Improvement Proposal
+/improvement-merge <id> <approval-id> Merge after approval
+/improvement-prepare <run-id>         Create/update an Improvement Proposal
+/improvement-reject <id> <reason>     Reject an Improvement Proposal
+/improvement-request-merge <id>       Request merge approval
+/improvements                         List Improvement Proposals
+/keybindings                          Current keybindings
+/llm                                  LLM server/model status
+/mcp                                  Registered MCP servers and trust status
 /memory <name>@<version>              Show a Semantic Memory
+/memory-block <name>@<version>        Block a Semantic Memory
 /memory-propose <path>                Draft a Semantic Memory proposal
 /memory-publish <id> <digest>         Publish a Semantic Memory proposal
 /memory-reject <id> <reason>          Reject a Semantic Memory proposal
-/memory-block <name>@<version>        Block a Semantic Memory
-/session-start [title]                Start an active session
-/session-show <session-id>            Show an active session
-/episodic-search <query>              Search event history
-/episodic <run-id>                    Show a Run timeline
-/control                              Control-center overview
+/memory-search <query>                Search semantic and episodic memory
+/model                                Model Profiles
+/proposal <id>                        Show a Workflow proposal
+/proposal-publish <id> <digest>       Publish a draft proposal
+/proposal-reject <id> <reason>        Reject a draft proposal
+/quit                                 Exit
 /readiness                            Hardware and runtime readiness
-/doctor                               Install and operator readiness checks
-/llm                                  LLM server/model status
-/agents                               Registered Agent Manifests
-/skills                               Registry Skills
+/reject <id> <reason>                 Reject a pending approval
+/resume                               Trigger the startup recovery scan
+/run <workflow>@<version>             Start a Run
+/runs                                 List Runs
+/secrets                              Secret names only - never values
+/session-show <session-id>            Show an active session
+/session-start [title]                Start an active session
+/settings                             Current TUI settings
 /skill <name>@<version>               Show a registry Skill
 /skill-run <name>@<version> <input>   Invoke a registry Skill through the resident mind
-/workflows                            Registry Workflow definitions
-/capabilities                         Capability Records with risk classes
-/mcp                                  Registered MCP servers and trust status
-/model                                Model Profiles
-/voices                               Voice Profiles
-/secrets                              Secret names only - never values
-/settings                             Current TUI settings
+/skills                               Registry Skills
+/status <run-id>                      Run state, step progress, budgets
 /theme                                Current theme
-/keybindings                          Current keybindings
-/clear                                Clear the scrollback
-/quit                                 Exit
+/voices                               Voice Profiles
+/workflows                            Registry Workflow definitions
 `.trim();
 
 export const COMMAND_NAMES = HELP_TEXT.split("\n")

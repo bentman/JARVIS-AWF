@@ -122,29 +122,41 @@ def test_control_center_summary_aggregates_existing_core_state(tmp_path, monkeyp
     repo_root, conn = make_awf_repo(tmp_path)
     seed_run_step(conn)
     seed_approval(conn, risk_class="R2")
+    calls = {"readiness": 0}
 
-    monkeypatch.setattr(
-        "awf.cli.core_ops.op_llm_servers",
-        lambda _repo_root: {"default_server": "llama-server", "servers": {}},
-    )
+    def llm_servers(_repo_root, *, host_profile_id=None, probe_timeout_seconds=2.0):
+        assert host_profile_id == "linux-x64-cpu"
+        assert probe_timeout_seconds == 0.25
+        return {"default_server": "llama-server", "servers": {}}
+
+    def readiness(_repo_root):
+        calls["readiness"] += 1
+        return {"profile_id": "linux-x64-cpu", "readiness": {}}
+
+    def doctor(_repo_root, *, readiness=None, quick=False):
+        assert readiness == {"profile_id": "linux-x64-cpu", "readiness": {}}
+        assert quick is True
+        return {"status": "ok", "checks": [], "next_actions": []}
+
+    monkeypatch.setattr("awf.cli.core_ops.op_llm_servers", llm_servers)
     monkeypatch.setattr(
         "awf.cli.core_ops.op_llm_serve",
-        lambda _repo_root, _conn, *, action: {"state": "stopped", "action": action},
+        lambda _repo_root, _conn, *, action, **kwargs: {
+            "state": "stopped",
+            "action": action,
+            "probe_timeout_seconds": kwargs["probe_timeout_seconds"],
+        },
     )
-    monkeypatch.setattr(
-        "awf.cli.core_ops.op_system_readiness",
-        lambda _repo_root: {"profile_id": "linux-x64-cpu", "readiness": {}},
-    )
-    monkeypatch.setattr(
-        "awf.cli.core_ops.op_system_doctor",
-        lambda _repo_root: {"status": "ok", "checks": [], "next_actions": []},
-    )
+    monkeypatch.setattr("awf.cli.core_ops.op_system_readiness", readiness)
+    monkeypatch.setattr("awf.cli.core_ops.op_system_doctor", doctor)
 
     summary = op_control_center_summary(repo_root, conn)
 
+    assert calls["readiness"] == 1
     assert summary["runs"][0]["run_id"] == "run-1"
     assert summary["approvals"][0]["approval_id"] == "ap-1"
     assert summary["llm"]["status"]["state"] == "stopped"
+    assert summary["llm"]["status"]["probe_timeout_seconds"] == 0.25
     assert summary["readiness"]["profile_id"] == "linux-x64-cpu"
     assert summary["doctor"]["status"] == "ok"
     assert "skills" in summary["registry_counts"]

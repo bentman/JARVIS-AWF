@@ -82,6 +82,14 @@ describe("dispatchCommand", () => {
     expect(COMMAND_NAMES).toContain("proposal-publish");
   });
 
+  it("keeps slash commands alphabetized in help text", () => {
+    const helpCommands = HELP_TEXT.split("\n")
+      .map((line) => line.match(/^\/([a-z0-9-]+)/)?.[1])
+      .filter((name): name is string => Boolean(name));
+
+    expect(helpCommands).toEqual([...helpCommands].sort((left, right) => left.localeCompare(right)));
+  });
+
   it("/run calls runStart with the workflow ref", async () => {
     const client = makeFakeClient();
     const result = await dispatchCommand(client, "/run demo@1.0.0", DEFAULT_SETTINGS);

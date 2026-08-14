@@ -26,6 +26,14 @@ share one enum-check shape with no exceptions.
 Covers Task B (items 5–8) and Task C (item 9) of the registry cohesion review.
 Task A and Task D are ADR-0012, which builds on this record.
 
+Alignment update, 2026-08-14: the one-kind-vocabulary decision now covers
+twelve registry kinds, including `hardware-voice-manifests` and `llm-servers`.
+All kind-specific validation uses JSON Schema modules under
+`awf.registry.schemas` plus one shared loader path for identity, path, and
+version checks. Registry operations moved from `awf.cli.core_ops` into
+`awf.ops.registry`; `awf.cli.core_ops` remains only a compatibility re-export
+surface.
+
 ## Context
 
 **Kind-to-layout knowledge is written three times.** `resolve._object_path`

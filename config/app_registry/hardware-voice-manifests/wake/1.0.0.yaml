@@ -1,0 +1,15 @@
+apiVersion: awf/v1
+kind: HardwareVoiceManifest
+metadata:
+  name: wake
+  version: 1.0.0
+  digest: sha256:bootstrap
+spec:
+  function: wake
+  files:
+  - name: hey_jarvis_v0.1.onnx
+    url: https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/hey_jarvis_v0.1.onnx
+  - name: melspectrogram.onnx
+    url: https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx
+  - name: embedding_model.onnx
+    url: https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.onnx

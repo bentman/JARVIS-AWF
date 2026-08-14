@@ -38,3 +38,11 @@ def test_parse_memory_profile_rejects_invalid_limits():
 
     with pytest.raises(MemoryProfileValidationError):
         parse_memory_profile(raw)
+
+
+def test_parse_memory_profile_schema_rejects_missing_retrieval_field():
+    raw = valid_profile()
+    del raw["spec"]["retrieval"]["minConfidence"]
+
+    with pytest.raises(MemoryProfileValidationError, match="minConfidence"):
+        parse_memory_profile(raw)

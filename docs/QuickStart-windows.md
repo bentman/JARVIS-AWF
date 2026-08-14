@@ -1,235 +1,84 @@
-# Quick Start — Windows
+# Quick Start - Windows
 
-Sets up JARVIS-AWF on Windows x64 or ARM64. Run every command from PowerShell at the repository root. Do not install this project's Python packages globally.
+Set up JARVIS-AWF on Windows x64 or ARM64. Run commands from PowerShell at the
+repository root. Do not install this project's Python packages globally.
 
 ## Prerequisites
 
-- Windows PowerShell and Git
+- Git
 - Python `>=3.12,<3.15` through the Windows `py` launcher
-- Node.js 24 LTS `>=24.15.0` and npm, for the frontends
-- Internet access for dependency and model acquisition
+- Node.js 24 LTS `>=24.15.0` and npm
+- Internet access for dependencies and model files
 
-Optional, for accelerated speech: an NVIDIA GPU with a working driver (x64), an AMD or Intel GPU for DirectML, or a Qualcomm NPU on ARM64. CPU is the guaranteed floor on every host.
+CPU is the supported floor. NVIDIA CUDA, DirectML, and Qualcomm QNN paths are
+selected only when setup can verify the required runtime.
 
-## Clone
+## Setup
 
 ```powershell
 git clone https://github.com/bentman/JARVIS-AWF.git
 Set-Location .\JARVIS-AWF
-```
-
-For an existing clone:
-
-```powershell
-Set-Location <REPO_ROOT_PATH>
-git pull
-```
-
-## Recommended setup
-
-```powershell
 .\scripts\bootstrap.ps1
 ```
 
-The wrapper creates `backend\.venv` when needed, installs AWF through the repo venv, installs the hardware-selected backend dependencies, bootstraps local state, acquires and verifies speech models, installs frontend dependencies when npm is available, runs `awf doctor`, and prints the first assistant run command. It writes the full transcript to `reports\diagnostics\<datetime>-bootstrap.txt`, including `--provision`, `--install`, `--verify`, model, and doctor output. Use `-SkipSpeech` only when diagnosing a dependency or model-acquisition outage.
+The bootstrap script creates `backend\.venv`, installs the repo package and
+host-selected runtime dependencies, initializes local state, acquires speech
+models, installs frontend dependencies when npm is available, runs `awf doctor`,
+and writes a transcript to `reports\diagnostics\`.
 
-The wrapper does not add `awf` to your Windows `PATH`. Use `.\backend\.venv\Scripts\awf.exe` unless you activate the venv or create your own shell alias.
-
-The wrapper also does not acquire the managed LLM sidecar runtime. Run `.\backend\.venv\Scripts\awf.exe llm acquire` after bootstrap when you want AWF to manage `llama-server` itself.
-
-## Manual setup sequence
-
-```text
-create venv -> install -> provision -> bootstrap -> acquire models -> validate
-```
-
-### 1. Create the backend environment
+Load the repo-local command helper in the same terminal:
 
 ```powershell
-py -3.12 -m venv backend\.venv
-.\backend\.venv\Scripts\python -m pip install --upgrade pip
+. .\scripts\use-awf.ps1
 ```
 
-Python 3.13 or 3.14 work as well. Use `.\backend\.venv\Scripts\python` for every command below; the project is never installed into a system interpreter.
+The helper is session-local. It does not edit your profile, install global
+commands, or change `PATH`.
 
-### 2. Install the base package
+## First Check
 
 ```powershell
-.\backend\.venv\Scripts\python -m pip install -e ".[dev]"
+awf doctor
+awf run assistant-default@1.0.0 --objective "check the system"
 ```
 
-This installs the core, the four console scripts (`awf`, `awf-setup`, `awf-secret`, `awf-speech`), and the dev tooling needed by validation, including pytest and Ruff. The scripts are created inside `backend\.venv\Scripts`; setup does not install global commands or modify your shell profile. Speech packages and the ONNX Runtime build are not part of the base set.
-
-### 3. Provision the hardware-appropriate ONNX Runtime
+Start the GUI:
 
 ```powershell
-.\backend\.venv\Scripts\awf-setup --provision
+awf-gui
 ```
 
-This probes the host and names one extra without installing anything:
-
-| Extra | Selected when |
-|---|---|
-| `hw-ort-cuda` | x64 with an NVIDIA GPU and a CUDA driver |
-| `hw-ort-directml` | Windows with an AMD or Intel GPU |
-| `hw-ort-qnn` | Windows ARM64 with a Qualcomm NPU |
-| `hw-ort-cpu` | everything else |
-
-Install it, then confirm what resolution produced:
+Start the terminal UI after the frontend has been built:
 
 ```powershell
-.\backend\.venv\Scripts\awf-setup --install --verify
+awf-cli
 ```
 
-`--verify` reports the installed ONNX Runtime distribution and version, its available execution providers, the installed Ruff version, and `pip check`. On any host with a non-CPU extra, `pip check` reports that `kokoro-onnx`, `openwakeword`, and `faster-whisper` require `onnxruntime` — expected, since those packages name the base distribution and have no way to express that an accelerator build satisfies it. `--verify` distinguishes that from a real failure.
+## Optional LLM Runtime
 
-### 4. Bootstrap local state
+If AWF should manage its own `llama-server`, acquire the runtime and provide a
+local `.gguf` model under `models\llm\<model-name>\`:
 
 ```powershell
-.\backend\.venv\Scripts\awf-setup
+awf llm acquire
+awf llm select llama-server
+awf llm serve start
 ```
 
-With no flags this generates `.env` with a fresh secret key, creates `cache\sandbox\`, and creates `data\awf_db\awf.db`.
-
-### 5. Acquire the speech models
-
-Speech packages are installed by `awf-setup --install` through the host-selected dependency extras.
+For an operator-run OpenAI-compatible server, select it instead:
 
 ```powershell
-.\backend\.venv\Scripts\awf-speech models sync
-.\backend\.venv\Scripts\awf-speech models verify
+awf llm select openai-compatible --model "<server-model-name>"
 ```
 
-`sync` downloads the artifacts named in `config\voice\{stt,tts,vad,wake}.yaml` into `models\`, and warms the STT model for the host's resolved device. It is idempotent — a second run changes nothing. `verify` reports each expected artifact as `OK` or `MISSING`.
-
-Windows x64 can use Faster Whisper where CTranslate2 is available. Windows ARM64 avoids the missing CTranslate2 wheel by using the ONNX Whisper CPU floor, with QNN attempted when the QNN provider and model artifacts are present. OpenWakeWord remains part of the normal wake path.
-
-### 6. Acquire the managed LLM runtime, when needed
-
-If you want AWF to start and stop its own `llama-server`, acquire the runtime declared for this host in `config\llm\servers.yaml`:
+## Useful Checks
 
 ```powershell
-.\backend\.venv\Scripts\awf.exe llm acquire
+awf readiness
+awf llm servers
+awf llm serve status
+awf-speech models verify
 ```
 
-For Windows x64 CUDA this populates:
-
-```text
-runtimes\llama.cpp\windows-x64-cuda\llama-server.exe
-```
-
-This does not download GGUF model weights. Managed `llama-server` expects operator-provided `.gguf` files under `models\llm\<model-name>\`.
-
-Skip this step when you use an operator-run endpoint such as Ollama or another OpenAI-compatible server. Select that server instead:
-
-```powershell
-.\backend\.venv\Scripts\awf.exe llm select openai-compatible --model "<server-model-name>"
-```
-
-### 7. Validate
-
-```powershell
-.\backend\.venv\Scripts\python scripts\validate_backend.py profile
-.\backend\.venv\Scripts\python scripts\validate_backend.py lint
-.\backend\.venv\Scripts\python scripts\validate_backend.py ci
-```
-
-`profile` writes a timestamped report to `reports\diagnostics\` naming the resolved hardware profile, the preflight tokens, and the per-function readiness results. `lint` runs Ruff format/check in read-only mode. `ci` runs `lint` first, then everything except the tests marked `live`, and writes its own validation report.
-
-### 8. Frontends
-
-```powershell
-npm --prefix frontend install
-npm --prefix frontend test
-npm --prefix frontend run build
-```
-
-## Validation commands
-
-```powershell
-.\backend\.venv\Scripts\python scripts\validate_backend.py profile
-.\backend\.venv\Scripts\python scripts\validate_backend.py lint
-.\backend\.venv\Scripts\python scripts\validate_backend.py unit
-.\backend\.venv\Scripts\python scripts\validate_backend.py integration
-.\backend\.venv\Scripts\python scripts\validate_backend.py runtime
-.\backend\.venv\Scripts\python scripts\validate_backend.py regression
-.\backend\.venv\Scripts\python scripts\validate_backend.py ci
-```
-
-Exit codes: `0` pass, `1` fail, `2` skipped, `3` environment unsatisfied. `runtime` runs only the tests marked `live`, which need real hardware and the acquired models; it returns `2` when the host cannot satisfy them.
-
-`profile` writes to `reports\diagnostics\`; every validation command writes one timestamped report to `reports\validation\`. Test commands stream each test's name, progress, and result, then end with pass/fail/skip/warning counts.
-
-## Running AWF
-
-```powershell
-.\backend\.venv\Scripts\awf run assistant-default@1.0.0 --objective "check the system"
-.\backend\.venv\Scripts\awf runs
-.\backend\.venv\Scripts\awf status <run-id>
-.\backend\.venv\Scripts\awf artifacts <run-id>
-.\backend\.venv\Scripts\awf approvals
-.\backend\.venv\Scripts\awf doctor
-```
-
-`assistant-default@1.0.0` is the local first-run workflow. It verifies that AWF can accept a request, create a durable Run, and return response text without requiring an external coding-agent CLI. Use implementation workflows after the relevant agent CLIs are installed and authenticated.
-
-The run, status, runs, resume, approvals, artifacts, readiness, and doctor commands print operator-readable summaries by default. Add `--json` when automation needs the raw payload.
-
-Store a provider API key by name, so it never appears in a registry file:
-
-```powershell
-.\backend\.venv\Scripts\awf-secret set OPENAI_API_KEY
-```
-
-A voice round trip takes a pre-recorded wake file and command file, and writes a spoken response:
-
-```powershell
-.\backend\.venv\Scripts\awf-speech round-trip <wake.wav> <command.wav> --response-audio-out <out.wav>
-```
-
-Omitting `--voice-id` uses the `narrator` Voice Profile's voice. Any other voice remains selectable by passing the flag.
-
-## ARM64 notes
-
-An ARM64 host selects `hw-ort-qnn`, which installs `onnxruntime-qnn` alongside the base `onnxruntime`. The two provide different import names and coexist; the profiler registers the QNN provider library at probe time.
-
-Speech-to-text uses QNN only when the provider and required model artifacts are present; otherwise it falls back to the ONNX Whisper CPU runtime. This avoids the Windows ARM64 `faster-whisper`/CTranslate2 wheel gap while keeping speech usable. Text-to-speech and VAD run on ONNX Runtime; wake uses OpenWakeWord. `profile` reports which functions are actually ready.
-
-## Repository rules that matter
-
-- `pyproject.toml` is the only place Python dependencies are declared.
-- Install through `awf-setup --install` rather than by hand, so the ONNX Runtime distribution stays consistent with the host.
-- `models\`, `data\`, `cache\`, and `reports\` are local state and stay out of commits.
-- Record validation claims with the command output that produced them.
-
-## Common diagnostics
-
-Python version rejected — install 3.12, 3.13, or 3.14 and recreate `backend\.venv`.
-
-Wrong ONNX Runtime installed, or providers missing:
-
-```powershell
-.\backend\.venv\Scripts\awf-setup --provision
-.\backend\.venv\Scripts\awf-setup --install --verify
-```
-
-Install or setup state unclear:
-
-```powershell
-.\backend\.venv\Scripts\awf doctor
-```
-
-Speech models missing:
-
-```powershell
-.\backend\.venv\Scripts\awf-speech models verify
-.\backend\.venv\Scripts\awf-speech models sync
-```
-
-Accelerator detected but not selected — run `profile` and read the readiness reasons; each names the hardware fact and the runtime token it required:
-
-```powershell
-.\backend\.venv\Scripts\python scripts\validate_backend.py profile
-```
-
-STT and TTS resolve their devices independently. STT uses Faster Whisper/CTranslate2 for verified CUDA acceleration and ONNX Whisper for the CPU floor; TTS runs on ONNX Runtime and needs the matching execution provider. One reaching `cuda` while the other stays on `cpu` is a normal outcome, not an error.
+Use `docs\OperatorsGuide.md` after setup for normal operation,
+troubleshooting, and validation commands.

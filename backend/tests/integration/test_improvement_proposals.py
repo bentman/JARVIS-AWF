@@ -4,20 +4,20 @@ from pathlib import Path
 
 import pytest
 
-from awf.cli.core_ops import (
-    CoreOpError,
-    op_improvement_mark_ready,
-    op_improvement_merge,
-    op_improvement_prepare,
-    op_improvement_reject,
-    op_improvement_request_merge,
-)
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.run import create_run, create_step
 from awf.gates.artifacts import write_verdict_artifact
 from awf.gates.schema import Verdict
 from awf.isolation.worktree import branch_name, commit_all_changes, create_worktree, worktree_path
+from awf.ops.improvement import (
+    op_improvement_mark_ready,
+    op_improvement_merge,
+    op_improvement_prepare,
+    op_improvement_reject,
+    op_improvement_request_merge,
+)
+from awf.ops.shared import CoreOpError
 from awf.paths import artifacts_dir
 
 

@@ -65,7 +65,12 @@ from awf.guard.capability_guard import Decision, authorize
 from awf.registry.agent_manifest import AgentManifest, load_agent_manifest
 from awf.registry.capability_record import CapabilityRecord, Effects, Identity, load_capability_record
 from awf.registry.resolve import RegistryObjectNotFoundError, resolve_registry_object
-from awf.workflow.activities import ACTIVITY_REGISTRY, UnknownActivityError
+from awf.workflow.activities import (
+    ACTIVITY_REGISTRY,
+    MACHINE_ACTIVITY_NAMES,
+    ActivityRegistration,
+    UnknownActivityError,
+)
 from awf.workflow.definition import WorkflowDefinition
 from awf.workflow.io_schema import OutputValidationError, render_outputs, validate_output
 
@@ -225,6 +230,7 @@ def make_activity_node_executor(
     workflow_input: dict | None = None,
 ) -> NodeExecutor:
     def executor(conn: sqlite3.Connection, run_id: str, step_id: str, node: dict) -> dict:
+        function_name = node["function"]
         rendered_node = {
             **node,
             "args": _render_input_templates_in_value(node.get("args", {}), dict(workflow_input or {})),
@@ -234,13 +240,21 @@ def make_activity_node_executor(
                 **rendered_node["args"],
                 "_awf": {"repo_root": str(repo_root), "run_id": run_id, "step_id": step_id},
             }
-        if repo_root is not None and node["function"] in {
-            "fs_read",
-            "fs_write",
-            "fs_delete",
-            "command_run",
-            "network_fetch",
-        }:
+        registration = activity_registry.get(function_name)
+        is_machine_activity = function_name in MACHINE_ACTIVITY_NAMES or (
+            isinstance(registration, ActivityRegistration) and registration.kind == "machine"
+        )
+        if is_machine_activity:
+            if repo_root is None:
+
+                def deny(_payload: dict) -> dict:
+                    raise StepFailure(
+                        "governed machine activity requires repo_root",
+                        failure_class="POLICY_DENIED",
+                    )
+
+                return run_step(conn, step_id=step_id, run_id=run_id, fn=deny, input_payload={})
+
             from awf.machine.activities import run_machine_activity
 
             capability = _resolve_activity_capability(node, repo_root, conn=conn)
@@ -255,9 +269,13 @@ def make_activity_node_executor(
             )
 
         def fn(_payload: dict) -> dict:
-            activity_fn = activity_registry.get(node["function"])
+            activity_registration = activity_registry.get(function_name)
+            if isinstance(activity_registration, ActivityRegistration):
+                activity_fn = activity_registration.fn
+            else:
+                activity_fn = activity_registration
             if activity_fn is None:
-                raise UnknownActivityError(f"node '{node['id']}': no registered activity named '{node['function']}'")
+                raise UnknownActivityError(f"node '{node['id']}': no registered activity named '{function_name}'")
             if repo_root is not None:
                 capability = _resolve_activity_capability(node, repo_root, conn=conn)
                 decision = authorize(

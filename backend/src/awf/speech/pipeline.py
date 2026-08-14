@@ -10,11 +10,11 @@ and its result actually selects the STT model/device/compute_type (via
 
 "core" here is any callable that takes the recognized command text and
 returns a response string - the caller supplies it (a real AWF Run via
-`awf.cli.core_ops`, a trivial echo, or anything else) since the pipeline
+`awf.ops.run`, a trivial echo, or anything else) since the pipeline
 itself has no opinion on what the core does with the text.
 
-`repo_root` resolves the STT runtime from `config/voice/stt.yaml` and checks
-the resolved profile's `config/voice/` manifests against the real model
+`repo_root` resolves the STT runtime from the hardware voice manifest registry
+object and checks the resolved profile's manifests against the real model
 files already passed in, logging the result to the `events` table.
 """
 
@@ -59,7 +59,7 @@ class VoiceRoundTripResult:
 
 
 def _verify_and_log_pinned_models(conn: sqlite3.Connection, repo_root: Path, profile_id: str, readiness: dict) -> None:
-    """Section 16.4's pinned manifests (`config/voice/*`) exist and are
+    """Section 16.4's pinned hardware voice manifests exist and are
     checked here, but a missing artifact is logged, not raised - this is an
     audit record of what's actually installed against what's named, the
     same "every probe result and fallback decision is written to the

@@ -18,16 +18,14 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from awf.registry.schema import require, split_frontmatter
-
-ROLES = ("builder", "verifier", "adversary")
+from awf.registry.schema import split_frontmatter, validate_json_schema, validate_registry_identity
+from awf.registry.schemas.agent_manifests import SCHEMA
 
 
 class AgentManifestValidationError(ValueError):
     pass
 
 
-_require = partial(require, error=AgentManifestValidationError)
 _split_frontmatter = partial(split_frontmatter, label="agent manifest", error=AgentManifestValidationError)
 
 
@@ -67,22 +65,20 @@ def _parse_skill_ref(item: object) -> SkillRef:
     if isinstance(item, str):
         return SkillRef(ref=item)
     if isinstance(item, dict):
-        return SkillRef(ref=_require(item, "ref", "skill ref"), share=bool(item.get("share", False)))
+        return SkillRef(ref=item["ref"], share=item.get("share", False))
     raise AgentManifestValidationError(f"skills entry must be a string or a mapping, got {item!r}")
 
 
 def parse_agent_manifest(raw: dict, instructions: str = "") -> AgentManifest:
-    role = raw.get("role")
-    if role is not None and role not in ROLES:
-        raise AgentManifestValidationError(f"role '{role}' not in {ROLES}")
+    validate_json_schema(raw, SCHEMA, "agent manifest", error=AgentManifestValidationError)
 
     return AgentManifest(
-        name=_require(raw, "name", "agent manifest"),
-        version=_require(raw, "version", "agent manifest"),
-        description=_require(raw, "description", "agent manifest"),
-        adapter=_require(raw, "adapter", "agent manifest"),
+        name=raw["name"],
+        version=raw["version"],
+        description=raw["description"],
+        adapter=raw["adapter"],
         capabilities=tuple(raw.get("capabilities", [])),
-        role=role,
+        role=raw.get("role"),
         mcp=tuple(raw.get("mcp", [])),
         skills=tuple(_parse_skill_ref(item) for item in raw.get("skills", [])),
         voice=raw.get("voice"),
@@ -94,4 +90,12 @@ def parse_agent_manifest(raw: dict, instructions: str = "") -> AgentManifest:
 
 def load_agent_manifest(path: Path) -> AgentManifest:
     frontmatter, body = _split_frontmatter(path.read_text())
-    return parse_agent_manifest(frontmatter, instructions=body)
+    manifest = parse_agent_manifest(frontmatter, instructions=body)
+    validate_registry_identity(
+        name=manifest.name,
+        version=manifest.version,
+        path=path,
+        context="agent manifest",
+        error=AgentManifestValidationError,
+    )
+    return manifest

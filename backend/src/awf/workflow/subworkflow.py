@@ -3,10 +3,10 @@ and runs it to completion through the same durable engine as any top-level
 Run - a real child `runs` row, real Steps, real events, not a simulated
 call.
 
-`run_child` is supplied by the caller (`awf.cli.core_ops`, which already
+`run_child` is supplied by the caller (`awf.ops.run`, which already
 knows how to resolve a workflow ref and build node executors) rather than
 imported here, to avoid a circular dependency between the workflow engine
-and the CLI layer that wires it up. The same `run_child` callback is reused
+and the operation layer that wires it up. The same `run_child` callback is reused
 by the `map` and `loop` node executors.
 """
 

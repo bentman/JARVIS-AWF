@@ -8,10 +8,10 @@ from typing import Any
 
 import yaml
 
-from awf.cli.core_ops import op_registry_publish
 from awf.hardware.profiler import resolve_hardware_profile_id
 from awf.llm.discovery import local_models, model_by_name
 from awf.llm.servers import LlmServerError, load_servers
+from awf.ops.registry import op_registry_publish
 from awf.registry.resolve import resolve_registry_object
 
 RESIDENT_MIND_NAME = "resident-mind"

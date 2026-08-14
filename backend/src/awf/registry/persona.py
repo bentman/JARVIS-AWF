@@ -1,15 +1,12 @@
 """Persona schema, loading, and deterministic prompt compilation (ADR-0018)."""
 
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 
 import yaml
 
-from awf.registry.schema import require, require_enum
-
-TRAIT_LEVELS = ("none", "low", "medium", "high", "strong")
-HUMOR_LEVELS = ("none", "light", "medium", "high", "dry")
+from awf.registry.schema import validate_json_schema, validate_registry_identity
+from awf.registry.schemas.personas import HUMOR_LEVELS, SCHEMA, TRAIT_LEVELS
 
 ALLOWED_FIELDS = (
     "name",
@@ -39,8 +36,6 @@ PROHIBITED_FIELDS = (
     "safety_overrides",
     "hidden_instructions",
 )
-
-GENERATION_FIELDS = ("temperature", "top_p", "top_k", "repeat_penalty", "max_tokens", "stop")
 
 WARMTH_INSTRUCTIONS = {
     "none": "Use direct helpfulness with no extra warmth.",
@@ -77,10 +72,6 @@ HUMOR_INSTRUCTIONS = {
 
 class PersonaValidationError(ValueError):
     pass
-
-
-_require = partial(require, error=PersonaValidationError)
-_require_enum = partial(require_enum, error=PersonaValidationError)
 
 
 @dataclass(frozen=True)
@@ -132,18 +123,6 @@ class CompiledPersona:
     generation: dict
 
 
-def _require_mapping(value: object, context: str) -> dict:
-    if not isinstance(value, dict):
-        raise PersonaValidationError(f"{context} must be a mapping")
-    return value
-
-
-def _string_tuple(value: object, context: str) -> tuple[str, ...]:
-    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-        raise PersonaValidationError(f"{context} must be a list of strings")
-    return tuple(value)
-
-
 def parse_persona(raw: dict) -> Persona:
     prohibited = sorted(key for key in raw if key in PROHIBITED_FIELDS)
     if prohibited:
@@ -151,55 +130,32 @@ def parse_persona(raw: dict) -> Persona:
     unknown = sorted(key for key in raw if key not in ALLOWED_FIELDS)
     if unknown:
         raise PersonaValidationError(f"persona contains unknown fields: {', '.join(unknown)}")
-
-    style_raw = _require_mapping(_require(raw, "style", "persona"), "persona.style")
-    traits_raw = _require_mapping(_require(raw, "traits", "persona"), "persona.traits")
-    examples_raw = _require(raw, "examples", "persona")
-    generation_raw = _require_mapping(_require(raw, "generation", "persona"), "persona.generation")
-
-    generation_unknown = sorted(key for key in generation_raw if key not in GENERATION_FIELDS)
-    if generation_unknown:
-        raise PersonaValidationError(f"persona.generation contains unknown fields: {', '.join(generation_unknown)}")
-
-    if not isinstance(examples_raw, list) or not examples_raw:
-        raise PersonaValidationError("persona.examples must be a non-empty list")
-    examples = []
-    for index, example_raw in enumerate(examples_raw):
-        example = _require_mapping(example_raw, f"persona.examples[{index}]")
-        examples.append(
-            PersonaExample(
-                user=_require(example, "user", f"persona.examples[{index}]"),
-                assistant=_require(example, "assistant", f"persona.examples[{index}]"),
-            )
-        )
+    validate_json_schema(raw, SCHEMA, "persona", error=PersonaValidationError)
+    style_raw = raw["style"]
+    traits_raw = raw["traits"]
+    examples = [PersonaExample(user=example["user"], assistant=example["assistant"]) for example in raw["examples"]]
 
     return Persona(
-        name=_require(raw, "name", "persona"),
-        version=_require(raw, "version", "persona"),
-        display_name=_require(raw, "display_name", "persona"),
-        description=_require(raw, "description", "persona"),
-        locale=_require(raw, "locale", "persona"),
-        system=_require(raw, "system", "persona"),
+        name=raw["name"],
+        version=raw["version"],
+        display_name=raw["display_name"],
+        description=raw["description"],
+        locale=raw["locale"],
+        system=raw["system"],
         style=PersonaStyle(
-            max_words_default=int(_require(style_raw, "max_words_default", "persona.style")),
-            structure=_require(style_raw, "structure", "persona.style"),
-            do=_string_tuple(_require(style_raw, "do", "persona.style"), "persona.style.do"),
-            avoid=_string_tuple(_require(style_raw, "avoid", "persona.style"), "persona.style.avoid"),
+            max_words_default=style_raw["max_words_default"],
+            structure=style_raw["structure"],
+            do=tuple(style_raw["do"]),
+            avoid=tuple(style_raw["avoid"]),
         ),
         traits=PersonaTraits(
-            warmth=_require_enum(
-                _require(traits_raw, "warmth", "persona.traits"), TRAIT_LEVELS, "persona.traits.warmth"
-            ),
-            assertiveness=_require_enum(
-                _require(traits_raw, "assertiveness", "persona.traits"), TRAIT_LEVELS, "persona.traits.assertiveness"
-            ),
-            detail=_require_enum(
-                _require(traits_raw, "detail", "persona.traits"), TRAIT_LEVELS, "persona.traits.detail"
-            ),
-            humor=_require_enum(_require(traits_raw, "humor", "persona.traits"), HUMOR_LEVELS, "persona.traits.humor"),
+            warmth=traits_raw["warmth"],
+            assertiveness=traits_raw["assertiveness"],
+            detail=traits_raw["detail"],
+            humor=traits_raw["humor"],
         ),
         examples=tuple(examples),
-        generation=dict(generation_raw),
+        generation=dict(raw["generation"]),
         enabled=bool(raw.get("enabled", True)),
     )
 
@@ -209,17 +165,13 @@ def load_persona(path: Path) -> Persona:
     if not isinstance(raw, dict):
         raise PersonaValidationError(f"{path}: persona must be a YAML mapping")
     persona = parse_persona(raw)
-
-    expected_name = path.parent.name
-    if persona.name != expected_name:
-        raise PersonaValidationError(
-            f"persona name '{persona.name}' does not match its registry directory '{expected_name}'"
-        )
-    expected_version = path.stem
-    if persona.version != expected_version:
-        raise PersonaValidationError(
-            f"persona version '{persona.version}' does not match its file name '{expected_version}'"
-        )
+    validate_registry_identity(
+        name=persona.name,
+        version=persona.version,
+        path=path,
+        context="persona",
+        error=PersonaValidationError,
+    )
     return persona
 
 
@@ -256,3 +208,19 @@ def compile_persona(persona: Persona) -> CompiledPersona:
         example_messages=tuple(messages),
         generation=dict(persona.generation),
     )
+
+
+__all__ = (
+    "ASSERTIVENESS_INSTRUCTIONS",
+    "DETAIL_INSTRUCTIONS",
+    "HUMOR_INSTRUCTIONS",
+    "HUMOR_LEVELS",
+    "TRAIT_LEVELS",
+    "WARMTH_INSTRUCTIONS",
+    "CompiledPersona",
+    "Persona",
+    "PersonaValidationError",
+    "compile_persona",
+    "load_persona",
+    "parse_persona",
+)

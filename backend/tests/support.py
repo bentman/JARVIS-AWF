@@ -6,6 +6,7 @@ import yaml
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.run import create_run, create_step
+from awf.registry.kinds import KINDS
 
 
 def make_awf_repo(tmp_path: Path):
@@ -13,6 +14,8 @@ def make_awf_repo(tmp_path: Path):
     (repo_root / "data" / "awf_db").mkdir(parents=True)
     (repo_root / "data" / "registry").mkdir(parents=True)
     (repo_root / "config" / "app_registry").mkdir(parents=True)
+    for kind in KINDS:
+        (repo_root / "data" / "registry" / kind.key).mkdir(parents=True, exist_ok=True)
     db_path = repo_root / "data" / "awf_db" / "awf.db"
     init_db(db_path)
     return repo_root, get_connection(db_path)

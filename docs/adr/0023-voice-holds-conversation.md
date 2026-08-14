@@ -22,6 +22,12 @@ backend `stt.partial` stream. The backend receives `stt.final` during
 Electron/Chromium and may require a network speech service, so the textarea
 path remains the reliable fallback.
 
+Alignment update, 2026-08-14: voice JSON-RPC handlers now live in
+`awf.ops.voice`; approval handlers live in `awf.ops.approval`. Shared
+R2+ voice-acknowledgement policy lives in `awf.approval_policy`, so
+`awf.gates.voice_approval` and approval operations do not import each other.
+`awf.cli.core_ops` remains a compatibility re-export surface only.
+
 ## Context
 
 `docs/archives/ProjectVisionAWF.md` defines the sixth promise as the move from
@@ -44,7 +50,7 @@ The current codebase has the foundation:
   interruption controls.
 - `frontend/gui/src/renderer/App.tsx` appends recognized command text and
   response text into the visible transcript.
-- `backend/src/awf/cli/core_ops.py` already enforces that voice alone cannot
+- `backend/src/awf/ops/approval.py` already enforces that voice alone cannot
   grant R2+ approvals.
 - ADR-0020 added active sessions; `backend/src/awf/memory/sessions.py` can
   persist bounded turn entries.

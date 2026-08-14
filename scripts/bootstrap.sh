@@ -80,5 +80,6 @@ fi
 step "Doctor"
 "$venv_awf" doctor
 
-printf '\nNext command:\n'
-printf 'backend/.venv/bin/awf run assistant-default@1.0.0 --objective "check the system"\n'
+printf '\nNext commands:\n'
+printf 'source scripts/use-awf.sh\n'
+printf 'awf run assistant-default@1.0.0 --objective "check the system"\n'

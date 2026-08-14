@@ -77,7 +77,7 @@ done
 [[ "$(uname -m)" == "x86_64" ]] || die "This helper supports Linux AMD64 only"
 [[ -d "$jarvis_root" ]] || die "JARVIS-AWF root does not exist: $jarvis_root"
 jarvis_root="$(cd -- "$jarvis_root" && pwd)"
-[[ -f "$jarvis_root/config/llm/servers.yaml" ]] || die "Not a JARVIS-AWF repository: $jarvis_root"
+[[ -f "$jarvis_root/config/app_registry/llm-servers/default/1.0.0.yaml" ]] || die "Not a JARVIS-AWF repository: $jarvis_root"
 
 mkdir -p -- "$dev_root"
 dev_root="$(cd -- "$dev_root" && pwd)"

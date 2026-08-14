@@ -3,13 +3,9 @@ import json
 import pytest
 from backend.tests.support import make_git_awf_repo, publish_workflow
 
-from awf.cli.core_ops import (
-    CoreOpError,
-    op_session_show,
-    op_voice_session_event,
-    op_voice_session_start,
-    op_voice_submit_text,
-)
+from awf.ops.memory import op_session_show
+from awf.ops.shared import CoreOpError
+from awf.ops.voice import op_voice_session_event, op_voice_session_start, op_voice_submit_text
 from awf.server.stdio import dispatch
 
 
@@ -165,7 +161,7 @@ def test_voice_submit_text_defaults_to_assistant_workflow(tmp_path, monkeypatch)
             "outputs": {"response_text": "default response"},
         }
 
-    monkeypatch.setattr("awf.cli.core_ops.op_run_start", fake_run_start)
+    monkeypatch.setattr("awf.ops.voice.op_run_start", fake_run_start)
 
     result = op_voice_submit_text(repo_root, conn, voice_session_id=sid, text="hello", workflow_ref=None)
 

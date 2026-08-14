@@ -4,15 +4,15 @@ import pytest
 import yaml
 
 from awf.authoring import workflow as workflow_authoring
-from awf.cli.core_ops import (
-    CoreOpError,
+from awf.db.bootstrap import init_db
+from awf.db.connection import get_connection
+from awf.ops.authoring import (
     op_proposal_publish,
     op_proposal_reject,
     op_proposal_update,
     op_workflow_author_draft,
 )
-from awf.db.bootstrap import init_db
-from awf.db.connection import get_connection
+from awf.ops.shared import CoreOpError
 from awf.registry.resolve import RegistryObjectNotFoundError, resolve_registry_object
 
 

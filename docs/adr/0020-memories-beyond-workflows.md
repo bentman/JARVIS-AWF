@@ -17,6 +17,11 @@ Corrective update, 2026-08-12: `data/registry/memory-profiles/.gitkeep` and
 re-include rules, so every declared memory registry kind has consistent
 operator-data scaffolding.
 
+Alignment update, 2026-08-14: memory, session, and episodic operations now
+live in `awf.ops.memory`; registry publication/listing lives in
+`awf.ops.registry`. `awf.cli.core_ops` remains a compatibility re-export
+surface only.
+
 ## Context
 
 `docs/archives/ProjectVisionAWF.md` defines the third promise as memory beyond
@@ -40,7 +45,7 @@ The current codebase has useful entry points:
 - `events` already stores durable Run/Step/approval/gate transitions.
 - `artifacts` already stores immutable evidence pointers.
 - `registry/kinds.py`, `registry/resolve.py`, `registry/index.py`, and
-  `core_ops.op_registry_publish` already provide versioned registry publishing,
+  `awf.ops.registry.op_registry_publish` already provide versioned registry publishing,
   lookup, indexing, trust status, and digest checks.
 - `awf.cognition.PromptEnvelope` already has `session`, `memory`, and
   `retrieval` authorities.

@@ -15,6 +15,12 @@ the Codex sandbox -> 559 passed, 7 warnings; `backend/.venv/bin/python -m ruff
 check .` passed; `npm --prefix frontend run build --workspaces` passed; `npm
 --prefix frontend test --workspaces` passed.
 
+Alignment update, 2026-08-14: improvement operations now live in
+`awf.ops.improvement`, run operations in `awf.ops.run`, registry operations in
+`awf.ops.registry`, and artifact helpers in `awf.ops.artifact`/`awf.artifacts`.
+`awf.cli.core_ops` remains a compatibility re-export surface for external
+imports only.
+
 ## Context
 
 `docs/archives/ProjectVisionAWF.md` defines the fifth promise as AWF pointed
@@ -26,7 +32,7 @@ The current codebase already has the core pieces:
 
 - `awf.isolation.worktree` creates one Git worktree per mutating Run and can
   report the most recent committed diff.
-- `awf.workflow.engine` and `awf.cli.core_ops.op_run_start` run published
+- `awf.workflow.engine` and `awf.ops.run.op_run_start` run published
   Workflows against a resolved registry object.
 - `awf.gates.gate_node` writes deterministic Verdict artifacts from verifier
   and adversary Findings.
@@ -34,7 +40,7 @@ The current codebase already has the core pieces:
   action digests.
 - `awf.authoring.workflow` creates registry proposals that remain drafts until
   a caller publishes them with the current draft digest.
-- `awf.cli.core_ops.op_registry_publish` writes durable registry objects under
+- `awf.ops.registry.op_registry_publish` writes durable registry objects under
   `data/registry/`.
 - `frontend/shared`, `frontend/cli`, and `frontend/gui` already expose
   proposal, approval, artifact, and run surfaces over JSON-RPC rather than

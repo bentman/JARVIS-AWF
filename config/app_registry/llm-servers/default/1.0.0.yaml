@@ -1,0 +1,157 @@
+apiVersion: awf/v1
+kind: LlmServers
+metadata:
+  name: default
+  version: 1.0.0
+  digest: sha256:bootstrap
+spec:
+  default_server: llama-server
+  servers:
+    llama-server:
+      managed: true
+      base_url: http://127.0.0.1:8080
+      openai_base_path: /v1
+      provider: openai
+      health_paths:
+      - /health
+      - /v1/models
+      artifacts:
+        linux-x64-cpu:
+          url: https://github.com/ggml-org/llama.cpp/releases/download/b9704/llama-b9704-bin-ubuntu-x64.tar.gz
+          archive: tar_gz
+          binary: llama-server
+          accelerator: cpu
+          launch:
+            device: none
+            gpu_layers: 0
+        linux-x64-gpu:
+          url: https://github.com/ggml-org/llama.cpp/releases/download/b9704/llama-b9704-bin-ubuntu-vulkan-x64.tar.gz
+          archive: tar_gz
+          binary: llama-server
+          accelerator: gpu.vulkan
+          launch:
+            gpu_layers: all
+            split_mode: none
+            main_gpu: 0
+        linux-x64-cuda:
+          url: manual://llama.cpp/b9704/linux-x64-cuda
+          archive: manual
+          binary: llama-server
+          accelerator: gpu.cuda
+          launch:
+            gpu_layers: all
+            split_mode: none
+            main_gpu: 0
+        linux-arm64-cpu:
+          url: https://github.com/ggml-org/llama.cpp/releases/download/b9704/llama-b9704-bin-ubuntu-arm64.tar.gz
+          archive: tar_gz
+          binary: llama-server
+          accelerator: cpu
+          launch:
+            device: none
+            gpu_layers: 0
+        linux-arm64-gpu:
+          url: https://github.com/ggml-org/llama.cpp/releases/download/b9704/llama-b9704-bin-ubuntu-vulkan-arm64.tar.gz
+          archive: tar_gz
+          binary: llama-server
+          accelerator: gpu.vulkan
+          launch:
+            gpu_layers: all
+            split_mode: none
+            main_gpu: 0
+        linux-arm64-qnn:
+          url: manual://llama.cpp/snapdragon-hexagon/linux-arm64-qnn
+          archive: manual
+          binary: llama-server
+          accelerator: npu.qnn
+          launch:
+            device: HTP0
+            gpu_layers: all
+            split_mode: none
+        windows-x64-cpu:
+          url: https://github.com/ggml-org/llama.cpp/releases/download/b9704/llama-b9704-bin-win-cpu-x64.zip
+          archive: zip
+          binary: llama-server.exe
+          accelerator: cpu
+          launch:
+            device: none
+            gpu_layers: 0
+        windows-x64-gpu:
+          url: https://github.com/ggml-org/llama.cpp/releases/download/b9704/llama-b9704-bin-win-vulkan-x64.zip
+          archive: zip
+          binary: llama-server.exe
+          accelerator: gpu.vulkan
+          launch:
+            gpu_layers: all
+            split_mode: none
+            main_gpu: 0
+        windows-x64-cuda:
+          url: https://github.com/ggml-org/llama.cpp/releases/download/b9704/llama-b9704-bin-win-cuda-12.4-x64.zip
+          archive: zip
+          binary: llama-server.exe
+          accelerator: gpu.cuda
+          launch:
+            gpu_layers: all
+            split_mode: none
+            main_gpu: 0
+        windows-arm64-cpu:
+          url: https://github.com/ggml-org/llama.cpp/releases/download/b9704/llama-b9704-bin-win-cpu-arm64.zip
+          archive: zip
+          binary: llama-server.exe
+          accelerator: cpu
+          launch:
+            device: none
+            gpu_layers: 0
+        windows-arm64-gpu:
+          url: manual://llama.cpp/opencl-adreno/windows-arm64-gpu
+          archive: manual
+          binary: llama-server.exe
+          accelerator: gpu.opencl.adreno
+          launch:
+            device: GPU0
+            gpu_layers: all
+            split_mode: none
+            main_gpu: 0
+        windows-arm64-qnn:
+          url: manual://llama.cpp/snapdragon-hexagon/windows-arm64-qnn
+          archive: manual
+          binary: llama-server.exe
+          accelerator: npu.qnn
+          launch:
+            device: HTP0
+            gpu_layers: all
+            split_mode: none
+      launch:
+        ctx_size: 4096
+        batch_size: 512
+        ubatch_size: 128
+        cache_type_k: q8_0
+        cache_type_v: q8_0
+      model_defaults:
+        linux-x64-cpu: assistant-qwen3-8b-q5-balanced
+        linux-x64-gpu: assistant-qwen3-8b-q5-balanced
+        linux-x64-cuda: assistant-qwen3-8b-q5-balanced
+        linux-arm64-cpu: assistant-qwen3-8b-q5-balanced
+        linux-arm64-gpu: assistant-qwen3-8b-q5-balanced
+        linux-arm64-qnn: assistant-qwen3-8b-q5-balanced
+        windows-x64-cpu: assistant-qwen3-8b-q5-balanced
+        windows-x64-gpu: assistant-qwen3-8b-q5-balanced
+        windows-x64-cuda: assistant-qwen3-8b-q5-balanced
+        windows-arm64-cpu: assistant-qwen3-8b-q5-balanced
+        windows-arm64-gpu: assistant-qwen3-8b-q5-balanced
+        windows-arm64-qnn: assistant-qwen3-8b-q5-balanced
+    ollama:
+      managed: false
+      base_url: http://127.0.0.1:11434
+      openai_base_path: /v1
+      provider: ollama
+      health_paths:
+      - /api/tags
+    openai-compatible:
+      managed: false
+      base_url: http://127.0.0.1:8080
+      openai_base_path: /v1
+      provider: openai
+      health_paths:
+      - /v1/models
+      api_key_secret_name: null

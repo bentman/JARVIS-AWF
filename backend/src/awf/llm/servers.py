@@ -1,4 +1,4 @@
-"""LLM Server backend definitions and configuration loader (ADR-0017)."""
+"""LLM server registry object loader (ADR-0017)."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -6,8 +6,9 @@ from pathlib import Path
 import yaml
 
 from awf.hardware.profiler import CANONICAL_PROFILES
-from awf.paths import config_llm_dir
-from awf.registry.schema import require, require_enum
+from awf.paths import config_registry_dir
+from awf.registry.schema import validate_json_schema, validate_registry_identity
+from awf.registry.schemas.llm_servers import NAME, SCHEMA, VERSION
 
 
 class LlmServerError(ValueError):
@@ -42,8 +43,75 @@ class LlmServer:
         return f"{self.base_url.rstrip('/')}{self.openai_base_path}"
 
 
-def load_servers(repo_root: Path) -> tuple[str, dict[str, LlmServer]]:
-    servers_file = config_llm_dir(repo_root) / "servers.yaml"
+def resolve_servers_path(repo_root: Path) -> Path:
+    return config_registry_dir(repo_root) / "llm-servers" / NAME / f"{VERSION}.yaml"
+
+
+def parse_servers(data: dict) -> tuple[str, dict[str, LlmServer]]:
+    validate_json_schema(data, SCHEMA, "llm servers", error=LlmServerError)
+    metadata = data["metadata"]
+    spec = data["spec"]
+
+    default_server = spec["default_server"]
+    raw_servers = spec["servers"]
+
+    servers: dict[str, LlmServer] = {}
+    for server_id, raw in raw_servers.items():
+        ctx = f"server '{server_id}'"
+        raw_health = raw["health_paths"]
+        api_key_secret_name = raw.get("api_key_secret_name")
+
+        server_launch = raw.get("launch") or {}
+        model_defaults = raw.get("model_defaults") or {}
+        for profile_id in model_defaults:
+            if profile_id not in CANONICAL_PROFILES:
+                raise LlmServerError(
+                    f"{ctx}: model_defaults key '{profile_id}' is not a valid canonical profile ID in {CANONICAL_PROFILES}"
+                )
+
+        raw_artifacts = raw.get("artifacts") or {}
+
+        artifacts: dict[str, Artifact] = {}
+        for art_profile_id, art_raw in raw_artifacts.items():
+            if art_profile_id not in CANONICAL_PROFILES:
+                raise LlmServerError(
+                    f"{ctx}: artifact key '{art_profile_id}' is not a valid canonical profile ID in {CANONICAL_PROFILES}"
+                )
+
+            art_launch = art_raw.get("launch") or {}
+            merged_art_launch = {**server_launch, **art_launch}
+            artifacts[art_profile_id] = Artifact(
+                profile_id=art_profile_id,
+                url=art_raw["url"],
+                archive=art_raw["archive"],
+                binary=art_raw["binary"],
+                accelerator=art_raw["accelerator"],
+                launch=merged_art_launch,
+            )
+
+        servers[server_id] = LlmServer(
+            id=server_id,
+            managed=raw["managed"],
+            base_url=raw["base_url"],
+            openai_base_path=raw["openai_base_path"],
+            provider=raw["provider"],
+            health_paths=tuple(raw_health),
+            artifacts=artifacts,
+            launch=server_launch,
+            model_defaults={str(k): str(v) for k, v in model_defaults.items()},
+            api_key_secret_name=api_key_secret_name,
+        )
+
+    if default_server not in servers:
+        raise LlmServerError(f"default_server '{default_server}' is not declared in servers mapping")
+
+    if metadata["name"] != NAME:
+        raise LlmServerError(f"llm servers metadata.name must be '{NAME}'")
+
+    return default_server, servers
+
+
+def load_servers_file(servers_file: Path) -> tuple[str, dict[str, LlmServer]]:
     if not servers_file.is_file():
         raise LlmServerError(f"LLM servers config not found at '{servers_file}'")
 
@@ -55,101 +123,20 @@ def load_servers(repo_root: Path) -> tuple[str, dict[str, LlmServer]]:
     if not isinstance(data, dict):
         raise LlmServerError("LLM servers config root must be a YAML mapping")
 
-    default_server = str(require(data, "default_server", "llm_servers", error=LlmServerError))
-    raw_servers = require(data, "servers", "llm_servers", error=LlmServerError)
-    if not isinstance(raw_servers, dict):
-        raise LlmServerError("llm_servers.servers must be a mapping")
-
-    servers: dict[str, LlmServer] = {}
-    for server_id, raw in raw_servers.items():
-        ctx = f"server '{server_id}'"
-        if not isinstance(raw, dict):
-            raise LlmServerError(f"{ctx}: configuration must be a mapping")
-
-        managed = bool(require(raw, "managed", ctx, error=LlmServerError))
-        base_url = str(require(raw, "base_url", ctx, error=LlmServerError))
-        openai_base_path = str(require(raw, "openai_base_path", ctx, error=LlmServerError))
-        provider = str(require(raw, "provider", ctx, error=LlmServerError))
-        raw_health = require(raw, "health_paths", ctx, error=LlmServerError)
-        if not isinstance(raw_health, list):
-            raise LlmServerError(f"{ctx}: health_paths must be a list")
-        health_paths = tuple(str(p) for p in raw_health)
-        api_key_secret_name = raw.get("api_key_secret_name")
-        if api_key_secret_name is not None:
-            api_key_secret_name = str(api_key_secret_name)
-
-        server_launch = raw.get("launch") or {}
-        if not isinstance(server_launch, dict):
-            raise LlmServerError(f"{ctx}: launch must be a mapping")
-        model_defaults = raw.get("model_defaults") or {}
-        if not isinstance(model_defaults, dict):
-            raise LlmServerError(f"{ctx}: model_defaults must be a mapping")
-        for profile_id in model_defaults:
-            if profile_id not in CANONICAL_PROFILES:
-                raise LlmServerError(
-                    f"{ctx}: model_defaults key '{profile_id}' is not a valid canonical profile ID in {CANONICAL_PROFILES}"
-                )
-
-        raw_artifacts = raw.get("artifacts") or {}
-        if not isinstance(raw_artifacts, dict):
-            raise LlmServerError(f"{ctx}: artifacts must be a mapping")
-
-        artifacts: dict[str, Artifact] = {}
-        for art_profile_id, art_raw in raw_artifacts.items():
-            if art_profile_id not in CANONICAL_PROFILES:
-                raise LlmServerError(
-                    f"{ctx}: artifact key '{art_profile_id}' is not a valid canonical profile ID in {CANONICAL_PROFILES}"
-                )
-
-            art_ctx = f"{ctx}.artifacts.{art_profile_id}"
-            if not isinstance(art_raw, dict):
-                raise LlmServerError(f"{art_ctx}: artifact configuration must be a mapping")
-
-            url = str(require(art_raw, "url", art_ctx, error=LlmServerError))
-            archive = require_enum(
-                require(art_raw, "archive", art_ctx, error=LlmServerError),
-                ("tar_gz", "zip", "manual"),
-                art_ctx,
-                error=LlmServerError,
-            )
-            binary = str(require(art_raw, "binary", art_ctx, error=LlmServerError))
-            accelerator = require_enum(
-                require(art_raw, "accelerator", art_ctx, error=LlmServerError),
-                ("cpu", "gpu.cuda", "gpu.vulkan", "npu.qnn", "gpu.opencl.adreno"),
-                art_ctx,
-                error=LlmServerError,
-            )
-            art_launch = art_raw.get("launch") or {}
-            if not isinstance(art_launch, dict):
-                raise LlmServerError(f"{art_ctx}: launch must be a mapping")
-
-            merged_art_launch = {**server_launch, **art_launch}
-            artifacts[art_profile_id] = Artifact(
-                profile_id=art_profile_id,
-                url=url,
-                archive=archive,
-                binary=binary,
-                accelerator=accelerator,
-                launch=merged_art_launch,
-            )
-
-        servers[server_id] = LlmServer(
-            id=server_id,
-            managed=managed,
-            base_url=base_url,
-            openai_base_path=openai_base_path,
-            provider=provider,
-            health_paths=health_paths,
-            artifacts=artifacts,
-            launch=server_launch,
-            model_defaults={str(k): str(v) for k, v in model_defaults.items()},
-            api_key_secret_name=api_key_secret_name,
-        )
-
-    if default_server not in servers:
-        raise LlmServerError(f"default_server '{default_server}' is not declared in servers mapping")
+    default_server, servers = parse_servers(data)
+    validate_registry_identity(
+        name=data["metadata"]["name"],
+        version=data["metadata"]["version"],
+        path=servers_file,
+        context="llm servers",
+        error=LlmServerError,
+    )
 
     return default_server, servers
+
+
+def load_servers(repo_root: Path) -> tuple[str, dict[str, LlmServer]]:
+    return load_servers_file(resolve_servers_path(repo_root))
 
 
 def artifact_for(server: LlmServer, profile_id: str) -> Artifact | None:

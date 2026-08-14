@@ -9,7 +9,7 @@ stream.
 
 `models sync`/`models verify` resolve STT readiness (the only readiness
 result `speech.models` needs), then acquire or check presence of the
-artifacts `config/voice/{stt,tts,vad,wake}.yaml` name.
+artifacts `config/app_registry/hardware-voice-manifests/*/1.0.0.yaml` names.
 """
 
 import argparse

@@ -17,6 +17,15 @@ bridge to `agent` nodes. An agent capability that resolves to
 failing as `POLICY_DENIED`; the historical gap notes below describe the
 pre-ADR-0026 state.
 
+Alignment update, 2026-08-14: standard machine activities are registered as
+metadata-only `ActivityRegistration(kind="machine", fn=None)` entries, not
+placeholder Python callables. `make_activity_node_executor` always routes
+`fs_read`, `fs_write`, `fs_delete`, `command_run`, and `network_fetch`
+through `awf.machine.activities.run_machine_activity`; injected activity
+registries can override only non-machine local activities. A machine activity
+without the repository context needed for authorization records
+`POLICY_DENIED` through the Step path and does not execute.
+
 Acceptance run: `backend/.venv/bin/python -m pytest backend/tests -q` outside
 the Codex sandbox -> 550 passed, 7 warnings; `backend/.venv/bin/python -m ruff
 check .` passed; `npm --prefix frontend run build --workspaces` passed; `npm

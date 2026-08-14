@@ -6,22 +6,16 @@ connected to directly (see `awf.mcp.render`).
 """
 
 from dataclasses import dataclass, field
-from functools import partial
 from pathlib import Path
 
 import yaml
 
-from awf.registry.schema import require, require_enum
-
-TYPES = ("stdio", "http")
+from awf.registry.schema import validate_json_schema, validate_registry_identity
+from awf.registry.schemas.mcp_servers import SCHEMA
 
 
 class McpServerValidationError(ValueError):
     pass
-
-
-_require = partial(require, error=McpServerValidationError)
-_require_enum = partial(require_enum, error=McpServerValidationError)
 
 
 @dataclass(frozen=True)
@@ -48,17 +42,12 @@ class McpServer:
 
 
 def parse_mcp_server(raw: dict) -> McpServer:
-    server_type = _require_enum(_require(raw, "type", "mcp server"), TYPES, "type")
-
-    if server_type == "stdio" and not raw.get("command"):
-        raise McpServerValidationError("mcp server: type 'stdio' requires 'command'")
-    if server_type == "http" and not raw.get("url"):
-        raise McpServerValidationError("mcp server: type 'http' requires 'url'")
+    validate_json_schema(raw, SCHEMA, "mcp server", error=McpServerValidationError)
 
     return McpServer(
-        name=_require(raw, "name", "mcp server"),
-        version=_require(raw, "version", "mcp server"),
-        type=server_type,
+        name=raw["name"],
+        version=raw["version"],
+        type=raw["type"],
         command=raw.get("command"),
         args=tuple(raw.get("args", [])),
         url=raw.get("url"),
@@ -78,4 +67,12 @@ def load_mcp_server(path: Path) -> McpServer:
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise McpServerValidationError(f"{path}: mcp server must be a YAML mapping")
-    return parse_mcp_server(raw)
+    server = parse_mcp_server(raw)
+    validate_registry_identity(
+        name=server.name,
+        version=server.version,
+        path=path,
+        context="mcp server",
+        error=McpServerValidationError,
+    )
+    return server

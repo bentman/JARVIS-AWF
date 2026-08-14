@@ -4,11 +4,11 @@ from email.message import Message
 
 import pytest
 
-from awf.cli.core_ops import op_approval_approve, op_approval_detail
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.run import create_run, create_step
 from awf.machine.activities import MachineActivityError, run_machine_activity
+from awf.ops.approval import op_approval_approve, op_approval_detail
 from awf.registry.capability_record import CapabilityRecord, Effects, Identity
 
 
@@ -323,3 +323,48 @@ def test_per_invocation_machine_action_creates_preview_and_waits_for_approval(co
     row = conn.execute("SELECT status, output_json FROM steps WHERE step_id = 'step-approval'").fetchone()
     assert row["status"] == "SUCCEEDED"
     assert json.loads(row["output_json"])["path"] == str(worktree / "approved.txt")
+
+
+def test_machine_execution_uses_approval_hooks_before_and_after_execution(conn, machine_root, monkeypatch):
+    repo_root, worktree = machine_root
+    create_step(conn, step_id="step-hooks", run_id="run-1", node_id="write")
+    capability = _capability(
+        "fs_write",
+        "update",
+        "R1",
+        "never",
+        {"filesystem": {"allowedRoots": ["worktree"]}},
+    )
+    calls = []
+
+    def approved_or_waiting(_conn, *, action):
+        calls.append(("approved_or_waiting", action.kind))
+        return None
+
+    def authorize_machine_action(_conn, *, capability, action):
+        calls.append(("authorize_machine_action", capability.ref, action.kind))
+        return None
+
+    def record_executed(_conn, action, *, output):
+        calls.append(("record_executed", action.kind, output["bytes"]))
+
+    monkeypatch.setattr("awf.machine.activities.approved_or_waiting", approved_or_waiting)
+    monkeypatch.setattr("awf.machine.activities.authorize_machine_action", authorize_machine_action)
+    monkeypatch.setattr("awf.machine.activities.record_executed", record_executed)
+
+    output = run_machine_activity(
+        conn,
+        repo_root=repo_root,
+        worktree_path=worktree,
+        run_id="run-1",
+        step_id="step-hooks",
+        node={"id": "write", "function": "fs_write", "args": {"path": "hooked.txt", "content": "ok"}},
+        capability=capability,
+    )
+
+    assert output["bytes"] == 2
+    assert calls == [
+        ("approved_or_waiting", "fs_write"),
+        ("authorize_machine_action", "fs_write@1.0.0", "fs_write"),
+        ("record_executed", "fs_write", 2),
+    ]

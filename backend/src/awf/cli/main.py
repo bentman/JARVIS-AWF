@@ -2,8 +2,9 @@
 
 No command may bypass the Capability Guard, mark a Gate as passed, or
 invoke an unregistered adapter - this module only orchestrates; every
-mutation flows through `awf.cli.core_ops`, the same functions
-`awf serve --stdio` calls (Section 16.3: "the protocol adds no authority").
+mutation flows through `awf.ops.*` via the `awf.cli.core_ops` compatibility
+shim, the same operation functions `awf serve --stdio` calls (Section 16.3:
+"the protocol adds no authority").
 """
 
 import argparse
@@ -414,225 +415,244 @@ def cmd_llm_serve(args: argparse.Namespace, repo_root: Path, conn) -> int:
     return 0
 
 
+CLI_COMMAND_SPECS = (
+    {
+        "path": ("run",),
+        "func": cmd_run,
+        "args": (
+            {"flags": ("workflow",)},
+            {"flags": ("--input",), "default": None, "group": "input"},
+            {"flags": ("--objective",), "default": None, "group": "input"},
+            {"flags": ("--json",), "action": "store_true"},
+        ),
+    },
+    {
+        "path": ("status",),
+        "func": cmd_status,
+        "args": ({"flags": ("run_id",)}, {"flags": ("--json",), "action": "store_true"}),
+    },
+    {"path": ("resume",), "func": cmd_resume, "args": ({"flags": ("--json",), "action": "store_true"},)},
+    {"path": ("runs",), "func": cmd_runs, "args": ({"flags": ("--json",), "action": "store_true"},)},
+    {"path": ("approvals",), "func": cmd_approvals, "args": ({"flags": ("--json",), "action": "store_true"},)},
+    {"path": ("approve",), "func": cmd_approve, "args": ({"flags": ("approval_id",)},)},
+    {
+        "path": ("reject",),
+        "func": cmd_reject,
+        "args": ({"flags": ("approval_id",)}, {"flags": ("--reason",), "required": True}),
+    },
+    {
+        "path": ("artifacts",),
+        "func": cmd_artifacts,
+        "args": ({"flags": ("run_id",)}, {"flags": ("--json",), "action": "store_true"}),
+    },
+    {"path": ("readiness",), "func": cmd_readiness, "args": ({"flags": ("--json",), "action": "store_true"},)},
+    {"path": ("doctor",), "func": cmd_doctor, "args": ({"flags": ("--json",), "action": "store_true"},)},
+    {
+        "path": ("improvement", "list"),
+        "func": cmd_improvement_list,
+        "args": ({"flags": ("--status",), "default": None},),
+    },
+    {"path": ("improvement", "show"), "func": cmd_improvement_show, "args": ({"flags": ("improvement_id",)},)},
+    {
+        "path": ("improvement", "prepare"),
+        "func": cmd_improvement_prepare,
+        "args": ({"flags": ("run_id",)}, {"flags": ("--summary",), "default": None}),
+    },
+    {
+        "path": ("improvement", "mark-ready"),
+        "func": cmd_improvement_mark_ready,
+        "args": (
+            {"flags": ("improvement_id",)},
+            {"flags": ("--verdict-artifact-id",), "required": True},
+            {"flags": ("--validation-artifact-id",), "action": "append", "default": []},
+        ),
+    },
+    {
+        "path": ("improvement", "request-merge"),
+        "func": cmd_improvement_request_merge,
+        "args": ({"flags": ("improvement_id",)},),
+    },
+    {
+        "path": ("improvement", "merge"),
+        "func": cmd_improvement_merge,
+        "args": ({"flags": ("improvement_id",)}, {"flags": ("approval_id",)}),
+    },
+    {
+        "path": ("improvement", "reject"),
+        "func": cmd_improvement_reject,
+        "args": ({"flags": ("improvement_id",)}, {"flags": ("--reason",), "default": None}),
+    },
+    {
+        "path": ("registry", "validate"),
+        "func": cmd_registry_validate,
+        "args": ({"flags": ("definition_file",)}, {"flags": ("--kind",), "default": None}),
+    },
+    {
+        "path": ("registry", "publish"),
+        "func": cmd_registry_publish,
+        "args": ({"flags": ("definition_file",)}, {"flags": ("--kind",), "required": True}),
+    },
+    {"path": ("registry", "reindex"), "func": cmd_registry_reindex, "args": ()},
+    {
+        "path": ("registry", "retire"),
+        "func": cmd_registry_retire,
+        "args": ({"flags": ("kind",)}, {"flags": ("name",)}, {"flags": ("version",)}),
+    },
+    {
+        "path": ("registry", "trust"),
+        "func": cmd_registry_trust,
+        "args": (
+            {"flags": ("kind",)},
+            {"flags": ("name",)},
+            {"flags": ("version",)},
+            {"flags": ("--status",), "required": True},
+        ),
+    },
+    {
+        "path": ("author", "workflow"),
+        "func": cmd_author_workflow,
+        "args": (
+            {"flags": ("--objective",), "required": True},
+            {"flags": ("--name",), "default": None},
+            {"flags": ("--version",), "default": None},
+            {"flags": ("--profile",), "default": ops.workflow_authoring.DEFAULT_AUTHOR_PROFILE},
+        ),
+    },
+    {"path": ("proposal", "show"), "func": cmd_proposal_show, "args": ({"flags": ("proposal_id",)},)},
+    {
+        "path": ("proposal", "update"),
+        "func": cmd_proposal_update,
+        "args": (
+            {"flags": ("proposal_id",)},
+            {"flags": ("--file",), "required": True},
+            {"flags": ("--summary",), "default": None},
+        ),
+    },
+    {
+        "path": ("proposal", "publish"),
+        "func": cmd_proposal_publish,
+        "args": ({"flags": ("proposal_id",)}, {"flags": ("--digest",), "required": True}),
+    },
+    {
+        "path": ("proposal", "reject"),
+        "func": cmd_proposal_reject,
+        "args": ({"flags": ("proposal_id",)}, {"flags": ("--reason",), "default": None}),
+    },
+    {
+        "path": ("memory", "search"),
+        "func": cmd_memory_search,
+        "args": ({"flags": ("query",)}, {"flags": ("--profile",), "default": "default@1.0.0"}),
+    },
+    {"path": ("memory", "get"), "func": cmd_memory_get, "args": ({"flags": ("ref",)},)},
+    {
+        "path": ("memory", "propose"),
+        "func": cmd_memory_propose,
+        "args": ({"flags": ("--file",), "required": True}, {"flags": ("--summary",), "default": None}),
+    },
+    {
+        "path": ("memory", "publish"),
+        "func": cmd_memory_publish,
+        "args": ({"flags": ("proposal_id",)}, {"flags": ("--digest",), "required": True}),
+    },
+    {
+        "path": ("memory", "reject"),
+        "func": cmd_memory_reject,
+        "args": ({"flags": ("proposal_id",)}, {"flags": ("--reason",), "default": None}),
+    },
+    {"path": ("memory", "block"), "func": cmd_memory_block, "args": ({"flags": ("ref",)},)},
+    {
+        "path": ("session", "start"),
+        "func": cmd_session_start,
+        "args": ({"flags": ("--title",), "default": None}, {"flags": ("--expires-at",), "default": None}),
+    },
+    {
+        "path": ("session", "append"),
+        "func": cmd_session_append,
+        "args": (
+            {"flags": ("session_id",)},
+            {"flags": ("--role",), "required": True},
+            {"flags": ("--json",), "required": True},
+            {"flags": ("--summary",), "default": None},
+        ),
+    },
+    {"path": ("session", "show"), "func": cmd_session_show, "args": ({"flags": ("session_id",)},)},
+    {
+        "path": ("session", "summarize"),
+        "func": cmd_session_summarize,
+        "args": ({"flags": ("session_id",)}, {"flags": ("--summary",), "default": None}),
+    },
+    {
+        "path": ("episodic", "search"),
+        "func": cmd_episodic_search,
+        "args": ({"flags": ("query",)}, {"flags": ("--run-id",), "default": None}),
+    },
+    {"path": ("episodic", "timeline"), "func": cmd_episodic_timeline, "args": ({"flags": ("run_id",)},)},
+    {"path": ("llm", "servers"), "func": cmd_llm_servers, "args": ()},
+    {"path": ("llm", "models"), "func": cmd_llm_models, "args": ()},
+    {"path": ("llm", "acquire"), "func": cmd_llm_acquire, "args": ()},
+    {
+        "path": ("llm", "select"),
+        "func": cmd_llm_select,
+        "args": (
+            {"flags": ("server_id",)},
+            {"flags": ("--model",), "default": None},
+            {"flags": ("--allow-remote",), "action": "store_true"},
+        ),
+    },
+    {
+        "path": ("llm", "serve"),
+        "func": cmd_llm_serve,
+        "args": ({"flags": ("action",), "choices": ("start", "stop", "status")},),
+    },
+    {
+        "path": ("secret",),
+        "defaults": {"is_secret": True},
+        "args": ({"flags": ("secret_args",), "nargs": "REMAINDER"},),
+    },
+    {"path": ("serve",), "func": cmd_serve, "args": ({"flags": ("--stdio",), "action": "store_true"},)},
+)
+
+
+def _argument_kwargs(spec: dict) -> dict:
+    kwargs = {key: value for key, value in spec.items() if key not in {"flags", "group"}}
+    if kwargs.get("nargs") == "REMAINDER":
+        kwargs["nargs"] = argparse.REMAINDER
+    return kwargs
+
+
+def _install_cli_command(parsers: dict[tuple[str, ...], argparse.ArgumentParser], spec: dict) -> None:
+    path = spec["path"]
+    current_path: tuple[str, ...] = ()
+    for index, part in enumerate(path):
+        parent = parsers[current_path]
+        subparsers = getattr(parent, "_awf_subparsers", None)
+        if subparsers is None:
+            dest = "command" if not current_path else f"{current_path[0]}_command"
+            subparsers = parent.add_subparsers(dest=dest, required=True)
+            parent._awf_subparsers = subparsers
+        next_path = (*current_path, part)
+        if next_path not in parsers:
+            parsers[next_path] = subparsers.add_parser(part)
+        current_path = next_path
+        if index == len(path) - 1:
+            parser = parsers[current_path]
+            groups: dict[str, argparse._MutuallyExclusiveGroup] = {}
+            for arg_spec in spec.get("args", ()):
+                target = parser
+                if group_name := arg_spec.get("group"):
+                    groups.setdefault(group_name, parser.add_mutually_exclusive_group())
+                    target = groups[group_name]
+                target.add_argument(*arg_spec["flags"], **_argument_kwargs(arg_spec))
+            parser.set_defaults(**spec.get("defaults", {}))
+            if func := spec.get("func"):
+                parser.set_defaults(func=func)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="awf")
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    run_parser = sub.add_parser("run")
-    run_parser.add_argument("workflow")
-    run_input = run_parser.add_mutually_exclusive_group()
-    run_input.add_argument("--input", required=False, default=None)
-    run_input.add_argument("--objective", required=False, default=None)
-    run_parser.add_argument("--json", action="store_true")
-    run_parser.set_defaults(func=cmd_run)
-
-    status_parser = sub.add_parser("status")
-    status_parser.add_argument("run_id")
-    status_parser.add_argument("--json", action="store_true")
-    status_parser.set_defaults(func=cmd_status)
-
-    resume_parser = sub.add_parser("resume")
-    resume_parser.add_argument("--json", action="store_true")
-    resume_parser.set_defaults(func=cmd_resume)
-
-    runs_parser = sub.add_parser("runs")
-    runs_parser.add_argument("--json", action="store_true")
-    runs_parser.set_defaults(func=cmd_runs)
-
-    approvals_parser = sub.add_parser("approvals")
-    approvals_parser.add_argument("--json", action="store_true")
-    approvals_parser.set_defaults(func=cmd_approvals)
-
-    approve_parser = sub.add_parser("approve")
-    approve_parser.add_argument("approval_id")
-    approve_parser.set_defaults(func=cmd_approve)
-
-    reject_parser = sub.add_parser("reject")
-    reject_parser.add_argument("approval_id")
-    reject_parser.add_argument("--reason", required=True)
-    reject_parser.set_defaults(func=cmd_reject)
-
-    artifacts_parser = sub.add_parser("artifacts")
-    artifacts_parser.add_argument("run_id")
-    artifacts_parser.add_argument("--json", action="store_true")
-    artifacts_parser.set_defaults(func=cmd_artifacts)
-
-    readiness_parser = sub.add_parser("readiness")
-    readiness_parser.add_argument("--json", action="store_true")
-    readiness_parser.set_defaults(func=cmd_readiness)
-
-    doctor_parser = sub.add_parser("doctor")
-    doctor_parser.add_argument("--json", action="store_true")
-    doctor_parser.set_defaults(func=cmd_doctor)
-
-    improvement_parser = sub.add_parser("improvement")
-    improvement_sub = improvement_parser.add_subparsers(dest="improvement_command", required=True)
-    improvement_list_parser = improvement_sub.add_parser("list")
-    improvement_list_parser.add_argument("--status", required=False, default=None)
-    improvement_list_parser.set_defaults(func=cmd_improvement_list)
-    improvement_show_parser = improvement_sub.add_parser("show")
-    improvement_show_parser.add_argument("improvement_id")
-    improvement_show_parser.set_defaults(func=cmd_improvement_show)
-    improvement_prepare_parser = improvement_sub.add_parser("prepare")
-    improvement_prepare_parser.add_argument("run_id")
-    improvement_prepare_parser.add_argument("--summary", required=False, default=None)
-    improvement_prepare_parser.set_defaults(func=cmd_improvement_prepare)
-    improvement_ready_parser = improvement_sub.add_parser("mark-ready")
-    improvement_ready_parser.add_argument("improvement_id")
-    improvement_ready_parser.add_argument("--verdict-artifact-id", required=True)
-    improvement_ready_parser.add_argument("--validation-artifact-id", action="append", default=[])
-    improvement_ready_parser.set_defaults(func=cmd_improvement_mark_ready)
-    improvement_request_parser = improvement_sub.add_parser("request-merge")
-    improvement_request_parser.add_argument("improvement_id")
-    improvement_request_parser.set_defaults(func=cmd_improvement_request_merge)
-    improvement_merge_parser = improvement_sub.add_parser("merge")
-    improvement_merge_parser.add_argument("improvement_id")
-    improvement_merge_parser.add_argument("approval_id")
-    improvement_merge_parser.set_defaults(func=cmd_improvement_merge)
-    improvement_reject_parser = improvement_sub.add_parser("reject")
-    improvement_reject_parser.add_argument("improvement_id")
-    improvement_reject_parser.add_argument("--reason", required=False, default=None)
-    improvement_reject_parser.set_defaults(func=cmd_improvement_reject)
-
-    registry_parser = sub.add_parser("registry")
-    registry_sub = registry_parser.add_subparsers(dest="registry_command", required=True)
-    validate_parser = registry_sub.add_parser("validate")
-    validate_parser.add_argument("definition_file")
-    validate_parser.add_argument("--kind", required=False, default=None)
-    validate_parser.set_defaults(func=cmd_registry_validate)
-    publish_parser = registry_sub.add_parser("publish")
-    publish_parser.add_argument("definition_file")
-    publish_parser.add_argument("--kind", required=True)
-    publish_parser.set_defaults(func=cmd_registry_publish)
-    reindex_parser = registry_sub.add_parser("reindex")
-    reindex_parser.set_defaults(func=cmd_registry_reindex)
-    retire_parser = registry_sub.add_parser("retire")
-    retire_parser.add_argument("kind")
-    retire_parser.add_argument("name")
-    retire_parser.add_argument("version")
-    retire_parser.set_defaults(func=cmd_registry_retire)
-    trust_parser = registry_sub.add_parser("trust")
-    trust_parser.add_argument("kind")
-    trust_parser.add_argument("name")
-    trust_parser.add_argument("version")
-    trust_parser.add_argument("--status", required=True)
-    trust_parser.set_defaults(func=cmd_registry_trust)
-
-    author_parser = sub.add_parser("author")
-    author_sub = author_parser.add_subparsers(dest="author_command", required=True)
-    author_workflow_parser = author_sub.add_parser("workflow")
-    author_workflow_parser.add_argument("--objective", required=True)
-    author_workflow_parser.add_argument("--name", required=False, default=None)
-    author_workflow_parser.add_argument("--version", required=False, default=None)
-    author_workflow_parser.add_argument(
-        "--profile", required=False, default=ops.workflow_authoring.DEFAULT_AUTHOR_PROFILE
-    )
-    author_workflow_parser.set_defaults(func=cmd_author_workflow)
-
-    proposal_parser = sub.add_parser("proposal")
-    proposal_sub = proposal_parser.add_subparsers(dest="proposal_command", required=True)
-    proposal_show_parser = proposal_sub.add_parser("show")
-    proposal_show_parser.add_argument("proposal_id")
-    proposal_show_parser.set_defaults(func=cmd_proposal_show)
-    proposal_update_parser = proposal_sub.add_parser("update")
-    proposal_update_parser.add_argument("proposal_id")
-    proposal_update_parser.add_argument("--file", required=True)
-    proposal_update_parser.add_argument("--summary", required=False, default=None)
-    proposal_update_parser.set_defaults(func=cmd_proposal_update)
-    proposal_publish_parser = proposal_sub.add_parser("publish")
-    proposal_publish_parser.add_argument("proposal_id")
-    proposal_publish_parser.add_argument("--digest", required=True)
-    proposal_publish_parser.set_defaults(func=cmd_proposal_publish)
-    proposal_reject_parser = proposal_sub.add_parser("reject")
-    proposal_reject_parser.add_argument("proposal_id")
-    proposal_reject_parser.add_argument("--reason", required=False, default=None)
-    proposal_reject_parser.set_defaults(func=cmd_proposal_reject)
-
-    memory_parser = sub.add_parser("memory")
-    memory_sub = memory_parser.add_subparsers(dest="memory_command", required=True)
-    memory_search_parser = memory_sub.add_parser("search")
-    memory_search_parser.add_argument("query")
-    memory_search_parser.add_argument("--profile", required=False, default="default@1.0.0")
-    memory_search_parser.set_defaults(func=cmd_memory_search)
-    memory_get_parser = memory_sub.add_parser("get")
-    memory_get_parser.add_argument("ref")
-    memory_get_parser.set_defaults(func=cmd_memory_get)
-    memory_propose_parser = memory_sub.add_parser("propose")
-    memory_propose_parser.add_argument("--file", required=True)
-    memory_propose_parser.add_argument("--summary", required=False, default=None)
-    memory_propose_parser.set_defaults(func=cmd_memory_propose)
-    memory_publish_parser = memory_sub.add_parser("publish")
-    memory_publish_parser.add_argument("proposal_id")
-    memory_publish_parser.add_argument("--digest", required=True)
-    memory_publish_parser.set_defaults(func=cmd_memory_publish)
-    memory_reject_parser = memory_sub.add_parser("reject")
-    memory_reject_parser.add_argument("proposal_id")
-    memory_reject_parser.add_argument("--reason", required=False, default=None)
-    memory_reject_parser.set_defaults(func=cmd_memory_reject)
-    memory_block_parser = memory_sub.add_parser("block")
-    memory_block_parser.add_argument("ref")
-    memory_block_parser.set_defaults(func=cmd_memory_block)
-
-    session_parser = sub.add_parser("session")
-    session_sub = session_parser.add_subparsers(dest="session_command", required=True)
-    session_start_parser = session_sub.add_parser("start")
-    session_start_parser.add_argument("--title", required=False, default=None)
-    session_start_parser.add_argument("--expires-at", required=False, default=None)
-    session_start_parser.set_defaults(func=cmd_session_start)
-    session_append_parser = session_sub.add_parser("append")
-    session_append_parser.add_argument("session_id")
-    session_append_parser.add_argument("--role", required=True)
-    session_append_parser.add_argument("--json", required=True)
-    session_append_parser.add_argument("--summary", required=False, default=None)
-    session_append_parser.set_defaults(func=cmd_session_append)
-    session_show_parser = session_sub.add_parser("show")
-    session_show_parser.add_argument("session_id")
-    session_show_parser.set_defaults(func=cmd_session_show)
-    session_summarize_parser = session_sub.add_parser("summarize")
-    session_summarize_parser.add_argument("session_id")
-    session_summarize_parser.add_argument("--summary", required=False, default=None)
-    session_summarize_parser.set_defaults(func=cmd_session_summarize)
-
-    episodic_parser = sub.add_parser("episodic")
-    episodic_sub = episodic_parser.add_subparsers(dest="episodic_command", required=True)
-    episodic_search_parser = episodic_sub.add_parser("search")
-    episodic_search_parser.add_argument("query")
-    episodic_search_parser.add_argument("--run-id", required=False, default=None)
-    episodic_search_parser.set_defaults(func=cmd_episodic_search)
-    episodic_timeline_parser = episodic_sub.add_parser("timeline")
-    episodic_timeline_parser.add_argument("run_id")
-    episodic_timeline_parser.set_defaults(func=cmd_episodic_timeline)
-
-    llm_parser = sub.add_parser("llm")
-    llm_sub = llm_parser.add_subparsers(dest="llm_command", required=True)
-
-    servers_parser = llm_sub.add_parser("servers")
-    servers_parser.set_defaults(func=cmd_llm_servers)
-
-    models_parser = llm_sub.add_parser("models")
-    models_parser.set_defaults(func=cmd_llm_models)
-
-    acquire_parser = llm_sub.add_parser("acquire")
-    acquire_parser.set_defaults(func=cmd_llm_acquire)
-
-    select_parser = llm_sub.add_parser("select")
-    select_parser.add_argument("server_id")
-    select_parser.add_argument("--model", required=False, default=None)
-    select_parser.add_argument("--allow-remote", action="store_true")
-    select_parser.set_defaults(func=cmd_llm_select)
-
-    serve_sub_parser = llm_sub.add_parser("serve")
-    serve_sub_parser.add_argument("action", choices=["start", "stop", "status"])
-    serve_sub_parser.set_defaults(func=cmd_llm_serve)
-
-    secret_parser = sub.add_parser("secret")
-    secret_parser.add_argument("secret_args", nargs=argparse.REMAINDER)
-    secret_parser.set_defaults(is_secret=True)
-
-    serve_parser = sub.add_parser("serve")
-    serve_parser.add_argument("--stdio", action="store_true")
-    serve_parser.set_defaults(func=cmd_serve)
-
+    parsers = {(): parser}
+    for spec in CLI_COMMAND_SPECS:
+        _install_cli_command(parsers, spec)
     return parser
 
 

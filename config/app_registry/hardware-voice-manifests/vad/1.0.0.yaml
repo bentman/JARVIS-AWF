@@ -1,0 +1,11 @@
+apiVersion: awf/v1
+kind: HardwareVoiceManifest
+metadata:
+  name: vad
+  version: 1.0.0
+  digest: sha256:bootstrap
+spec:
+  function: vad
+  files:
+  - name: silero_vad.onnx
+    url: https://raw.githubusercontent.com/snakers4/silero-vad/master/src/silero_vad/data/silero_vad.onnx

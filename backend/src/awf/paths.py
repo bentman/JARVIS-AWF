@@ -43,20 +43,12 @@ def proposals_dir(repo_root: Path) -> Path:
     return repo_root / "data" / "proposals"
 
 
-def config_voice_dir(repo_root: Path) -> Path:
-    return repo_root / "config" / "voice"
-
-
 def sandbox_dir(repo_root: Path) -> Path:
     return repo_root / "cache" / "sandbox"
 
 
 def scratch_dir(repo_root: Path, run_id: str) -> Path:
     return sandbox_dir(repo_root) / run_id
-
-
-def config_llm_dir(repo_root: Path) -> Path:
-    return repo_root / "config" / "llm"
 
 
 def llm_models_dir(repo_root: Path) -> Path:

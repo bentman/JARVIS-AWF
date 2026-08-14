@@ -144,10 +144,11 @@ JARVIS/
       agents/<name>/<version>.yaml
       capabilities/<name>/<version>.yaml
       MCP/<name>/<version>.yaml
+      hardware-voice-manifests/<name>/<version>.yaml
+      llm-servers/<name>/<version>.yaml
       skills/<name>/<version>/SKILL.md           (+ optional scripts/, references/, assets/)
       voice-profiles/<name>/<version>.yaml
       workflows/<name>/<version>.yaml
-    voice/{stt,tts,vad,wake}.yaml                (one manifest per speech function — Section 16.4)
   data/                                          <- gitignored except .gitkeep; operator-personal, portable; back this up
     artifacts/                                   (content-addressed: artifacts/<sha256[0:2]>/<sha256>)
     awf_db/
@@ -156,6 +157,8 @@ JARVIS/
       agents/<name>/<version>.yaml
       capabilities/<name>/<version>.yaml
       MCP/<name>/<version>.yaml
+      hardware-voice-manifests/<name>/<version>.yaml
+      llm-servers/<name>/<version>.yaml
       model-profiles/<name>/<version>.yaml
       skills/<name>/<version>/SKILL.md
       voice-profiles/<name>/<version>.yaml
@@ -178,6 +181,8 @@ JARVIS/
       gates/                                      (Trifecta orchestration, Finding/Verdict — Section 12.3; Phase 8)
       hardware/                                   (GPU-utilization sampler, Phase 8; Hardware Profiler, Phase 12 — Sections 12.3, 16.4)
       cli/                                        (the `awf` command — Section 16.1; Phase 10)
+      ops/                                        (domain operation implementations for CLI and protocol handlers)
+      protocol/                                   (canonical JSON-RPC method manifest and generation source)
       server/                                     (`awf serve --stdio` JSON-RPC endpoint — Section 16.3; Phase 10)
       speech/                                     (STT/TTS/VAD/wake adapter contracts — Section 16.4; Phase 12)
     tests/
@@ -190,12 +195,12 @@ JARVIS/
 ```
 
 Rules:
-- **`config/`:** git-tracked in full. `config/app_registry/` holds repository-default registry objects (9.3); `config/voice/` holds one manifest per speech function (16.4).
+- **`config/`:** git-tracked in full. `config/app_registry/` holds repository-default registry objects (9.3), including hardware voice manifests (16.4) and LLM server settings.
 - **`data/`:** gitignored in full except a `.gitkeep` placeholder per empty subdirectory, so a fresh checkout carries the directory skeleton with no content. Every path under it stays relative to `data/` itself, so the whole tree can be copied to another machine or backed up as a unit.
 - **`cache/`:** ephemeral scratch only. Run resumption reads `data/awf_db/awf.db` alone (13.2).
 - **`.env`:** gitignored, machine-local; relocating or sharing `data/` does not carry it.
 - **`backend/src/awf/`:** modules appear in the phase noted beside them; Phase 0 creates only `db/` and `events/`.
-- **`models/`:** gitignored, config-owned storage populated and reconciled from `config/voice/` manifests by `awf-speech models sync` (16.4). Distribution ships `config/`, `backend/`, and `frontend/` only.
+- **`models/`:** gitignored, config-owned storage populated and reconciled from hardware voice manifest registry objects by `awf-speech models sync` (16.4). Distribution ships `config/`, `backend/`, and `frontend/` only.
 
 ---
 
@@ -243,7 +248,9 @@ Authorization is code outside the model, never a model's self-assessment. The Gu
 
 ### 9.3 Registry resolution
 
-A registry object of a given `kind` and `name` resolves through one of two roots: `config/app_registry/<kind>/<name>/<version>.yaml` and `data/registry/<kind>/<name>/<version>.yaml`. `config/app_registry/` is git-tracked and holds the repository's default Agents, Capabilities, MCP server definitions, Skills, Voice Profiles, and Workflows. `data/registry/` is gitignored (Section 7) and holds every object the operator adds afterward, across those same six kinds plus a seventh, `model-profiles`, which has no `config/app_registry/` counterpart — a Model Profile names a specific provider account and budget, so it is always operator-specific.
+A registry object of a given `kind` and `name` resolves through one of two roots: `config/app_registry/<kind>/<name>/<version>.yaml` and `data/registry/<kind>/<name>/<version>.yaml`. `config/app_registry/` is git-tracked and holds repository defaults; `data/registry/` is gitignored (Section 7) and holds operator additions and overrides. The canonical kind vocabulary is declared once in code and currently covers `agents`, `capabilities`, `mcp`, `skills`, `voice-profiles`, `workflows`, `model-profiles`, `personas`, `memory-profiles`, `semantic-memories`, `hardware-voice-manifests`, and `llm-servers`.
+
+Every object kind validates through the shared registry loader path and a kind-specific JSON Schema module under `awf.registry.schemas`. Common identity/path/version checks live in the generic loader; kind modules own only their object-specific schema. Adding a registry kind requires updating the canonical kind vocabulary, adding its schema module, and preserving the same config/data precedence and digest/index behavior described here.
 
 Lookup checks `data/registry/<kind>/<name>/` first. If any version exists there, resolution uses that tree exclusively for that `kind`+`name` — `config/app_registry/` is not read, merged, or blended in for the same name. Only when `data/registry/<kind>/<name>/` has no entry does resolution fall back to `config/app_registry/<kind>/<name>/`. Version selection (`name@version`) proceeds normally within whichever tree resolution lands on.
 
@@ -358,6 +365,8 @@ Eight node types, exactly:
 | `map` | Bounded fan-out over an input array | `maxItems`/`maxConcurrency` mandatory |
 | `loop` | Repeat a child Workflow while a condition holds, bounded by `maxIterations` | — |
 | `handoff` | Transfer control between two Agent invocations, allowing cycles | Section 13.4 |
+
+Activity registration distinguishes local Python callables from governed machine activities. Local activities register a callable; standard machine activities (`fs_read`, `fs_write`, `fs_delete`, `command_run`, `network_fetch`) register metadata only and MUST always route through the machine-action authorization path, even when a caller injects an alternate local activity registry for tests or embedding. A governed machine activity invoked without the repository context required for authorization MUST fail closed as `POLICY_DENIED` and MUST NOT execute.
 
 **High-risk trigger list** (MUST be classified R2 or higher, MUST require the escalated Gate tier (12.3), regardless of what any individual capability's own default risk class says):
 - any write to `data/awf_db/awf.db`, `.env`, or any Capability Record under `config/app_registry/` or `data/registry/` from within a Run (a Run modifying its own authorization surface);
@@ -478,6 +487,8 @@ awf serve --stdio                                (16.3 protocol endpoint)
 
 No command may bypass the Capability Guard, mark a Gate as passed, or invoke an unregistered adapter.
 
+The CLI parser is hand-written/table-driven in `awf.cli.main`; it is not generated from the protocol manifest. Commands with JSON-RPC equivalents carry CLI metadata in `awf.protocol.methods`, and the default validation gate checks that parser commands and argument metadata stay in parity with that manifest.
+
 ### 16.2 AWF-CLI — inline terminal UI
 
 AWF-CLI is an npm-distributed TypeScript application — npm package **`awf-cli`**, installed binary **`awf-cli`** — at `frontend/cli/` (Node.js 24 LTS `>=24.15.0`, Ink 7 + React ≥19.2), in the interaction style of Claude Code, Codex CLI, and Antigravity CLI. It spawns the Python core as a child process (`awf serve --stdio`) and is otherwise stateless.
@@ -519,7 +530,9 @@ AWF-CLI is an npm-distributed TypeScript application — npm package **`awf-cli`
 ### 16.3 Frontend↔core protocol
 
 - The core exposes `awf serve --stdio`: **JSON-RPC 2.0 over stdio**, frontend as parent process. Message shapes SHOULD follow the **Agent Client Protocol (ACP)** — sessions, streamed content blocks, tool-call and permission-request flows — implemented on the Python side with the official `agent-client-protocol` SDK. Where AWF needs more than ACP models (run/step queries, approvals bound to action digests, registry operations), methods are added under an `awf/` namespace rather than distorting ACP shapes. ACP shaping makes AWF drivable by ACP-capable editors (Zed, JetBrains, Neovim).
-- **Method surface (exhaustive):** `awf/run.start`, `awf/run.status`, `awf/run.list`, `awf/run.resume`, `awf/approval.list`, `awf/approval.approve`, `awf/approval.reject`, `awf/artifact.list`, `awf/artifact.read`, `awf/registry.list`, `awf/registry.get`, `awf/registry.validate`, `awf/registry.publish`, `awf/secret.set`, `awf/secret.listNames`, and `awf/events.subscribe` (server→client stream of `events` rows). Each method maps 1:1 onto a 16.1 operation, a registry read, or a Section 8 table read. Adding a method is a change to this list; a frontend needing an unlisted method fixes this section, never reads `data/` directly.
+- **Method surface:** `backend/src/awf/protocol/methods.py` is the canonical manifest for JSON-RPC method names, handler import paths, Python parameter adapters, TypeScript wrapper declarations, timeout class, and CLI metadata where applicable. Generated mirrors are emitted only to generated-only files: Python stdio dispatch data in `backend/src/awf/server/protocol_generated.py`, and the TypeScript `MethodName` union plus generated wrapper base in `frontend/shared/src/protocol.generated.ts`. `frontend/shared/src/types.ts` keeps hand-written result interfaces and re-exports `MethodName`; `frontend/shared/src/client.ts` keeps transport/error handling and composes the generated wrappers without changing `ProtocolClient`'s public methods.
+- The manifest currently covers run, approval, machine action preview, improvement, artifact, registry, skill invocation, workflow authoring, proposals, memory, sessions, voice, episodic retrieval, secrets, control-center summaries, system readiness/doctor, LLM server/model/serve status, and event snapshot methods. `awf/events.subscribe` remains a request/response event snapshot on the stdio transport, not server push. Adding, removing, or renaming a method is a manifest and spec change; a frontend needing an unlisted method fixes the protocol, never reads `data/` directly.
+- `scripts/generate_protocol.py --check` compares only generated protocol files, and `--check-argparse` verifies CLI parser parity against manifest CLI metadata. `scripts/validate_backend.py ci` runs both checks before lint and non-live backend tests so protocol and CLI drift fail the default gate.
 - Stdio is the only transport in the initial build: no ports, no auth surface, no orphaned daemons. A local HTTP/WebSocket daemon mode for multi-client or detached use is a documented escalation, not built now.
 - The protocol adds no authority: every mutating method maps 1:1 onto a core operation that passes the Capability Guard and writes `events` rows exactly as if invoked from 16.1.
 
@@ -542,7 +555,7 @@ AWF-GUI (`frontend/gui/`) is a desktop application whose defining capability is 
   On arm64 (both OSes), `-gpu` denotes Qualcomm **Adreno GPU acceleration via OpenCL**. On x64, `-gpu` denotes a probe-verified non-CUDA GPU execution provider (DirectML on Windows; the vendor GPU EP on Linux). A profile above `-cpu` is valid only when the Profiler verifies its execution provider actually loads. Resolution order per arch is QNN/CUDA → GPU → CPU, and **every profile falls back to its arch's `*64-cpu` profile** — the guaranteed floor on every host. WSL2 resolves as Linux.
 - **Model acquisition (Phase 12 setup, hardware-aware):** speech models are never bundled. `awf-speech models sync` resolves STT readiness, acquires the selected STT cache and the manifest-listed TTS, VAD, and wake artifacts into the gitignored `models/` tree, then reconciles every function directory. The manifests are authoritative: after acquisition succeeds, sync removes obsolete artifacts and stale faster-whisper cache/lock directories and reports each removal. The operator accepts each model's upstream license at download.
 - **Selection basis (decision record):** *STT = Whisper* — ONNX exports via sherpa-onnx include QNN builds for Snapdragon NPUs; faster-whisper is the fastest CUDA path. *TTS = Kokoro-82M* — Apache-2.0, 54 voices in one install (audibly distinct role personas), ~6× realtime on CPU, ONNX-native. *VAD = Silero* — MIT, ONNX, ~2 MB. *Wake word = openWakeWord* — Apache-2.0 code, ONNX models, prebuilt `hey jarvis`. Replacing a selection is an ADR against the same adapter contract.
-- **Voice manifests.** Repo-owned `config/voice/{stt,tts,vad,wake}.yaml` are the source of truth. `stt.yaml` maps readiness devices to faster-whisper model, device, and compute type; every unlisted device falls back to its `cpu` class. `tts.yaml`, `vad.yaml`, and `wake.yaml` name each required artifact and its URL or supplying package. Downloads land in the matching `models/<function>/` directory, which sync treats as config-owned and reconciles after a successful acquisition.
+- **Voice manifests.** Repo-owned `config/app_registry/hardware-voice-manifests/{stt,tts,vad,wake}/1.0.0.yaml` objects are the source of truth. The `stt` object maps readiness devices to model runtime, device, and compute type; every unlisted device falls back to its `cpu` class. The `tts`, `vad`, and `wake` objects name each required artifact and its URL or supplying package. Downloads land in the matching `models/<function>/` directory, which sync treats as config-owned and reconciles after a successful acquisition.
 - **Text-first invariant:** every recognized utterance is displayed as text before it is submitted to the core, and every spoken response has a visible transcript. Voice is an alternate modality over the same command surface as 16.2 — there are no voice-only capabilities.
 - **Approval rule:** an approval decision for an R2+ action MUST NOT be granted from voice input alone. The GUI MUST display the exact action digest and require a non-voice confirmation (click/keypress). Voice MAY acknowledge R0/R1 prompts.
 - **Resource ceiling:** local speech inference counts toward the GPU-utilization ceiling (Section 12.3); under contention with a running Gate evaluation, STT/TTS MUST degrade to CPU/smaller models rather than push GPU utilization past the limit.

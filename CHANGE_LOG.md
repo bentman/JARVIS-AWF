@@ -19,6 +19,27 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-14 08:57
+  - Host class(es): Windows AMD64 documentation validation
+  - Summary: Shortened the Windows and Linux QuickStart docs around the bootstrap/helper path and rewrote the README to describe the current project state without marketing language.
+  - Scope: `docs/QuickStart-{windows,linux}.md`, `README.md`, `CHANGE_LOG.md`.
+  - Validation: QuickStart/README grep found no stale `AWF_REPO_ROOT`, `AWF_CORE_COMMAND`, direct venv `awf`, or direct venv Python command instructions; `git diff --check` passed.
+  - Notes: QuickStart now points deeper operation, troubleshooting, and validation details to `docs/OperatorsGuide.md`; contributions are open for ideas, feedback, and bug reports, not fork/branch work.
+
+- Timestamp: 2026-08-14 08:49
+  - Host class(es): Windows AMD64 operator-launch validation; Linux/WSL helper syntax and function validation outside the sandbox
+  - Summary: Added session-local AWF command helpers so operators can run `awf`, `awf-speech`, `awf-gui`, and `awf-cli` from the repo root without global PATH edits or backend environment-variable preambles.
+  - Scope: `scripts/{use-awf.ps1,use-awf.sh,bootstrap.ps1,bootstrap.sh}`, `docs/OperatorsGuide.md`, `CHANGE_LOG.md`.
+  - Validation: PowerShell helper dot-source resolved all six helper functions; `awf doctor` passed through the helper; Bash helper syntax passed outside the sandbox after WSL/Bash returned `E_ACCESSDENIED` inside the sandbox; Bash helper sourcing exposed the expected functions; operator guide grep found no stale `AWF_REPO_ROOT`, `AWF_CORE_COMMAND`, or direct venv `awf` command instructions; `git diff --check` passed.
+  - Notes: Helpers are session-local functions only; no profile, global install, PATH mutation, or persistent alias is introduced.
+
+- Timestamp: 2026-08-14 07:57
+  - Host class(es): Windows AMD64 backend/frontend validation
+  - Summary: Completed the AWF DRY cleanup by centralizing protocol/CLI drift checks, splitting `core_ops` into real domain ops modules, removing machine activity placeholders, moving voice/LLM settings into registry-shaped objects, schema-backing every registry kind, and eliminating the remaining approval/gate import cycle and stale config directories.
+  - Scope: `.gitignore`, `backend/src/awf/approval_policy.py`, `backend/src/awf/{artifacts.py,pyexec.py,setup.py}`, `backend/src/awf/{cli,gates,llm,machine,ops,protocol,registry,server,speech,workflow}`, `config/app_registry/{hardware-voice-manifests,llm-servers}`, `data/registry/{hardware-voice-manifests,llm-servers}`, `frontend/shared/src/{client.ts,protocol.generated.ts,types.ts}`, `scripts/{generate_protocol.py,validate_backend.py}`, renamed backend tests/fixtures, quickstart/spec/helper docs, aligned ADRs, `CHANGE_LOG.md`.
+  - Validation: Focused backend pytest passed (`126 passed`); generated protocol check passed; argparse parity check passed with argument metadata comparison; backend CI passed (`642 passed, 17 deselected`, report `reports/validation/20260814125646-ci.txt`); frontend shared tests passed outside the Windows sandbox after the known Vite `spawn EPERM` sandbox failure (`15 passed`).
+  - Notes: `awf.cli.core_ops` remains a public compatibility re-export; internal implementation and tests now use `awf.ops.*` domain modules and generated-only protocol files.
+
 - Timestamp: 2026-08-12 14:28
   - Host class(es): Windows AMD64 focused backend/frontend validation
   - Summary: Closed the B11-B15 registry/governance gaps by adding direct Skill invocation, fail-closed MCP execution for unguarded adapters, deterministic workflow proposal verification, a shipped `network_fetch` Capability Record, complete memory registry data-root scaffolding, and strict Workflow `metadata.digest` format validation.

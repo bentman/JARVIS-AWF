@@ -16,6 +16,11 @@ parses the draft, checks proposal identity against Workflow metadata, resolves
 activity Capability Records, writes a `verified` proposal event on success,
 and blocks publication on verifier failure.
 
+Alignment update, 2026-08-14: authoring and proposal operations now live in
+`awf.ops.authoring`, registry operations in `awf.ops.registry`, and run
+operations in `awf.ops.run`. `awf.cli.core_ops` remains a compatibility
+re-export surface for external imports, not the internal implementation owner.
+
 ## Context
 
 `docs/archives/ProjectVisionAWF.md` defines the second promise as authorship:
@@ -26,10 +31,10 @@ approval event, and the diff reviewed is the diff that runs.
 
 The current implementation already has most of the required control points:
 
-- `awf.cli.core_ops.op_registry_validate` parses and validates Workflow files.
-- `awf.cli.core_ops.op_registry_publish` writes registry objects under
+- `awf.ops.registry.op_registry_validate` parses and validates Workflow files.
+- `awf.ops.registry.op_registry_publish` writes registry objects under
   `data/registry/` and updates `registry_index`.
-- `awf.cli.core_ops.op_run_start` resolves a published Workflow and starts the
+- `awf.ops.run.op_run_start` resolves a published Workflow and starts the
   Run.
 - `awf.server.stdio` exposes the same core operations over JSON-RPC.
 - `frontend/shared/src/client.ts` is the single TypeScript protocol client used

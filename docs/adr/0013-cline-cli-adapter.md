@@ -10,6 +10,10 @@ adapter-agnostic; this record proposes a Cline adapter that mirrors the
 other four in shape, pattern, and functionality. No source-of-truth
 conflict. No code is implemented by this record.
 
+Alignment update, 2026-08-14: `ADAPTER_REGISTRY` now lives with run execution
+in `awf.ops.run_execution`. References below to `cli/core_ops.py` describe
+the historical ADR-0013 wiring location.
+
 ## Context
 
 Section 10 names five CLI coding agents "driven through one adapter

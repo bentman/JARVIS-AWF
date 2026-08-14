@@ -120,8 +120,9 @@ Invoke-Step "Doctor" {
 }
 
 Write-Log ""
-Write-Log "Next command:"
-Write-Log '.\backend\.venv\Scripts\awf run assistant-default@1.0.0 --objective "check the system"'
+Write-Log "Next commands:"
+Write-Log '. .\scripts\use-awf.ps1'
+Write-Log 'awf run assistant-default@1.0.0 --objective "check the system"'
 
 } finally {
     Write-Log ""

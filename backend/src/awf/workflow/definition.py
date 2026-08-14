@@ -10,6 +10,8 @@ from pathlib import Path
 
 import yaml
 
+from awf.registry.schema import validate_json_schema, validate_registry_identity
+from awf.registry.schemas.workflows import SCHEMA
 from awf.workflow.nodes import NodeValidationError, validate_node
 
 
@@ -46,27 +48,18 @@ class WorkflowDefinition:
         raise WorkflowValidationError(f"no node with id '{node_id}'")
 
 
-def _require(mapping: dict, key: str, context: str) -> object:
-    if key not in mapping:
-        raise WorkflowValidationError(f"{context}: missing required field '{key}'")
-    return mapping[key]
-
-
 def parse_workflow(raw: dict) -> WorkflowDefinition:
-    api_version = _require(raw, "apiVersion", "workflow")
-    kind = _require(raw, "kind", "workflow")
-    metadata_raw = _require(raw, "metadata", "workflow")
-    spec_raw = _require(raw, "spec", "workflow")
+    validate_json_schema(raw, SCHEMA, "workflow", error=WorkflowValidationError)
+    metadata_raw = raw["metadata"]
+    spec_raw = raw["spec"]
 
     metadata = WorkflowMetadata(
-        name=_require(metadata_raw, "name", "metadata"),
-        version=_require(metadata_raw, "version", "metadata"),
-        digest=_require(metadata_raw, "digest", "metadata"),
+        name=metadata_raw["name"],
+        version=metadata_raw["version"],
+        digest=metadata_raw["digest"],
     )
 
-    nodes_raw = _require(spec_raw, "nodes", "spec")
-    if not isinstance(nodes_raw, list) or not nodes_raw:
-        raise WorkflowValidationError("spec.nodes must be a non-empty list")
+    nodes_raw = spec_raw["nodes"]
     for node in nodes_raw:
         try:
             validate_node(node)
@@ -77,14 +70,14 @@ def parse_workflow(raw: dict) -> WorkflowDefinition:
         raise WorkflowValidationError("spec.nodes contains duplicate node ids")
 
     return WorkflowDefinition(
-        api_version=api_version,
-        kind=kind,
+        api_version=raw["apiVersion"],
+        kind=raw["kind"],
         metadata=metadata,
-        input_schema=_require(spec_raw, "inputSchema", "spec"),
-        output_schema=_require(spec_raw, "outputSchema", "spec"),
-        budgets=_require(spec_raw, "budgets", "spec"),
+        input_schema=spec_raw["inputSchema"],
+        output_schema=spec_raw["outputSchema"],
+        budgets=spec_raw["budgets"],
         nodes=tuple(nodes_raw),
-        outputs=_require(spec_raw, "outputs", "spec"),
+        outputs=spec_raw["outputs"],
     )
 
 
@@ -92,4 +85,12 @@ def load_workflow(path: Path) -> WorkflowDefinition:
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise WorkflowValidationError(f"{path}: workflow must be a YAML mapping")
-    return parse_workflow(raw)
+    workflow = parse_workflow(raw)
+    validate_registry_identity(
+        name=workflow.metadata.name,
+        version=workflow.metadata.version,
+        path=path,
+        context="workflow",
+        error=WorkflowValidationError,
+    )
+    return workflow

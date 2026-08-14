@@ -349,7 +349,7 @@ Required evidence:
 
 ## Current repository boundary
 
-The repository already declares the QNN LLM profile in `config\llm\servers.yaml` as:
+The repository already declares the QNN LLM profile in `config\app_registry\llm-servers\default\1.0.0.yaml` as:
 
 ```text
 windows-arm64-qnn

@@ -25,6 +25,7 @@ from pathlib import Path
 
 from awf.db.bootstrap import init_db
 from awf.paths import REPO_ROOT, db_path, env_path, sandbox_dir
+from awf.registry.kinds import KINDS
 
 PLACEHOLDER = "<your-secret-key-here>"
 
@@ -49,6 +50,8 @@ def bootstrap_repo(repo_root: Path) -> None:
 
     sandbox_dir(repo_root).mkdir(parents=True, exist_ok=True)
     (repo_root / "cache" / "temp").mkdir(parents=True, exist_ok=True)
+    for kind in KINDS:
+        (repo_root / "data" / "registry" / kind.key).mkdir(parents=True, exist_ok=True)
 
     init_db(db_path(repo_root))
 

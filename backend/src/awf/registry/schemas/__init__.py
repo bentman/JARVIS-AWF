@@ -1,0 +1,1 @@
+"""Declarative registry JSON Schemas."""

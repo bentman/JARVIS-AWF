@@ -1,14 +1,8 @@
 """`awf serve --stdio` (Section 16.3): JSON-RPC 2.0 over stdio.
 
-Plain JSON-RPC 2.0 request/response framing, one JSON object per line. Every
-method maps 1:1 onto a 16.1 operation or a Section 8 table read (via
-`awf.cli.core_ops`, the same functions the CLI calls). Full ACP shaping
-(sessions, streamed content blocks, the official `agent-client-protocol`
-SDK) is a separate presentation layer that can sit on top of these same
-method bodies without changing what each one does.
-
-`awf/events.subscribe` is exposed here as a request/response snapshot for
-polling. Server-push streaming remains deferred to a future transport.
+Plain JSON-RPC 2.0 request/response framing, one JSON object per line.
+Method names and dispatch are generated from `awf.protocol.methods`; this
+module owns only transport framing, connection lifecycle, and JSON-RPC errors.
 """
 
 import json
@@ -16,73 +10,14 @@ import sys
 import threading
 from pathlib import Path
 
-from awf.cli import core_ops as ops
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
-from awf.paths import artifacts_dir
 from awf.paths import db_path as resolve_db_path
+from awf.server import protocol_generated
 
 _CONNECTION_LOCK = threading.Lock()
-
-METHOD_NAMES = (
-    "awf/run.start",
-    "awf/run.status",
-    "awf/run.list",
-    "awf/run.resume",
-    "awf/approval.list",
-    "awf/approval.detail",
-    "awf/approval.approve",
-    "awf/approval.reject",
-    "awf/machine.actionPreview",
-    "awf/improvement.list",
-    "awf/improvement.get",
-    "awf/improvement.prepare",
-    "awf/improvement.markReady",
-    "awf/improvement.requestMerge",
-    "awf/improvement.merge",
-    "awf/improvement.reject",
-    "awf/artifact.list",
-    "awf/artifact.read",
-    "awf/registry.list",
-    "awf/registry.get",
-    "awf/registry.validate",
-    "awf/registry.publish",
-    "awf/registry.reindex",
-    "awf/registry.retire",
-    "awf/registry.trust",
-    "awf/skill.invoke",
-    "awf/workflow.authorDraft",
-    "awf/proposal.get",
-    "awf/proposal.update",
-    "awf/proposal.publish",
-    "awf/proposal.reject",
-    "awf/memory.search",
-    "awf/memory.get",
-    "awf/memory.propose",
-    "awf/memory.publish",
-    "awf/memory.reject",
-    "awf/memory.block",
-    "awf/session.start",
-    "awf/session.append",
-    "awf/session.show",
-    "awf/session.summarize",
-    "awf/voice.sessionStart",
-    "awf/voice.event",
-    "awf/voice.sessionClose",
-    "awf/voice.submitText",
-    "awf/episodic.search",
-    "awf/episodic.timeline",
-    "awf/secret.set",
-    "awf/secret.listNames",
-    "awf/control.summary",
-    "awf/control.runDetail",
-    "awf/system.readiness",
-    "awf/system.doctor",
-    "awf/llm.servers",
-    "awf/llm.models",
-    "awf/llm.serveStatus",
-    "awf/events.subscribe",
-)
+METHOD_NAMES = protocol_generated.METHOD_NAMES
+DISPATCH_TABLE = protocol_generated.DISPATCH_TABLE
 
 METHOD_NOT_FOUND = -32601
 PARSE_ERROR = -32700
@@ -97,190 +32,10 @@ class JsonRpcError(Exception):
 
 
 def dispatch(repo_root: Path, conn, method: str, params: dict):
-    if method == "awf/run.start":
-        return ops.op_run_start(repo_root, conn, workflow_ref=params["workflow"], input_data=params.get("input", {}))
-    if method == "awf/run.status":
-        return ops.op_run_status(conn, run_id=params["runId"])
-    if method == "awf/run.list":
-        return ops.op_run_list(conn)
-    if method == "awf/run.resume":
-        return ops.op_run_resume(repo_root, conn)
-    if method == "awf/approval.list":
-        return ops.op_approval_list(conn)
-    if method == "awf/approval.detail":
-        return ops.op_approval_detail(conn, approval_id=params["approvalId"])
-    if method == "awf/approval.approve":
-        return ops.op_approval_approve(
-            conn,
-            approval_id=params["approvalId"],
-            channel=params.get("channel", "manual"),
-            risk_class=params.get("riskClass"),
-        )
-    if method == "awf/approval.reject":
-        return ops.op_approval_reject(conn, approval_id=params["approvalId"], reason=params.get("reason", ""))
-    if method == "awf/machine.actionPreview":
-        return ops.op_machine_action_preview(conn, approval_id=params["approvalId"])
-    if method == "awf/improvement.list":
-        return ops.op_improvement_list(conn, status=params.get("status"))
-    if method == "awf/improvement.get":
-        return ops.op_improvement_get(conn, improvement_id=params["improvementId"])
-    if method == "awf/improvement.prepare":
-        return ops.op_improvement_prepare(repo_root, conn, run_id=params["runId"], summary=params.get("summary"))
-    if method == "awf/improvement.markReady":
-        return ops.op_improvement_mark_ready(
-            repo_root,
-            conn,
-            improvement_id=params["improvementId"],
-            verdict_artifact_id=params["verdictArtifactId"],
-            validation_artifact_ids=params.get("validationArtifactIds", []),
-        )
-    if method == "awf/improvement.requestMerge":
-        return ops.op_improvement_request_merge(repo_root, conn, improvement_id=params["improvementId"])
-    if method == "awf/improvement.merge":
-        return ops.op_improvement_merge(
-            repo_root, conn, improvement_id=params["improvementId"], approval_id=params["approvalId"]
-        )
-    if method == "awf/improvement.reject":
-        return ops.op_improvement_reject(
-            repo_root, conn, improvement_id=params["improvementId"], reason=params.get("reason")
-        )
-    if method == "awf/artifact.list":
-        return ops.op_artifact_list(conn, run_id=params["runId"])
-    if method == "awf/artifact.read":
-        return ops.op_artifact_read(conn, artifact_id=params["artifactId"], artifacts_root=artifacts_dir(repo_root))
-    if method == "awf/registry.list":
-        return ops.op_registry_list(repo_root, kind=params["kind"], conn=conn)
-    if method == "awf/registry.get":
-        return ops.op_registry_get(repo_root, conn, kind=params["kind"], name=params["name"], version=params["version"])
-    if method == "awf/registry.validate":
-        return ops.op_registry_validate(Path(params["path"]), kind=params.get("kind"))
-    if method == "awf/registry.publish":
-        return ops.op_registry_publish(repo_root, conn, path=Path(params["path"]), kind=params["kind"])
-    if method == "awf/registry.reindex":
-        return ops.op_registry_reindex(repo_root, conn)
-    if method == "awf/registry.retire":
-        return ops.op_registry_retire(conn, kind=params["kind"], name=params["name"], version=params["version"])
-    if method == "awf/registry.trust":
-        return ops.op_registry_trust(
-            conn, kind=params["kind"], name=params["name"], version=params["version"], status=params["status"]
-        )
-    if method == "awf/skill.invoke":
-        return ops.op_skill_invoke(
-            repo_root,
-            conn,
-            ref=params["ref"],
-            input_text=params["input"],
-            profile_ref=params.get("profile", ops.workflow_authoring.DEFAULT_AUTHOR_PROFILE),
-        )
-    if method == "awf/workflow.authorDraft":
-        return ops.op_workflow_author_draft(
-            repo_root,
-            conn,
-            objective=params["objective"],
-            name=params.get("name"),
-            version=params.get("version"),
-            profile_ref=params.get("profile", ops.workflow_authoring.DEFAULT_AUTHOR_PROFILE),
-        )
-    if method == "awf/proposal.get":
-        return ops.op_proposal_get(repo_root, conn, proposal_id=params["proposalId"])
-    if method == "awf/proposal.update":
-        return ops.op_proposal_update(
-            repo_root,
-            conn,
-            proposal_id=params["proposalId"],
-            content=params["content"],
-            summary=params.get("summary"),
-        )
-    if method == "awf/proposal.publish":
-        return ops.op_proposal_publish(repo_root, conn, proposal_id=params["proposalId"], digest=params["digest"])
-    if method == "awf/proposal.reject":
-        return ops.op_proposal_reject(repo_root, conn, proposal_id=params["proposalId"], reason=params.get("reason"))
-    if method == "awf/memory.search":
-        return ops.op_memory_search(
-            repo_root,
-            conn,
-            query=params["query"],
-            profile_ref=params.get("profile", "default@1.0.0"),
-        )
-    if method == "awf/memory.get":
-        return ops.op_memory_get(repo_root, conn, ref=params["ref"])
-    if method == "awf/memory.propose":
-        return ops.op_memory_propose(repo_root, conn, path=Path(params["path"]), summary=params.get("summary"))
-    if method == "awf/memory.publish":
-        return ops.op_memory_publish(repo_root, conn, proposal_id=params["proposalId"], digest=params["digest"])
-    if method == "awf/memory.reject":
-        return ops.op_memory_reject(repo_root, conn, proposal_id=params["proposalId"], reason=params.get("reason"))
-    if method == "awf/memory.block":
-        return ops.op_memory_block(conn, ref=params["ref"])
-    if method == "awf/session.start":
-        return ops.op_session_start(conn, title=params.get("title"), expires_at=params.get("expiresAt"))
-    if method == "awf/session.append":
-        return ops.op_session_append(
-            conn,
-            session_id=params["sessionId"],
-            role=params["role"],
-            content=params["content"],
-            summary=params.get("summary"),
-        )
-    if method == "awf/session.show":
-        return ops.op_session_show(conn, session_id=params["sessionId"])
-    if method == "awf/session.summarize":
-        return ops.op_session_summarize(conn, session_id=params["sessionId"], summary=params.get("summary"))
-    if method == "awf/voice.sessionStart":
-        return ops.op_voice_session_start(
-            conn,
-            title=params.get("title"),
-            wake_enabled=bool(params.get("wakeEnabled", False)),
-        )
-    if method == "awf/voice.event":
-        return ops.op_voice_session_event(
-            conn,
-            voice_session_id=params["voiceSessionId"],
-            frame_type=params["frameType"],
-            payload=params.get("payload", {}),
-            turn_id=params.get("turnId"),
-        )
-    if method == "awf/voice.sessionClose":
-        return ops.op_voice_session_close(
-            conn,
-            voice_session_id=params["voiceSessionId"],
-            reason=params.get("reason"),
-        )
-    if method == "awf/voice.submitText":
-        return ops.op_voice_submit_text(
-            repo_root,
-            conn,
-            voice_session_id=params["voiceSessionId"],
-            text=params["text"],
-            workflow_ref=params.get("workflowRef"),
-            voice_profile_ref=params.get("voiceProfileRef"),
-            turn_id=params.get("turnId"),
-        )
-    if method == "awf/episodic.search":
-        return ops.op_episodic_search(conn, query=params["query"], run_id=params.get("runId"))
-    if method == "awf/episodic.timeline":
-        return ops.op_episodic_timeline(conn, run_id=params["runId"])
-    if method == "awf/secret.set":
-        return ops.op_secret_set(repo_root, conn, name=params["name"], value=params["value"])
-    if method == "awf/secret.listNames":
-        return ops.op_secret_list_names(conn)
-    if method == "awf/control.summary":
-        return ops.op_control_center_summary(repo_root, conn)
-    if method == "awf/control.runDetail":
-        return ops.op_control_center_run_detail(repo_root, conn, run_id=params["runId"])
-    if method == "awf/system.readiness":
-        return ops.op_system_readiness(repo_root)
-    if method == "awf/system.doctor":
-        return ops.op_system_doctor(repo_root)
-    if method == "awf/llm.servers":
-        return ops.op_llm_servers(repo_root)
-    if method == "awf/llm.models":
-        return ops.op_llm_models(repo_root)
-    if method == "awf/llm.serveStatus":
-        return ops.op_llm_serve(repo_root, conn, action="status")
-    if method == "awf/events.subscribe":
-        return ops.op_events_snapshot(conn, run_id=params.get("runId"), limit=int(params.get("limit", 100)))
-    raise JsonRpcError(METHOD_NOT_FOUND, f"unknown method: {method}")
+    handler = DISPATCH_TABLE.get(method)
+    if handler is None:
+        raise JsonRpcError(METHOD_NOT_FOUND, f"unknown method: {method}")
+    return handler(repo_root, conn, params)
 
 
 def handle_line(repo_root: Path, conn, line: str, out_stream, write_lock=None) -> None:

@@ -12,6 +12,12 @@ capture the full console output, including `awf.setup --provision`,
 next operator command. Windows uses explicit `Tee-Object` capture for native
 commands because `Start-Transcript` can miss native executable stdout/stderr.
 
+Alignment update, 2026-08-14: `focus <path-or-keyword>` is now a reporting
+validation command with the same exit-code mapping as the pytest-backed
+commands. `ci` also records protocol generated-file drift checks and argparse
+parity before lint and non-live pytest; a failed generator or parity check is
+reported as `FAIL`.
+
 ## Context
 
 ADR-0006 created the backend validation harness and durable reports, but only
@@ -22,7 +28,7 @@ which did not provide durable evidence or a readable per-test status stream.
 ## Decision
 
 Every test-running harness command (`unit`, `integration`, `runtime`,
-`regression`, and `ci`) writes one UTC-timestamped report under
+`focus`, `regression`, and `ci`) writes one UTC-timestamped report under
 `reports/validation/`. `profile` continues to write its diagnostic report
 under `reports/diagnostics/`.
 

@@ -10,7 +10,9 @@ durable way to invoke the Hardware Profiler mid-Run, not just at voice setup.
 
 import sqlite3
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from awf.cognition.envelope import PromptEnvelope, PromptSegment
 from awf.cognition.render import render_chat
@@ -24,6 +26,16 @@ from awf.registry.persona import compile_persona, load_persona
 from awf.registry.resolve import resolve_registry_object
 
 ActivityFn = Callable[[sqlite3.Connection, dict], dict]
+ActivityKind = Literal["local", "machine"]
+
+
+@dataclass(frozen=True)
+class ActivityRegistration:
+    kind: ActivityKind
+    fn: ActivityFn | None = None
+
+
+MACHINE_ACTIVITY_NAMES = frozenset({"fs_read", "fs_write", "fs_delete", "command_run", "network_fetch"})
 
 
 def _hardware_probe(conn: sqlite3.Connection, _args: dict) -> dict:
@@ -98,8 +110,8 @@ def _assistant_reply(conn: sqlite3.Connection, args: dict) -> dict:
 def _llm_server_ensure(conn: sqlite3.Connection, _args: dict) -> dict:
     from dataclasses import asdict
 
-    from awf.cli.core_ops import _select_managed_llm_artifact
     from awf.hardware.profiler import resolve_hardware_profile_id
+    from awf.llm.artifacts import select_managed_llm_artifact
     from awf.llm.discovery import local_models, model_by_name
     from awf.llm.selector import current_selection
     from awf.llm.servers import load_servers
@@ -122,7 +134,7 @@ def _llm_server_ensure(conn: sqlite3.Connection, _args: dict) -> dict:
         return asdict(st)
 
     profile_id, _ = resolve_hardware_profile_id(repo_root)
-    profile_id, art = _select_managed_llm_artifact(repo_root, server, profile_id)
+    profile_id, art = select_managed_llm_artifact(repo_root, server, profile_id)
 
     model = None
     if model_name:
@@ -139,20 +151,16 @@ def _llm_server_ensure(conn: sqlite3.Connection, _args: dict) -> dict:
     return asdict(st)
 
 
-def _machine_placeholder(conn: sqlite3.Connection, _args: dict) -> dict:
-    raise RuntimeError("machine activities are executed by awf.machine.activities")
-
-
-ACTIVITY_REGISTRY: dict[str, ActivityFn] = {
-    "assistant_reply": _assistant_reply,
-    "hardware_probe": _hardware_probe,
-    "gpu_utilization_sample": _gpu_utilization_sample,
-    "llm_server_ensure": _llm_server_ensure,
-    "fs_read": _machine_placeholder,
-    "fs_write": _machine_placeholder,
-    "fs_delete": _machine_placeholder,
-    "command_run": _machine_placeholder,
-    "network_fetch": _machine_placeholder,
+ACTIVITY_REGISTRY: dict[str, ActivityRegistration] = {
+    "assistant_reply": ActivityRegistration("local", _assistant_reply),
+    "hardware_probe": ActivityRegistration("local", _hardware_probe),
+    "gpu_utilization_sample": ActivityRegistration("local", _gpu_utilization_sample),
+    "llm_server_ensure": ActivityRegistration("local", _llm_server_ensure),
+    "fs_read": ActivityRegistration("machine"),
+    "fs_write": ActivityRegistration("machine"),
+    "fs_delete": ActivityRegistration("machine"),
+    "command_run": ActivityRegistration("machine"),
+    "network_fetch": ActivityRegistration("machine"),
 }
 
 

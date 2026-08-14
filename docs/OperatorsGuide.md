@@ -11,50 +11,39 @@ AWF has three operator surfaces over the same backend and database:
 - TUI: terminal chat and slash-command operator console.
 - Core CLI: direct commands for scripts, diagnostics, and precise actions.
 
-The backend command is installed in the repo venv, not globally. On Windows use
-`.\backend\.venv\Scripts\awf.exe`; on Linux/WSL use `backend/.venv/bin/awf`.
-Plain `awf` works only if your shell has that venv on `PATH`.
+## Start A Shell Session
+
+From the repo root, load the repo-local command helpers once per shell session.
+They do not edit your shell profile, install global commands, or change your
+system `PATH`. They only define functions in the current terminal that call the
+AWF executables inside `backend/.venv`.
+
+Windows PowerShell:
+
+```powershell
+. .\scripts\use-awf.ps1
+```
+
+Linux/WSL:
+
+```bash
+source scripts/use-awf.sh
+```
+
+After that, use `awf`, `awf-speech`, `awf-gui`, and `awf-cli` from the repo
+root. Open a new terminal or reload the helper when you want a fresh session.
 
 ## Start The App
 
-From the repo root:
+Start the desktop GUI:
 
 ```bash
-npm --prefix frontend run dev
+awf-gui
 ```
 
-That builds the frontend workspaces and starts the Electron GUI. The GUI starts
-`awf serve --stdio` from `backend/.venv` automatically.
-
-If you launch from another directory, set `AWF_REPO_ROOT` first.
-
-Windows PowerShell:
-
-```powershell
-$env:AWF_REPO_ROOT = "E:\WORK\CODE\REPO\JARVIS-AWF"
-npm --prefix frontend run dev
-```
-
-Linux/WSL:
-
-```bash
-AWF_REPO_ROOT=/path/to/JARVIS-AWF npm --prefix frontend run dev
-```
-
-If backend resolution is wrong, set `AWF_CORE_COMMAND`.
-
-Windows PowerShell:
-
-```powershell
-$env:AWF_CORE_COMMAND = "E:\WORK\CODE\REPO\JARVIS-AWF\backend\.venv\Scripts\awf.exe"
-npm --prefix frontend run dev
-```
-
-Linux/WSL:
-
-```bash
-AWF_CORE_COMMAND=/path/to/JARVIS-AWF/backend/.venv/bin/awf npm --prefix frontend run dev
-```
+The helper runs the frontend from the repo root. The GUI starts the AWF core
+from the repo venv automatically, so operators do not need to set backend
+environment variables before launch.
 
 ## GUI Map
 
@@ -109,40 +98,22 @@ There are two different local LLM shapes:
 
 Check status:
 
-Windows PowerShell:
-
-```powershell
-.\backend\.venv\Scripts\awf.exe llm servers
-.\backend\.venv\Scripts\awf.exe llm models
-.\backend\.venv\Scripts\awf.exe llm serve status
-```
-
-Linux/WSL:
-
 ```bash
-backend/.venv/bin/awf llm servers
-backend/.venv/bin/awf llm models
-backend/.venv/bin/awf llm serve status
+awf llm servers
+awf llm models
+awf llm serve status
 ```
 
 Acquire a managed llama.cpp runtime:
 
-```powershell
-.\backend\.venv\Scripts\awf.exe llm acquire
-```
-
 ```bash
-backend/.venv/bin/awf llm acquire
+awf llm acquire
 ```
 
 Select an operator-run OpenAI-compatible server instead:
 
-```powershell
-.\backend\.venv\Scripts\awf.exe llm select openai-compatible --model "Qwen/Qwen3-8B-GGUF:Q5_K_M"
-```
-
 ```bash
-backend/.venv/bin/awf llm select openai-compatible --model "Qwen/Qwen3-8B-GGUF:Q5_K_M"
+awf llm select openai-compatible --model "Qwen/Qwen3-8B-GGUF:Q5_K_M"
 ```
 
 Managed `llama-server` also needs a local `.gguf` under `models/llm/<name>/`
@@ -153,7 +124,7 @@ before it can start. Operator-run servers keep their own model store.
 Start the terminal UI after the frontend has been built:
 
 ```bash
-node frontend/cli/dist/cli.js
+awf-cli
 ```
 
 Use `/help` inside the TUI for the current slash-command list. Plain text starts
@@ -161,28 +132,16 @@ the default assistant workflow, so it has the same LLM requirement as GUI chat.
 
 ## Core CLI
 
-Common Windows commands:
-
-```powershell
-.\backend\.venv\Scripts\awf.exe doctor
-.\backend\.venv\Scripts\awf.exe readiness
-.\backend\.venv\Scripts\awf.exe run assistant-default@1.0.0 --objective "check the system"
-.\backend\.venv\Scripts\awf.exe runs
-.\backend\.venv\Scripts\awf.exe status <run-id>
-.\backend\.venv\Scripts\awf.exe artifacts <run-id>
-.\backend\.venv\Scripts\awf.exe approvals
-```
-
-Common Linux/WSL commands:
+Common commands:
 
 ```bash
-backend/.venv/bin/awf doctor
-backend/.venv/bin/awf readiness
-backend/.venv/bin/awf run assistant-default@1.0.0 --objective "check the system"
-backend/.venv/bin/awf runs
-backend/.venv/bin/awf status <run-id>
-backend/.venv/bin/awf artifacts <run-id>
-backend/.venv/bin/awf approvals
+awf doctor
+awf readiness
+awf run assistant-default@1.0.0 --objective "check the system"
+awf runs
+awf status <run-id>
+awf artifacts <run-id>
+awf approvals
 ```
 
 Most commands print readable summaries. Use `--json` where the command exposes
@@ -202,9 +161,6 @@ awf status <run-id>
 awf artifacts <run-id>
 awf resume
 ```
-
-Use the repo-local venv path for `awf` unless your shell has an alias or `PATH`
-entry.
 
 ## Approvals
 
@@ -236,8 +192,6 @@ Debug file-based voice from the CLI:
 awf-speech round-trip <wake.wav> <command.wav> --response-audio-out <out.wav>
 awf-speech models verify
 ```
-
-Use the venv-local `awf-speech` path when it is not on `PATH`.
 
 ## Memory
 
@@ -318,9 +272,9 @@ awf-speech models verify
 
 GUI opens but Status is empty or stale:
 
-- restart the GUI so it starts a fresh `awf serve --stdio` backend;
-- check `AWF_REPO_ROOT` if launched outside the repo;
-- check `AWF_CORE_COMMAND` if the wrong backend venv is being used.
+- restart the GUI so it starts a fresh AWF backend;
+- confirm your terminal is at the repo root;
+- reload the session helper for your platform.
 
 Chat fails while Status loads:
 

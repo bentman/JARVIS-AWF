@@ -5,7 +5,6 @@ import os
 import shutil
 import sqlite3
 import subprocess
-import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -23,6 +22,7 @@ from awf.machine.policy import (
     validate_url,
 )
 from awf.paths import artifacts_dir
+from awf.pyexec import repo_python_executable_or_current
 from awf.registry.capability_record import CapabilityRecord
 
 
@@ -30,16 +30,6 @@ class MachineActivityError(RuntimeError):
     def __init__(self, message: str, *, failure_class: str = DEFAULT_FAILURE_CLASS):
         super().__init__(message)
         self.failure_class = failure_class
-
-
-def _repo_python_executable(repo_root: Path) -> str:
-    for candidate in (
-        repo_root / "backend" / ".venv" / "Scripts" / "python.exe",
-        repo_root / "backend" / ".venv" / "bin" / "python",
-    ):
-        if candidate.is_file():
-            return str(candidate)
-    return sys.executable
 
 
 def _execution_argv(repo_root: Path, argv: list[str]) -> list[str]:
@@ -57,7 +47,7 @@ def _execution_argv(repo_root: Path, argv: list[str]) -> list[str]:
         "backend/.venv/bin/python",
         "backend/.venv/scripts/python.exe",
     }:
-        return [_repo_python_executable(repo_root), *argv[1:]]
+        return [repo_python_executable_or_current(repo_root), *argv[1:]]
     return argv
 
 

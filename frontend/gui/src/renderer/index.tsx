@@ -88,6 +88,7 @@ declare global {
         voiceId: string | undefined,
         responseAudioOutPath?: string,
       ) => Promise<{ response_audio_path: string }>;
+      voiceTranscribe: (audioData: ArrayBuffer) => Promise<{ text: string; language: string }>;
     };
   }
 }

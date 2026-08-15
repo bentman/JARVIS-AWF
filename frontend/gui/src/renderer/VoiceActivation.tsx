@@ -1,35 +1,5 @@
 import React, { useRef, useState } from "react";
 
-type SpeechRecognitionResultEvent = Event & {
-  resultIndex: number;
-  results: {
-    length: number;
-    [index: number]: {
-      isFinal: boolean;
-      [index: number]: { transcript: string };
-    };
-  };
-};
-
-type SpeechRecognitionLike = {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: SpeechRecognitionResultEvent) => void) | null;
-  onerror: ((event: Event) => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-declare global {
-  interface Window {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  }
-}
-
 export type VoiceSessionState =
   | "idle"
   | "armed"
@@ -112,7 +82,8 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const updateFrom = (result: VoiceSessionResult | VoiceSubmitTextResult) => {
     setState(result.state);
@@ -143,45 +114,39 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
       if (navigator.mediaDevices?.getUserMedia) {
         streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
-      const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
-      if (Recognition) {
-        const recognition = new Recognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = "en-US";
-        recognition.onresult = (event: SpeechRecognitionResultEvent) => {
-          let finalText = "";
-          let interimText = "";
-          for (let index = event.resultIndex; index < event.results.length; index += 1) {
-            const result = event.results[index];
-            const text = result[0]?.transcript ?? "";
-            if (result.isFinal) finalText += text;
-            else interimText += text;
-          }
-          if (finalText.trim()) {
-            setRecognizedText((current) => `${current} ${finalText}`.trim());
-          }
-          setPartialText(interimText.trim());
+      if (streamRef.current) {
+        audioChunksRef.current = [];
+        const mimeType = MediaRecorder.isTypeSupported("audio/wav") ? "audio/wav" : "audio/webm";
+        const recorder = new MediaRecorder(streamRef.current, { mimeType });
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunksRef.current.push(e.data);
         };
-        recognition.onerror = () => setError("Live speech recognition failed. Type or retry the final text.");
-        recognition.start();
-        recognitionRef.current = recognition;
+        mediaRecorderRef.current = recorder;
+        recorder.start();
       }
       const nextTurn = nextTurnId();
       setTurnId(nextTurn);
-      setPartialText("");
       updateFrom(await onPushToTalkStart(voiceSessionId, nextTurn));
     });
 
   const stopPushToTalk = () =>
     withBusy(async () => {
       if (!voiceSessionId) return;
-      recognitionRef.current?.stop();
-      recognitionRef.current = null;
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        const transcript = await new Promise<{ text: string; language: string }>((resolve, reject) => {
+          recorder.onstop = () => {
+            const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
+            blob.arrayBuffer().then((buf) => window.awf.voiceTranscribe(buf)).then(resolve).catch(reject);
+          };
+          recorder.stop();
+        });
+        setRecognizedText(transcript.text);
+      }
+      mediaRecorderRef.current = null;
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       updateFrom(await onPushToTalkStop(voiceSessionId, turnId));
-      setPartialText(recognizedText);
     });
 
   const submitText = () =>
@@ -201,8 +166,8 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
   const interrupt = () =>
     withBusy(async () => {
       if (!voiceSessionId) return;
-      recognitionRef.current?.stop();
-      recognitionRef.current = null;
+      mediaRecorderRef.current?.stop();
+      mediaRecorderRef.current = null;
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       updateFrom(await onInterrupt(voiceSessionId, turnId));

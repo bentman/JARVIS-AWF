@@ -81,4 +81,6 @@ contextBridge.exposeInMainWorld("awf", {
   ) => ipcRenderer.invoke(VOICE_SESSION_CHANNELS.submitText, voiceSessionId, text, workflowRef, voiceProfileRef, turnId),
   voiceSpeakText: (text: string, voiceId: string | undefined, responseAudioOutPath?: string) =>
     ipcRenderer.invoke(VOICE_SESSION_CHANNELS.speakText, text, voiceId, responseAudioOutPath),
+  voiceTranscribe: (audioData: ArrayBuffer) =>
+    ipcRenderer.invoke(VOICE_SESSION_CHANNELS.transcribe, audioData),
 });

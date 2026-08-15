@@ -4,6 +4,15 @@
 
 Implemented.
 
+Corrective update, 2026-08-15: `_semantic_line` in `memory/context.py` now
+reads the actual `search_semantic_memories` result schema — `ref` as label,
+`object.subject / object.predicate / object.value` as body, top-level
+`confidence` appended when present. The previous implementation read `title`,
+`key`, `text`, `content`, and `summary`, none of which that function emits,
+and fell through to `json.dumps(result)`, injecting digest, trust_status, and
+all governance fields into the prompt. The rule in Task F below is corrected
+accordingly.
+
 Corrective update, 2026-08-12: agent execution now retrieves memory context
 by default through `retrieve_memory_context(repo_root, conn, query=objective,
 profile_ref="default@1.0.0")` during prompt-envelope assembly. Retrieved
@@ -363,7 +372,7 @@ Rules:
 
 - semantic memories render as `PromptSegment("memory", "context", False, ...)`;
 - episodic retrieval renders as `PromptSegment("retrieval", "context", False, ...)`;
-- each segment includes memory ref, digest, provenance, confidence, and source;
+- each segment text is a compact `ref: subject predicate value (confidence)` line — governance fields (digest, trust_status, provenance, source) are not injected into the prompt;
 - token and item caps are enforced before rendering;
 - memory is injected for agent invocations by default using
   `default@1.0.0`; callers may override the profile with

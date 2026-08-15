@@ -22,10 +22,16 @@ def _estimated_tokens(text: str) -> int:
 
 
 def _semantic_line(result: dict) -> str:
-    title = result.get("title") or result.get("key") or result.get("memory_id") or "semantic memory"
-    text = result.get("text") or result.get("content") or result.get("summary") or json.dumps(result, sort_keys=True)
+    label = result.get("ref") or result.get("name") or "semantic memory"
+    obj = result.get("object") or {}
+    subject = obj.get("subject", "")
+    predicate = obj.get("predicate", "")
+    value = obj.get("value", "")
+    body = f"{subject} {predicate} {value}".strip()
+    if not body:
+        body = json.dumps(result, sort_keys=True)
     confidence = result.get("confidence")
-    prefix = f"{title}: {text}"
+    prefix = f"{label}: {body}"
     if confidence is not None:
         return f"{prefix} (confidence={confidence})"
     return prefix

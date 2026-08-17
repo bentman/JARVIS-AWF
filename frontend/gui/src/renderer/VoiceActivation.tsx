@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { blobToWav16 } from "./wav.js";
 
 export type VoiceSessionState =
   | "idle"
@@ -78,7 +79,6 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
   const [workflowRef, setWorkflowRef] = useState(defaultWorkflowRef);
   const [recognizedText, setRecognizedText] = useState("");
   const [voiceProfileRef, setVoiceProfileRef] = useState("narrator@1.0.0");
-  const [partialText, setPartialText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -116,8 +116,9 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
       }
       if (streamRef.current) {
         audioChunksRef.current = [];
-        const mimeType = MediaRecorder.isTypeSupported("audio/wav") ? "audio/wav" : "audio/webm";
-        const recorder = new MediaRecorder(streamRef.current, { mimeType });
+        // Whatever container Chromium gives us; `blobToWav16` re-encodes
+        // it to the mono 16-bit PCM WAV the STT adapters require.
+        const recorder = new MediaRecorder(streamRef.current);
         recorder.ondataavailable = (e) => {
           if (e.data.size > 0) audioChunksRef.current.push(e.data);
         };
@@ -137,7 +138,10 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
         const transcript = await new Promise<{ text: string; language: string }>((resolve, reject) => {
           recorder.onstop = () => {
             const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
-            blob.arrayBuffer().then((buf) => window.awf.voiceTranscribe(buf)).then(resolve).catch(reject);
+            blobToWav16(blob)
+              .then((wav) => window.awf.voiceTranscribe(wav))
+              .then(resolve)
+              .catch(reject);
           };
           recorder.stop();
         });
@@ -160,7 +164,6 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
         turnId,
       );
       updateFrom(result);
-      setPartialText("");
     });
 
   const interrupt = () =>
@@ -249,7 +252,6 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
           Final recognized text
           <textarea value={recognizedText} onChange={(e) => setRecognizedText(e.target.value)} />
         </label>
-        {partialText && <span aria-label="Partial transcript">Partial: {partialText}</span>}
         {error && <span role="alert">{error}</span>}
       </div>
     </div>

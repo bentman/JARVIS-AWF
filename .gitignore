@@ -8,7 +8,6 @@
 /.env.*
 # tracked example
 !/.env.example
-
 # local agent/client state
 /.agents/
 /.claude/

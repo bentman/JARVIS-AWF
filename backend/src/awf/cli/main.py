@@ -2,9 +2,8 @@
 
 No command may bypass the Capability Guard, mark a Gate as passed, or
 invoke an unregistered adapter - this module only orchestrates; every
-mutation flows through `awf.ops.*` via the `awf.cli.core_ops` compatibility
-shim, the same operation functions `awf serve --stdio` calls (Section 16.3:
-"the protocol adds no authority").
+mutation flows through `awf.ops.*`, the same operation functions
+`awf serve --stdio` calls (Section 16.3: "the protocol adds no authority").
 """
 
 import argparse
@@ -12,10 +11,10 @@ import json
 import sys
 from pathlib import Path
 
-from awf.cli import core_ops as ops
-from awf.cli.core_ops import CoreOpError
+from awf import ops
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
+from awf.ops.shared import CoreOpError
 from awf.paths import REPO_ROOT, db_path
 from awf.secrets import cli as secrets_cli
 

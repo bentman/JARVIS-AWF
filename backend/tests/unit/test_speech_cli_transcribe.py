@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import awf.speech.cli as speech_cli

@@ -7,10 +7,6 @@ Audio in -> text out. Model files are operator-downloaded into
 from pathlib import Path
 
 
-class SttAdapterError(RuntimeError):
-    pass
-
-
 def transcribe(
     audio_path: Path,
     *,

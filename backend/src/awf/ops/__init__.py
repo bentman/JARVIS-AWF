@@ -1,1 +1,155 @@
 """Operation modules shared by CLI and protocol surfaces."""
+
+from awf.authoring import workflow as workflow_authoring
+from awf.authoring.workflow import DEFAULT_AUTHOR_PROFILE
+from awf.ops.approval import (
+    op_approval_approve,
+    op_approval_detail,
+    op_approval_list,
+    op_approval_reject,
+    op_machine_action_preview,
+)
+from awf.ops.artifact import (
+    op_artifact_list,
+    op_artifact_read,
+)
+from awf.ops.authoring import (
+    op_proposal_get,
+    op_proposal_publish,
+    op_proposal_reject,
+    op_proposal_update,
+    op_workflow_author_draft,
+)
+from awf.ops.control import (
+    op_control_center_run_detail,
+    op_control_center_summary,
+    op_events_snapshot,
+)
+from awf.ops.improvement import (
+    op_improvement_get,
+    op_improvement_list,
+    op_improvement_mark_ready,
+    op_improvement_merge,
+    op_improvement_prepare,
+    op_improvement_reject,
+    op_improvement_request_merge,
+)
+from awf.ops.llm import (
+    op_llm_acquire,
+    op_llm_models,
+    op_llm_select,
+    op_llm_serve,
+    op_llm_servers,
+)
+from awf.ops.memory import (
+    op_episodic_search,
+    op_episodic_timeline,
+    op_memory_block,
+    op_memory_get,
+    op_memory_propose,
+    op_memory_publish,
+    op_memory_reject,
+    op_memory_search,
+    op_session_append,
+    op_session_show,
+    op_session_start,
+    op_session_summarize,
+)
+from awf.ops.registry import (
+    op_registry_get,
+    op_registry_list,
+    op_registry_publish,
+    op_registry_reindex,
+    op_registry_retire,
+    op_registry_trust,
+    op_registry_validate,
+    op_skill_invoke,
+)
+from awf.ops.run import (
+    DEFAULT_ASSISTANT_WORKFLOW_REF,
+    op_run_list,
+    op_run_outcome,
+    op_run_resume,
+    op_run_start,
+    op_run_status,
+)
+from awf.ops.shared import CoreOpError
+from awf.ops.system import (
+    op_secret_list_names,
+    op_secret_set,
+    op_system_doctor,
+    op_system_readiness,
+)
+from awf.ops.voice import (
+    op_voice_session_close,
+    op_voice_session_event,
+    op_voice_session_start,
+    op_voice_submit_text,
+)
+
+__all__ = (
+    "DEFAULT_ASSISTANT_WORKFLOW_REF",
+    "DEFAULT_AUTHOR_PROFILE",
+    "CoreOpError",
+    "op_approval_approve",
+    "op_approval_detail",
+    "op_approval_list",
+    "op_approval_reject",
+    "op_artifact_list",
+    "op_artifact_read",
+    "op_control_center_run_detail",
+    "op_control_center_summary",
+    "op_episodic_search",
+    "op_episodic_timeline",
+    "op_events_snapshot",
+    "op_improvement_get",
+    "op_improvement_list",
+    "op_improvement_mark_ready",
+    "op_improvement_merge",
+    "op_improvement_prepare",
+    "op_improvement_reject",
+    "op_improvement_request_merge",
+    "op_llm_acquire",
+    "op_llm_models",
+    "op_llm_select",
+    "op_llm_serve",
+    "op_llm_servers",
+    "op_machine_action_preview",
+    "op_memory_block",
+    "op_memory_get",
+    "op_memory_propose",
+    "op_memory_publish",
+    "op_memory_reject",
+    "op_memory_search",
+    "op_proposal_get",
+    "op_proposal_publish",
+    "op_proposal_reject",
+    "op_proposal_update",
+    "op_registry_get",
+    "op_registry_list",
+    "op_registry_publish",
+    "op_registry_reindex",
+    "op_registry_retire",
+    "op_registry_trust",
+    "op_registry_validate",
+    "op_run_list",
+    "op_run_outcome",
+    "op_run_resume",
+    "op_run_start",
+    "op_run_status",
+    "op_secret_list_names",
+    "op_secret_set",
+    "op_session_append",
+    "op_session_show",
+    "op_session_start",
+    "op_session_summarize",
+    "op_skill_invoke",
+    "op_system_doctor",
+    "op_system_readiness",
+    "op_voice_session_close",
+    "op_voice_session_event",
+    "op_voice_session_start",
+    "op_voice_submit_text",
+    "op_workflow_author_draft",
+    "workflow_authoring",
+)

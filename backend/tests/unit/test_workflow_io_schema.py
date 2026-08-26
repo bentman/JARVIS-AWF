@@ -10,7 +10,7 @@ from awf.workflow.io_schema import (
 
 
 def test_validate_input_accepts_conforming_data():
-    validate_input({"objective": "do a thing"}, {"type": "object", "required": ["objective"]})
+    assert validate_input({"objective": "do a thing"}, {"type": "object", "required": ["objective"]}) is None
 
 
 def test_validate_input_rejects_missing_required_field():
@@ -42,7 +42,7 @@ def test_render_outputs_unresolvable_reference_renders_none():
 
 
 def test_validate_output_accepts_conforming_data():
-    validate_output({"repairs": 2}, {"type": "object", "properties": {"repairs": {"type": "integer"}}})
+    assert validate_output({"repairs": 2}, {"type": "object", "properties": {"repairs": {"type": "integer"}}}) is None
 
 
 def test_validate_output_rejects_type_mismatch():

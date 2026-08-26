@@ -1,6 +1,6 @@
 """One registry kind vocabulary (ADR-0011): every registry kind's directory
 name, on-disk layout, and config/app_registry/ presence, declared once.
-`resolve.py`, `core_ops.op_registry_list`, and `core_ops.op_registry_publish`
+`resolve.py`, `ops.registry.op_registry_list`, and `ops.registry.op_registry_publish`
 each read the layout from here rather than deriving it independently.
 """
 

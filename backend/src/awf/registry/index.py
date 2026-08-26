@@ -2,7 +2,7 @@
 
 The filesystem stays the resolution source of truth; this module reads and
 writes `registry_index`, the table `resolve.resolve_registry_object` and
-`cli.core_ops` consult for digest verification, trust status, and
+`ops.registry` consult for digest verification, trust status, and
 latest-version lookup. A rebuild (`reindex`) is idempotent and never touches
 an existing row's `trust_status`, so an operator's `blocked`/`quarantined`/
 `trusted` decision survives it.

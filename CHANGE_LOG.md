@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-25 14:35
+  - Host class(es): Windows AMD64 backend validation
+  - Summary: Executed codebase hygiene cleanup by deleting the legacy wildcard `core_ops.py` shim in favor of direct domain `awf.ops.*` routing, pruning unreferenced dangling exceptions/methods, aligning docstrings, and strengthening under-asserted test cases.
+  - Scope: `backend/src/awf/cli/{core_ops.py,main.py}`, `backend/src/awf/ops/__init__.py`, `backend/src/awf/machine/approvals.py`, `backend/src/awf/speech/{stt_whisper.py,tts_kokoro.py}`, `backend/src/awf/cognition/envelope.py`, `backend/src/awf/registry/{kinds.py,index.py}`, `backend/tests/integration/{test_cli_main.py,test_llm_cli.py}`, `backend/tests/unit/{test_speech_cli_transcribe.py,test_workflow_io_schema.py}`, `CHANGE_LOG.md`.
+  - Validation: Ruff formatting and linting passed cleanly; protocol and argparse parity precheck passed; unit test suite passed (`326 passed`); full backend CI validation passed (`643 passed, 17 deselected`, report `reports/validation/20260825193501-ci.txt`); `git diff --check` passed.
+  - Notes: No architectural contracts or protocol payloads modified; all internal callers now interact cleanly through explicit domain module exports.
+
 - Timestamp: 2026-08-14 08:57
   - Host class(es): Windows AMD64 documentation validation
   - Summary: Shortened the Windows and Linux QuickStart docs around the bootstrap/helper path and rewrote the README to describe the current project state without marketing language.

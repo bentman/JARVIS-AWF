@@ -146,7 +146,7 @@ def test_run_command_reports_a_coreoperror_cleanly_not_a_traceback(tmp_path, cap
     assert "inputSchema" in capsys.readouterr().err
 
 
-def test_approve_command_dispatches_to_core_ops(tmp_path, monkeypatch):
+def test_approve_command_dispatches_to_ops(tmp_path, monkeypatch):
     repo_root = make_repo(tmp_path)
     captured = {}
 
@@ -199,7 +199,7 @@ def test_registry_validate_command(tmp_path, capsys, fixtures_dir):
     assert out["kind"] == "CapabilityRecord"
 
 
-def test_author_workflow_command_dispatches_to_core_ops(tmp_path, monkeypatch):
+def test_author_workflow_command_dispatches_to_ops(tmp_path, monkeypatch):
     repo_root = make_repo(tmp_path)
     captured = {}
 
@@ -223,7 +223,7 @@ def test_author_workflow_command_dispatches_to_core_ops(tmp_path, monkeypatch):
     }
 
 
-def test_proposal_publish_command_dispatches_to_core_ops(tmp_path, monkeypatch):
+def test_proposal_publish_command_dispatches_to_ops(tmp_path, monkeypatch):
     repo_root = make_repo(tmp_path)
     captured = {}
 
@@ -239,7 +239,7 @@ def test_proposal_publish_command_dispatches_to_core_ops(tmp_path, monkeypatch):
     assert captured == {"proposal_id": "p1", "digest": "abc"}
 
 
-def test_improvement_commands_dispatch_to_core_ops(tmp_path, monkeypatch):
+def test_improvement_commands_dispatch_to_ops(tmp_path, monkeypatch):
     repo_root = make_repo(tmp_path)
     captured = {}
 
@@ -303,7 +303,7 @@ def test_improvement_commands_dispatch_to_core_ops(tmp_path, monkeypatch):
     assert captured["merge"] == {"improvement_id": "imp-1", "approval_id": "ap-1"}
 
 
-def test_registry_reindex_command_dispatches_to_core_ops(tmp_path, capsys, monkeypatch):
+def test_registry_reindex_command_dispatches_to_ops(tmp_path, capsys, monkeypatch):
     repo_root = make_repo(tmp_path)
     monkeypatch.setattr(
         cli_main.ops, "op_registry_reindex", lambda repo_root, conn: {"capabilities": {"config": 1, "data": 0}}
@@ -316,7 +316,7 @@ def test_registry_reindex_command_dispatches_to_core_ops(tmp_path, capsys, monke
     assert out["capabilities"] == {"config": 1, "data": 0}
 
 
-def test_doctor_command_dispatches_to_core_ops(tmp_path, capsys, monkeypatch):
+def test_doctor_command_dispatches_to_ops(tmp_path, capsys, monkeypatch):
     repo_root = make_repo(tmp_path)
     monkeypatch.setattr(
         cli_main.ops,
@@ -349,7 +349,7 @@ def test_readiness_command_json_flag(tmp_path, capsys, monkeypatch):
     assert out["profile_id"] == "linux-x64-cpu"
 
 
-def test_registry_retire_command_dispatches_to_core_ops(tmp_path, capsys, monkeypatch):
+def test_registry_retire_command_dispatches_to_ops(tmp_path, capsys, monkeypatch):
     repo_root = make_repo(tmp_path)
     captured = {}
 
@@ -377,7 +377,7 @@ def test_registry_trust_command_requires_status(tmp_path):
     assert raised
 
 
-def test_registry_trust_command_dispatches_to_core_ops(tmp_path, capsys, monkeypatch):
+def test_registry_trust_command_dispatches_to_ops(tmp_path, capsys, monkeypatch):
     repo_root = make_repo(tmp_path)
     captured = {}
 
@@ -395,7 +395,7 @@ def test_registry_trust_command_dispatches_to_core_ops(tmp_path, capsys, monkeyp
     assert out["trust_status"] == "trusted"
 
 
-def test_memory_search_command_dispatches_to_core_ops(tmp_path, monkeypatch):
+def test_memory_search_command_dispatches_to_ops(tmp_path, monkeypatch):
     repo_root = make_repo(tmp_path)
     captured = {}
 
@@ -411,7 +411,7 @@ def test_memory_search_command_dispatches_to_core_ops(tmp_path, monkeypatch):
     assert captured == {"query": "targeted", "profile_ref": "default@1.0.0"}
 
 
-def test_session_start_command_dispatches_to_core_ops(tmp_path, monkeypatch):
+def test_session_start_command_dispatches_to_ops(tmp_path, monkeypatch):
     repo_root = make_repo(tmp_path)
     captured = {}
 

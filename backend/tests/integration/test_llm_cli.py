@@ -3,7 +3,7 @@
 import shutil
 from textwrap import indent
 
-from awf.cli import core_ops as ops
+from awf import ops
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.paths import REPO_ROOT, config_registry_dir

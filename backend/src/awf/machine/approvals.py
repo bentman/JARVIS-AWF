@@ -11,10 +11,6 @@ from awf.machine.action import MachineAction
 from awf.registry.capability_record import CapabilityRecord
 
 
-class MachineApprovalRequired(RuntimeError):
-    pass
-
-
 class MachineApprovalRejected(RuntimeError):
     def __init__(self, message: str, *, failure_class: str = "APPROVAL_REJECTED"):
         super().__init__(message)

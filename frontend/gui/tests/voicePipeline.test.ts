@@ -11,10 +11,13 @@ vi.mock("node:child_process", () => {
 
 const writeFileMock = vi.fn().mockResolvedValue(undefined);
 const unlinkMock = vi.fn().mockResolvedValue(undefined);
-vi.mock("node:fs/promises", () => ({
-  writeFile: (...args: unknown[]) => writeFileMock(...args),
-  unlink: (...args: unknown[]) => unlinkMock(...args),
-}));
+vi.mock("node:fs/promises", () => {
+  const mod = {
+    writeFile: (...args: unknown[]) => writeFileMock(...args),
+    unlink: (...args: unknown[]) => unlinkMock(...args),
+  };
+  return { ...mod, default: mod };
+});
 
 function makeFakeChild() {
   const child = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter };
@@ -339,6 +342,8 @@ describe("runVoiceTranscribe", () => {
     const audio = new Uint8Array([1, 2, 3]);
 
     const promise = runVoiceTranscribe({ cwd: "/repo", audioData: audio });
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(writeFileMock).toHaveBeenCalledWith(expect.stringMatching(/awf-transcribe-.*\.wav$/), audio);
     const tmpPath = writeFileMock.mock.calls[0][0] as string;
@@ -358,6 +363,8 @@ describe("runVoiceTranscribe", () => {
     spawnMock.mockReturnValue(child);
 
     const promise = runVoiceTranscribe({ cwd: "/repo", audioData: new Uint8Array([0]) });
+    await Promise.resolve();
+    await Promise.resolve();
     const tmpPath = writeFileMock.mock.calls[0][0] as string;
 
     child.stdout.emit("data", Buffer.from(JSON.stringify({ error: "STT not ready: no STT runtime importable" }) + "\n"));
@@ -373,6 +380,8 @@ describe("runVoiceTranscribe", () => {
     spawnMock.mockReturnValue(child);
 
     const promise = runVoiceTranscribe({ command: "/custom/awf-speech", cwd: "/repo", audioData: new Uint8Array([0]) });
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(spawnMock).toHaveBeenCalledWith("/custom/awf-speech", expect.any(Array), { cwd: "/repo" });
 
@@ -405,6 +414,8 @@ describe("registerVoiceTranscribeIpcHandler", () => {
 
     const audioBuffer = new ArrayBuffer(4);
     const promise = handlers.get(VOICE_SESSION_CHANNELS.transcribe)?.({}, audioBuffer);
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(spawnMock).toHaveBeenCalledWith("awf-speech", expect.arrayContaining(["transcribe"]), { cwd: "/repo" });
 

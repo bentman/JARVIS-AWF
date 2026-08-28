@@ -19,12 +19,12 @@
 
 ## Change Entries
 
-- Timestamp: 2026-08-28 12:28
-  - Host class(es): Windows AMD64/ARM64 and Linux x64/ARM64 bootstrap and profiler validation
-  - Summary: Generalized Windows and Linux bootstrap scripts to dynamically discover and select operator Python versions within `>=3.12,<3.15` (supporting ARM64 native python.org defaults like 3.13), fixed Windows PnP NPU regex word boundaries to prevent USB input false-positives, and extracted explicit CUDA release versions from nvcc and nvidia-smi.
-  - Scope: `scripts/{bootstrap.ps1,bootstrap.sh}`, `backend/src/awf/hardware/profiler.py`, `backend/tests/integration/test_hardware_profiler.py`, `CHANGE_LOG.md`.
-  - Validation: Ruff lint checks passed cleanly; backend unit tests passed (`326 passed`); hardware profiler integration tests passed (`33 passed`); hardware profile validation verified on Windows AMD64 (`cuda_version='13.3'`, `npu_available=False`); `git diff --check` passed.
-  - Notes: Eliminates hardcoded `-3.12`/`python3.12` assumptions during venv bootstrap while strictly enforcing `>=3.12,<3.15` range bounds.
+- Timestamp: 2026-08-28 13:08
+  - Host class(es): Linux ARM64/x64 and Windows ARM64/AMD64 profiler and preflight validation
+  - Summary: Enhanced Linux native hardware discovery across DRM sysfs (`/sys/class/drm`), PCI bus sysfs (`/sys/bus/pci/devices`), and native `lspci`, expanded OpenCL detection to search `ctypes.util.find_library("OpenCL")`, multiarch distro paths (`/usr/lib/wsl/lib`, `/usr/lib/aarch64-linux-gnu`, `/usr/lib64`), and `clinfo`, enabling `linux-arm64-gpu` (`opencl:adreno`) acceleration recognition across bare-metal Linux and WSL2.
+  - Scope: `backend/src/awf/hardware/profiler.py`, `backend/src/awf/hardware/preflight.py`, `backend/tests/integration/test_hardware_profiler.py`, `CHANGE_LOG.md`.
+  - Validation: Ruff lint checks passed cleanly; backend unit tests passed (`326 passed`); hardware profiler integration tests passed (`34 passed`); `git diff --check` passed.
+  - Notes: Confirms that Windows CIM is never executed under Linux/WSL and that Linux hardware discovery relies entirely on native Linux sysfs, PCI, and CLI probes.
 
 - Timestamp: 2026-08-28 10:18
   - Host class(es): Windows AMD64 and Linux/WSL2 provisioning and documentation validation

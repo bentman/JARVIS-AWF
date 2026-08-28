@@ -14,6 +14,7 @@ that made the call, not here.
 """
 
 import ctypes
+import ctypes.util
 import importlib
 import os
 import platform
@@ -239,7 +240,24 @@ def _opencl_platform_count() -> int:
     Runtime publishes no execution provider - so this is probed directly
     rather than inferred from a device name.
     """
-    library_names = ("OpenCL.dll",) if platform.system() == "Windows" else ("libOpenCL.so.1", "libOpenCL.so")
+    library_names = ["OpenCL.dll"] if platform.system() == "Windows" else ["libOpenCL.so.1", "libOpenCL.so"]
+    if platform.system() == "Linux":
+        found = ctypes.util.find_library("OpenCL")
+        if found and found not in library_names:
+            library_names.insert(0, found)
+        for extra in (
+            "/usr/lib/wsl/lib/libOpenCL.so.1",
+            "/usr/lib/wsl/lib/libOpenCL.so",
+            "/usr/lib/aarch64-linux-gnu/libOpenCL.so.1",
+            "/usr/lib/aarch64-linux-gnu/libOpenCL.so",
+            "/usr/lib/x86_64-linux-gnu/libOpenCL.so.1",
+            "/usr/lib/x86_64-linux-gnu/libOpenCL.so",
+            "/usr/lib64/libOpenCL.so.1",
+            "/usr/lib/libOpenCL.so.1",
+        ):
+            if Path(extra).exists() and extra not in library_names:
+                library_names.insert(0, extra)
+
     for name in library_names:
         try:
             library = ctypes.CDLL(name)
@@ -256,7 +274,24 @@ def _opencl_platform_count() -> int:
 
 
 def _opencl_qualcomm_platform_present() -> bool:
-    library_names = ("OpenCL.dll",) if platform.system() == "Windows" else ("libOpenCL.so.1", "libOpenCL.so")
+    library_names = ["OpenCL.dll"] if platform.system() == "Windows" else ["libOpenCL.so.1", "libOpenCL.so"]
+    if platform.system() == "Linux":
+        found = ctypes.util.find_library("OpenCL")
+        if found and found not in library_names:
+            library_names.insert(0, found)
+        for extra in (
+            "/usr/lib/wsl/lib/libOpenCL.so.1",
+            "/usr/lib/wsl/lib/libOpenCL.so",
+            "/usr/lib/aarch64-linux-gnu/libOpenCL.so.1",
+            "/usr/lib/aarch64-linux-gnu/libOpenCL.so",
+            "/usr/lib/x86_64-linux-gnu/libOpenCL.so.1",
+            "/usr/lib/x86_64-linux-gnu/libOpenCL.so",
+            "/usr/lib64/libOpenCL.so.1",
+            "/usr/lib/libOpenCL.so.1",
+        ):
+            if Path(extra).exists() and extra not in library_names:
+                library_names.insert(0, extra)
+
     for name in library_names:
         try:
             library = ctypes.CDLL(name)
@@ -285,6 +320,17 @@ def _opencl_qualcomm_platform_present() -> bool:
                         return True
         except Exception:
             continue
+
+    if platform.system() == "Linux":
+        clinfo_cmd = shutil.which("clinfo")
+        if clinfo_cmd:
+            try:
+                res = subprocess.run([clinfo_cmd], capture_output=True, text=True, timeout=5)
+                if any(token in res.stdout.lower() for token in ("qualcomm", "adreno", "snapdragon")):
+                    return True
+            except Exception:
+                pass
+
     return False
 
 

@@ -35,6 +35,7 @@ Vocabulary note: architecture is normalized to this repo's `x64`/`arm64`
 """
 
 import ctypes
+import ctypes.util
 import hashlib
 import importlib
 import json
@@ -359,6 +360,7 @@ def _gpu_from_windows_cim() -> dict | None:
     except json.JSONDecodeError:
         return None
     items = [payload] if isinstance(payload, dict) else payload if isinstance(payload, list) else []
+    candidates = []
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -370,21 +372,43 @@ def _gpu_from_windows_cim() -> dict | None:
         # 4GB - recorded with its source so a consumer can weigh it, never
         # silently trusted as exact.
         vram_gb = _bytes_to_gb(adapter_ram) if isinstance(adapter_ram, (int, float)) else None
-        return {
+        vendor = _normalize_gpu_vendor(name)
+        candidates.append({
             "gpu_available": True,
             "gpu_name": name,
-            "gpu_vendor": _normalize_gpu_vendor(name) or "unknown",
+            "gpu_vendor": vendor or "unknown",
             "gpu_vram_gb": vram_gb,
             "gpu_vram_source": "windows-cim",
-        }
-    return None
+        })
+    # Prefer recognized physical hardware vendors over generic/remote display adapters
+    for candidate in candidates:
+        if candidate["gpu_vendor"] != "unknown":
+            return candidate
+    return candidates[0] if candidates else None
 
 
 _QUALCOMM_VENDOR_IDS = {"0x17cb", "0x5143"}
 
 
 def _opencl_qualcomm_name() -> str | None:
-    library_names = ("OpenCL.dll",) if platform.system() == "Windows" else ("libOpenCL.so.1", "libOpenCL.so")
+    library_names = ["OpenCL.dll"] if platform.system() == "Windows" else ["libOpenCL.so.1", "libOpenCL.so"]
+    if platform.system() == "Linux":
+        found = ctypes.util.find_library("OpenCL")
+        if found and found not in library_names:
+            library_names.insert(0, found)
+        for extra in (
+            "/usr/lib/wsl/lib/libOpenCL.so.1",
+            "/usr/lib/wsl/lib/libOpenCL.so",
+            "/usr/lib/aarch64-linux-gnu/libOpenCL.so.1",
+            "/usr/lib/aarch64-linux-gnu/libOpenCL.so",
+            "/usr/lib/x86_64-linux-gnu/libOpenCL.so.1",
+            "/usr/lib/x86_64-linux-gnu/libOpenCL.so",
+            "/usr/lib64/libOpenCL.so.1",
+            "/usr/lib/libOpenCL.so.1",
+        ):
+            if Path(extra).exists() and extra not in library_names:
+                library_names.insert(0, extra)
+
     for name in library_names:
         try:
             library = ctypes.CDLL(name)
@@ -413,6 +437,12 @@ def _opencl_qualcomm_name() -> str | None:
                         return text
         except Exception:
             continue
+
+    if platform.system() == "Linux":
+        clinfo_out = _run_command(["clinfo"])
+        if clinfo_out and any(token in clinfo_out.lower() for token in ("qualcomm", "adreno", "snapdragon")):
+            return "Qualcomm Adreno"
+
     return None
 
 
@@ -430,32 +460,72 @@ def _gpu_from_opencl() -> dict | None:
 
 
 def _gpu_from_linux_sysfs() -> dict | None:
-    drm_root = Path("/sys/class/drm")
-    try:
-        cards = sorted(p for p in drm_root.glob("card[0-9]*") if (p / "device/vendor").is_file())
-    except OSError:
-        return None
     pci_vendors = {
         "0x10de": "nvidia",
         "0x1002": "amd",
         "0x8086": "intel",
         **{v: "qualcomm" for v in _QUALCOMM_VENDOR_IDS},
     }
-    for card in cards:
-        try:
-            vendor_id = (card / "device/vendor").read_text(encoding="utf-8").strip().lower()
-        except OSError:
-            continue
-        vendor = pci_vendors.get(vendor_id)
-        if vendor is None:
-            continue
-        return {
-            "gpu_available": True,
-            "gpu_name": f"{vendor} ({vendor_id})",
-            "gpu_vendor": vendor,
-            "gpu_vram_gb": None,
-            "gpu_vram_source": "linux-sysfs-drm",
-        }
+
+    # 1. DRM cards sysfs
+    drm_root = Path("/sys/class/drm")
+    try:
+        cards = sorted(p for p in drm_root.glob("card[0-9]*") if (p / "device/vendor").is_file())
+        for card in cards:
+            try:
+                vendor_id = (card / "device/vendor").read_text(encoding="utf-8").strip().lower()
+            except OSError:
+                continue
+            vendor = pci_vendors.get(vendor_id)
+            if vendor is not None:
+                return {
+                    "gpu_available": True,
+                    "gpu_name": f"{vendor} ({vendor_id})",
+                    "gpu_vendor": vendor,
+                    "gpu_vram_gb": None,
+                    "gpu_vram_source": "linux-sysfs-drm",
+                }
+    except OSError:
+        pass
+
+    # 2. PCI devices sysfs (display controller class 0x03)
+    pci_root = Path("/sys/bus/pci/devices")
+    try:
+        for dev in sorted(pci_root.glob("*")):
+            try:
+                pci_class = (dev / "class").read_text(encoding="utf-8").strip().lower()
+                vendor_id = (dev / "vendor").read_text(encoding="utf-8").strip().lower()
+            except OSError:
+                continue
+            if pci_class.startswith("0x03"):
+                vendor = pci_vendors.get(vendor_id) or _normalize_gpu_vendor(vendor_id)
+                if vendor is not None:
+                    return {
+                        "gpu_available": True,
+                        "gpu_name": f"{vendor} ({vendor_id})",
+                        "gpu_vendor": vendor,
+                        "gpu_vram_gb": None,
+                        "gpu_vram_source": "linux-sysfs-pci",
+                    }
+    except OSError:
+        pass
+
+    # 3. lspci native Linux CLI
+    lspci_out = _run_command(["lspci", "-nn"])
+    if lspci_out:
+        for line in lspci_out.splitlines():
+            line_lower = line.lower()
+            if any(k in line_lower for k in ("vga compatible controller", "3d controller", "display controller")):
+                vendor = _normalize_gpu_vendor(line)
+                if vendor:
+                    return {
+                        "gpu_available": True,
+                        "gpu_name": line.split(":")[-1].strip() if ":" in line else line.strip(),
+                        "gpu_vendor": vendor,
+                        "gpu_vram_gb": None,
+                        "gpu_vram_source": "linux-lspci",
+                    }
+
     return None
 
 

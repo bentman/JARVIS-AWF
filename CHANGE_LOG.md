@@ -19,11 +19,11 @@
 
 ## Change Entries
 
-- Timestamp: 2026-08-28 13:08
+- Timestamp: 2026-08-28 13:48
   - Host class(es): Linux ARM64/x64 and Windows ARM64/AMD64 profiler and preflight validation
-  - Summary: Enhanced Linux native hardware discovery across DRM sysfs (`/sys/class/drm`), PCI bus sysfs (`/sys/bus/pci/devices`), and native `lspci`, expanded OpenCL detection to search `ctypes.util.find_library("OpenCL")`, multiarch distro paths (`/usr/lib/wsl/lib`, `/usr/lib/aarch64-linux-gnu`, `/usr/lib64`), and `clinfo`, enabling `linux-arm64-gpu` (`opencl:adreno`) acceleration recognition across bare-metal Linux and WSL2.
+  - Summary: Enhanced Linux native hardware discovery across DRM sysfs (`/sys/class/drm`), PCI bus sysfs (`/sys/bus/pci/devices`), and native `lspci`, expanded OpenCL detection to search `ctypes.util.find_library("OpenCL")`, multiarch distro paths (`/usr/lib/wsl/lib`, `/usr/lib/aarch64-linux-gnu`, `/usr/lib64`), and `clinfo`, enabling `linux-arm64-gpu` (`opencl:adreno`) acceleration recognition across bare-metal Linux and WSL2. Refined `detect_cuda_info()` to probe `CUDA_HOME`/`CUDA_PATH`, `/usr/local/cuda` active alternatives, and versioned `/usr/local/cuda-*` installations before falling back to system PATH `nvcc` and `nvidia-smi` header, correctly resolving operator-configured toolkit versions (e.g. CUDA 12.4/13.3) over legacy base distro packages.
   - Scope: `backend/src/awf/hardware/profiler.py`, `backend/src/awf/hardware/preflight.py`, `backend/tests/integration/test_hardware_profiler.py`, `CHANGE_LOG.md`.
-  - Validation: Ruff lint checks passed cleanly; backend unit tests passed (`326 passed`); hardware profiler integration tests passed (`34 passed`); `git diff --check` passed.
+  - Validation: Ruff lint checks passed cleanly; backend unit tests passed (`326 passed`); hardware profiler integration tests passed (`35 passed`); `git diff --check` passed.
   - Notes: Confirms that Windows CIM is never executed under Linux/WSL and that Linux hardware discovery relies entirely on native Linux sysfs, PCI, and CLI probes.
 
 - Timestamp: 2026-08-28 10:18

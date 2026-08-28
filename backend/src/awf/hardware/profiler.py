@@ -558,14 +558,40 @@ def detect_gpu_info() -> dict:
 
 
 def detect_cuda_info() -> dict:
-    nvcc = _run_command(["nvcc", "--version"])
-    if nvcc:
-        release_match = re.search(r"release\s+([\d.]+)", nvcc, re.IGNORECASE)
-        if release_match:
-            return {"cuda_available": True, "cuda_version": release_match.group(1)}
-        release_line = next((line.strip() for line in nvcc.splitlines() if "release" in line.lower()), None)
-        if release_line:
-            return {"cuda_available": True, "cuda_version": release_line}
+    nvcc_candidates: list[str] = []
+    for env_var in ("CUDA_HOME", "CUDA_PATH"):
+        val = os.environ.get(env_var)
+        if val:
+            exe_name = "nvcc.exe" if platform.system() == "Windows" else "nvcc"
+            nvcc_candidates.append(str(Path(val) / "bin" / exe_name))
+
+    if platform.system() == "Linux":
+        nvcc_candidates.append("/usr/local/cuda/bin/nvcc")
+        try:
+            usr_local = Path("/usr/local")
+            versioned = sorted(
+                usr_local.glob("cuda-[0-9]*"),
+                key=lambda p: [int(x) if x.isdigit() else 0 for x in p.name.replace("cuda-", "").split(".")],
+                reverse=True,
+            )
+            for p in versioned:
+                nvcc_candidates.append(str(p / "bin" / "nvcc"))
+        except OSError:
+            pass
+
+    nvcc_candidates.append("nvcc")
+
+    for candidate in nvcc_candidates:
+        if candidate != "nvcc" and not Path(candidate).exists():
+            continue
+        nvcc_out = _run_command([candidate, "--version"])
+        if nvcc_out:
+            release_match = re.search(r"release\s+([\d.]+)", nvcc_out, re.IGNORECASE)
+            if release_match:
+                return {"cuda_available": True, "cuda_version": release_match.group(1)}
+            release_line = next((line.strip() for line in nvcc_out.splitlines() if "release" in line.lower()), None)
+            if release_line:
+                return {"cuda_available": True, "cuda_version": release_line}
 
     smi_output = _run_command(["nvidia-smi"])
     if smi_output:

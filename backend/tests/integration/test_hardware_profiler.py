@@ -306,3 +306,20 @@ def test_gpu_from_windows_cim_prefers_recognized_vendor(monkeypatch):
     assert result is not None
     assert result["gpu_name"] == "Qualcomm Adreno(TM) GPU"
     assert result["gpu_vendor"] == "qualcomm"
+
+
+def test_detect_cuda_info_prefers_usr_local_cuda_over_distro_nvcc(monkeypatch):
+    import awf.hardware.profiler as profiler
+
+    monkeypatch.setattr(profiler.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(profiler.Path, "exists", lambda self: True)
+
+    def fake_run(command, timeout=10):
+        if command[0] == "/usr/local/cuda/bin/nvcc":
+            return "nvcc: NVIDIA (R) Cuda compiler driver\nCuda compilation tools, release 12.4, V12.4.131\n"
+        if command[0] == "nvcc":
+            return "nvcc: NVIDIA (R) Cuda compiler driver\nCuda compilation tools, release 11.5, V11.5.119\n"
+        return ""
+
+    monkeypatch.setattr(profiler, "_run_command", fake_run)
+    assert detect_cuda_info() == {"cuda_available": True, "cuda_version": "12.4"}

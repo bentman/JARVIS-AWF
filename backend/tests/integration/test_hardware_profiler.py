@@ -14,6 +14,7 @@ from awf.hardware.profiler import (
     _normalize_arch,
     _powershell,
     collect_inventory,
+    detect_cuda_info,
     detect_gpu_info,
     detect_npu_info,
     reset_inventory_cache,
@@ -267,3 +268,25 @@ def test_a_raising_detector_lands_in_detector_errors_without_failing_the_profile
     assert "gpu" in inventory.detector_errors
     assert "boom" in inventory.detector_errors["gpu"]
     assert inventory.gpu_available is False
+
+
+def test_windows_npu_does_not_false_positive_on_input_device(monkeypatch):
+    import awf.hardware.profiler as profiler
+
+    monkeypatch.setattr(profiler.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(profiler.platform, "processor", lambda: "Intel64 Family 6 Model 151 Stepping 2, GenuineIntel")
+    monkeypatch.setattr(profiler, "_powershell", lambda script: "")
+
+    assert detect_npu_info() == {"npu_available": False, "npu_vendor": None}
+
+
+def test_detect_cuda_info_prefers_nvcc_version(monkeypatch):
+    import awf.hardware.profiler as profiler
+
+    def fake_run(command, timeout=10):
+        if command[0] == "nvcc":
+            return "nvcc: NVIDIA (R) Cuda compiler driver\nCuda compilation tools, release 13.3, V13.3.33\n"
+        return ""
+
+    monkeypatch.setattr(profiler, "_run_command", fake_run)
+    assert detect_cuda_info() == {"cuda_available": True, "cuda_version": "13.3"}

@@ -67,9 +67,48 @@ if ((Test-Path $PyVenvCfg) -and (Test-Path (Join-Path $VenvRoot "bin\python"))) 
     }
 }
 
+function Resolve-HostPythonCommand {
+    $Candidates = @(
+        @("py"),
+        @("py", "-3.14"),
+        @("py", "-3.13"),
+        @("py", "-3.12"),
+        @("python"),
+        @("python3"),
+        @("python3.14"),
+        @("python3.13"),
+        @("python3.12")
+    )
+    foreach ($Cmd in $Candidates) {
+        $Exe = $Cmd[0]
+        $Args = if ($Cmd.Length -gt 1) { $Cmd[1..($Cmd.Length-1)] } else { @() }
+        if (Get-Command $Exe -ErrorAction SilentlyContinue) {
+            try {
+                $VersionOutput = & $Exe @Args -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+                if ($LASTEXITCODE -eq 0 -and $VersionOutput) {
+                    $Parts = $VersionOutput.Trim().Split('.')
+                    if ($Parts.Length -ge 2) {
+                        $Major = [int]$Parts[0]
+                        $Minor = [int]$Parts[1]
+                        if ($Major -eq 3 -and $Minor -ge 12 -and $Minor -lt 15) {
+                            return ,$Cmd
+                        }
+                    }
+                }
+            } catch {
+                # Continue trying next candidate
+            }
+        }
+    }
+    throw "No compatible Python executable (>=3.12,<3.15) found. Install Python 3.12, 3.13, or 3.14 (ARM64 native from python.org on ARM64 hosts)."
+}
+
 if (-not (Test-Path $VenvPython)) {
-    Invoke-Step "Create backend venv" {
-        Invoke-Native "py" @("-3.12", "-m", "venv", (Join-Path $RepoRoot "backend\.venv"))
+    $HostPythonCmd = Resolve-HostPythonCommand
+    $HostExe = $HostPythonCmd[0]
+    $HostArgs = if ($HostPythonCmd.Length -gt 1) { $HostPythonCmd[1..($HostPythonCmd.Length-1)] } else { @() }
+    Invoke-Step "Create backend venv using $($HostPythonCmd -join ' ')" {
+        Invoke-Native $HostExe ($HostArgs + @("-m", "venv", (Join-Path $RepoRoot "backend\.venv")))
     }
 }
 

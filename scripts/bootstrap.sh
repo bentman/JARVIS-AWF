@@ -39,9 +39,30 @@ if [[ -f "$pyvenv_cfg" && -x "$venv_root/Scripts/python.exe" ]]; then
   fi
 fi
 
+resolve_host_python() {
+  local candidates=("python3" "python" "python3.14" "python3.13" "python3.12")
+  for cmd in "${candidates[@]}"; do
+    if command -v "$cmd" >/dev/null 2>&1; then
+      local ver
+      ver="$("$cmd" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)"
+      if [[ -n "$ver" ]]; then
+        local major="${ver%%.*}"
+        local minor="${ver#*.}"
+        if [[ "$major" -eq 3 && "$minor" -ge 12 && "$minor" -lt 15 ]]; then
+          echo "$cmd"
+          return 0
+        fi
+      fi
+    fi
+  done
+  echo "No compatible Python executable (>=3.12,<3.15) found. Install Python 3.12, 3.13, or 3.14." >&2
+  return 1
+}
+
 if [[ ! -x "$venv_python" ]]; then
-  step "Create backend venv"
-  python3.12 -m venv "$repo_root/backend/.venv"
+  host_python="$(resolve_host_python)"
+  step "Create backend venv using $host_python"
+  "$host_python" -m venv "$repo_root/backend/.venv"
 fi
 
 step "Upgrade pip"

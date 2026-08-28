@@ -40,6 +40,7 @@ import importlib
 import json
 import os
 import platform
+import re
 import sqlite3
 import subprocess
 from dataclasses import asdict, dataclass, field
@@ -487,14 +488,24 @@ def detect_gpu_info() -> dict:
 
 
 def detect_cuda_info() -> dict:
+    nvcc = _run_command(["nvcc", "--version"])
+    if nvcc:
+        release_match = re.search(r"release\s+([\d.]+)", nvcc, re.IGNORECASE)
+        if release_match:
+            return {"cuda_available": True, "cuda_version": release_match.group(1)}
+        release_line = next((line.strip() for line in nvcc.splitlines() if "release" in line.lower()), None)
+        if release_line:
+            return {"cuda_available": True, "cuda_version": release_line}
+
+    smi_output = _run_command(["nvidia-smi"])
+    if smi_output:
+        cuda_match = re.search(r"CUDA(?:\s+UMD)?\s+Version:\s*([\d.]+)", smi_output, re.IGNORECASE)
+        if cuda_match:
+            return {"cuda_available": True, "cuda_version": cuda_match.group(1)}
+
     driver = _run_command(["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"])
     if driver:
         return {"cuda_available": True, "cuda_version": driver.splitlines()[0].strip() or None}
-
-    nvcc = _run_command(["nvcc", "--version"])
-    if nvcc:
-        release_line = next((line.strip() for line in nvcc.splitlines() if "release" in line.lower()), None)
-        return {"cuda_available": True, "cuda_version": release_line}
 
     return {"cuda_available": False, "cuda_version": None}
 
@@ -550,7 +561,7 @@ def detect_npu_info() -> dict:
 
     npu_names = _powershell(
         "Get-CimInstance Win32_PnPEntity | "
-        "Where-Object { $_.Name -match 'Neural|NPU|Hexagon|AI Boost|AI Accelerator' } | "
+        "Where-Object { $_.Name -match '\\b(Neural|NPU|Hexagon|AI Boost|AI Accelerator)\\b' } | "
         "Select-Object -ExpandProperty Name"
     )
     haystack = f"{processor} {linux_cpuinfo} {npu_names}".lower()

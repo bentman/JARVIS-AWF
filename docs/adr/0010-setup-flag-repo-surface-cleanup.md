@@ -45,7 +45,7 @@ re-include block refers to "tree roots documented in repo_tree.md".
 
 **The MCP registry directory is lowercase.** `config/app_registry/mcp/` and
 `data/registry/mcp/` on disk, `"mcp"` as the kind string in
-`resolve.resolve_registry_object` and `core_ops.op_registry_publish`, and
+`resolve.resolve_registry_object` and `awf.ops.registry.op_registry_publish`, and
 `/data/registry/mcp/` in `.gitignore`. The repository layout spells it
 `MCP`.
 

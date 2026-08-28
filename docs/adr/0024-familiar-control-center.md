@@ -16,6 +16,16 @@ other request lines. `awf/events.subscribe` is implemented over this
 request/response transport as a non-streaming event snapshot
 (`streaming: false`), exposed through the shared protocol client.
 
+Alignment update, 2026-08-14: the JSON-RPC surface is now declared in
+`awf.protocol.methods` and generated into generated-only mirrors:
+`awf.server.protocol_generated` for stdio dispatch and
+`frontend/shared/src/protocol.generated.ts` for `MethodName` plus wrapper
+methods. `frontend/shared/src/types.ts` keeps hand-written result interfaces
+and re-exports `MethodName`; `frontend/shared/src/client.ts` keeps transport
+and error handling while composing the generated wrappers. Backend operation
+handlers live in `awf.ops.*`; `awf.cli.core_ops` is a compatibility re-export
+surface only.
+
 ## Context
 
 `docs/archives/ProjectVisionAWF.md` defines the seventh promise as a familiar
@@ -38,7 +48,7 @@ The current codebase already has useful pieces:
   improvement-proposal summaries.
 - `frontend/gui/src/main/ipc.ts` and `frontend/gui/src/preload/preload.ts`
   keep Electron renderer access behind narrow IPC methods.
-- `backend/src/awf/cli/core_ops.py` already has operations for runs,
+- `backend/src/awf/ops/` has operations for runs,
   approvals, artifacts, registry objects, memory, sessions, episodic timeline,
   voice sessions, and LLM server/model state.
 
@@ -158,7 +168,8 @@ and leaves a clean seam for later streaming.
 
 ### Backend core and JSON-RPC
 
-- Add read-only control-center aggregation in `backend/src/awf/cli/core_ops.py`:
+- Add read-only control-center aggregation in `backend/src/awf/ops/control.py`
+  and `backend/src/awf/ops/system.py`:
   - `op_control_center_summary`
   - `op_control_center_run_detail`
   - `op_system_readiness`

@@ -26,10 +26,3 @@ class PromptEnvelope:
     segments: tuple[PromptSegment, ...] = ()
     example_messages: tuple[dict[str, str], ...] = ()
     generation: dict = field(default_factory=dict)
-
-    def with_segment(self, segment: PromptSegment) -> "PromptEnvelope":
-        return PromptEnvelope(
-            segments=(*self.segments, segment),
-            example_messages=self.example_messages,
-            generation=dict(self.generation),
-        )

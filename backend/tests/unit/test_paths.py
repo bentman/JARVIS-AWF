@@ -1,6 +1,5 @@
 from awf.paths import (
     config_registry_dir,
-    config_voice_dir,
     data_registry_dir,
     db_path,
     env_path,
@@ -28,10 +27,6 @@ def test_config_registry_dir(tmp_path):
 
 def test_data_registry_dir(tmp_path):
     assert data_registry_dir(tmp_path) == tmp_path / "data" / "registry"
-
-
-def test_config_voice_dir(tmp_path):
-    assert config_voice_dir(tmp_path) == tmp_path / "config" / "voice"
 
 
 def test_sandbox_dir(tmp_path):

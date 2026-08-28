@@ -5,7 +5,6 @@ import os
 import shutil
 import sqlite3
 import subprocess
-import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -23,6 +22,7 @@ from awf.machine.policy import (
     validate_url,
 )
 from awf.paths import artifacts_dir
+from awf.pyexec import repo_python_executable_or_current
 from awf.registry.capability_record import CapabilityRecord
 
 
@@ -30,16 +30,6 @@ class MachineActivityError(RuntimeError):
     def __init__(self, message: str, *, failure_class: str = DEFAULT_FAILURE_CLASS):
         super().__init__(message)
         self.failure_class = failure_class
-
-
-def _repo_python_executable(repo_root: Path) -> str:
-    for candidate in (
-        repo_root / "backend" / ".venv" / "Scripts" / "python.exe",
-        repo_root / "backend" / ".venv" / "bin" / "python",
-    ):
-        if candidate.is_file():
-            return str(candidate)
-    return sys.executable
 
 
 def _execution_argv(repo_root: Path, argv: list[str]) -> list[str]:
@@ -57,7 +47,7 @@ def _execution_argv(repo_root: Path, argv: list[str]) -> list[str]:
         "backend/.venv/bin/python",
         "backend/.venv/scripts/python.exe",
     }:
-        return [_repo_python_executable(repo_root), *argv[1:]]
+        return [repo_python_executable_or_current(repo_root), *argv[1:]]
     return argv
 
 
@@ -196,7 +186,12 @@ def _execute(
 def _fs_read(repo_root: Path, worktree: Path, run_id: str, args: dict, capability: CapabilityRecord) -> dict:
     constraints = constraint_family(capability.constraints, "filesystem")
     path = resolve_allowed_path(
-        repo_root=repo_root, worktree=worktree, run_id=run_id, relative_or_absolute=args["path"], constraints=constraints, must_exist=True
+        repo_root=repo_root,
+        worktree=worktree,
+        run_id=run_id,
+        relative_or_absolute=args["path"],
+        constraints=constraints,
+        must_exist=True,
     )
     max_bytes = int(args.get("maxBytes", constraints.get("maxBytes", 262144)))
     data = path.read_bytes()
@@ -209,12 +204,18 @@ def _fs_read(repo_root: Path, worktree: Path, run_id: str, args: dict, capabilit
 def _fs_write(repo_root: Path, worktree: Path, run_id: str, args: dict, capability: CapabilityRecord) -> dict:
     constraints = constraint_family(capability.constraints, "filesystem")
     path = resolve_allowed_path(
-        repo_root=repo_root, worktree=worktree, run_id=run_id, relative_or_absolute=args["path"], constraints=constraints
+        repo_root=repo_root,
+        worktree=worktree,
+        run_id=run_id,
+        relative_or_absolute=args["path"],
+        constraints=constraints,
     )
     data = args.get("content", "").encode(args.get("encoding", "utf-8"))
     max_bytes = int(args.get("maxBytes", constraints.get("maxBytes", 262144)))
     if len(data) > max_bytes:
-        raise MachineActivityError(f"content exceeds maxBytes ({len(data)} > {max_bytes})", failure_class="POLICY_DENIED")
+        raise MachineActivityError(
+            f"content exceeds maxBytes ({len(data)} > {max_bytes})", failure_class="POLICY_DENIED"
+        )
     tmp = path.with_name(f".{path.name}.awf-tmp")
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp.write_bytes(data)
@@ -225,7 +226,12 @@ def _fs_write(repo_root: Path, worktree: Path, run_id: str, args: dict, capabili
 def _fs_delete(repo_root: Path, worktree: Path, run_id: str, args: dict, capability: CapabilityRecord) -> dict:
     constraints = constraint_family(capability.constraints, "filesystem")
     path = resolve_allowed_path(
-        repo_root=repo_root, worktree=worktree, run_id=run_id, relative_or_absolute=args["path"], constraints=constraints, must_exist=True
+        repo_root=repo_root,
+        worktree=worktree,
+        run_id=run_id,
+        relative_or_absolute=args["path"],
+        constraints=constraints,
+        must_exist=True,
     )
     trash_dir = worktree / ".awf-trash"
     trash_dir.mkdir(exist_ok=True)
@@ -256,7 +262,12 @@ def _command_run(
     validate_command(argv=argv, cwd=cwd, worktree=worktree, constraints=constraints)
     timeout = int(constraints["timeoutSeconds"])
     env = {"PATH": os.environ.get("PATH", os.defpath)}
-    result = subprocess.run(_execution_argv(repo_root, argv), cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
+    try:
+        result = subprocess.run(
+            _execution_argv(repo_root, argv), cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise MachineActivityError(f"command timed out after {timeout}s", failure_class="TIMEOUT") from exc
     stdout = result.stdout.encode("utf-8")
     stderr = result.stderr.encode("utf-8")
     max_output = int(constraints.get("maxOutputBytes", 65536))

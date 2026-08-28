@@ -92,3 +92,65 @@ def test_profile_uses_the_same_inventory_selection_as_awf_setup(repo_root, monke
     assert "host_class_id=linux-x64-cuda" in output
     assert "hardware_provisioning_extra=hw-ort-cuda" in output
     assert "runtime_readiness_profile_id=linux-x64-cpu" in output
+
+
+def test_focus_runs_path_target_through_shared_report_contract(repo_root, monkeypatch):
+    validator = _load_validator(repo_root)
+    captured = {}
+
+    def fake_run_test_command(command_name, pytest_args):
+        captured["command_name"] = command_name
+        captured["pytest_args"] = pytest_args
+        return validator.EXIT_PASS
+
+    monkeypatch.setattr(validator, "_run_test_command", fake_run_test_command)
+
+    result = validator.cmd_focus(type("Args", (), {"target": "backend/tests/unit/test_validate_backend_script.py"})())
+
+    assert result == validator.EXIT_PASS
+    assert captured == {
+        "command_name": "focus",
+        "pytest_args": ["backend/tests/unit/test_validate_backend_script.py"],
+    }
+
+
+def test_focus_runs_keyword_target_with_pytest_k(repo_root, monkeypatch):
+    validator = _load_validator(repo_root)
+    captured = {}
+    monkeypatch.setattr(
+        validator,
+        "_run_test_command",
+        lambda command_name, pytest_args: (
+            captured.update({"command_name": command_name, "pytest_args": pytest_args}) or validator.EXIT_PASS
+        ),
+    )
+
+    result = validator.cmd_focus(type("Args", (), {"target": "memory_sessions"})())
+
+    assert result == validator.EXIT_PASS
+    assert captured == {"command_name": "focus", "pytest_args": ["-k", "memory_sessions", "backend/tests"]}
+
+
+def test_ci_runs_protocol_precheck_before_lint(repo_root, monkeypatch):
+    validator = _load_validator(repo_root)
+    calls = []
+    monkeypatch.setattr(validator, "_run_ci_precheck_command", lambda: calls.append("precheck") or validator.EXIT_FAIL)
+    monkeypatch.setattr(validator, "_run_lint_command", lambda: calls.append("lint") or validator.EXIT_PASS)
+
+    assert validator.cmd_ci(None) == validator.EXIT_FAIL
+    assert calls == ["precheck"]
+
+
+def test_regression_is_broader_than_unit(repo_root, monkeypatch):
+    validator = _load_validator(repo_root)
+    captured = {}
+    monkeypatch.setattr(
+        validator,
+        "_run_test_command",
+        lambda command_name, pytest_args: (
+            captured.update({"command_name": command_name, "pytest_args": pytest_args}) or validator.EXIT_PASS
+        ),
+    )
+
+    assert validator.cmd_regression(None) == validator.EXIT_PASS
+    assert captured == {"command_name": "regression", "pytest_args": ["-m", "not live", "backend/tests"]}

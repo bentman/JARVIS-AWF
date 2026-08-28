@@ -64,8 +64,10 @@ from awf.events.writer import write_event
 from awf.guard.capability_guard import Decision, authorize
 from awf.isolation.scratch import scratch_path
 from awf.isolation.worktree import commit_all_changes
+from awf.machine.action import MachineAction, content_digest
+from awf.machine.artifacts import write_report_artifact
 from awf.mcp.render import RENDERERS
-from awf.paths import env_path
+from awf.paths import artifacts_dir, env_path
 from awf.registry.agent_manifest import SkillRef
 from awf.registry.capability_record import CapabilityRecord, load_capability_record
 from awf.registry.index import latest_version
@@ -78,6 +80,7 @@ from awf.secrets.store import get_secret
 
 AdapterFn = Callable[[AgentInvocation], AgentResult]
 GUARDED_MCP_ADAPTERS = {"copilot"}
+MAX_AGENT_RESULT_TEXT_CHARS = 8192
 
 AGENT_STATUS_FAILURE_CLASSES = {
     AgentStatus.FAILED: "TOOL_ERROR",
@@ -87,6 +90,202 @@ AGENT_STATUS_FAILURE_CLASSES = {
 
 class AgentStepError(StepFailure):
     pass
+
+
+def _agent_event(
+    conn: sqlite3.Connection,
+    *,
+    action: MachineAction,
+    reason_code: str,
+    actor: str,
+    approval_id: str | None = None,
+) -> None:
+    payload = {"machine_action": action.to_dict(), "machine_action_digest": action.digest}
+    if approval_id is not None:
+        payload["approval_id"] = approval_id
+    write_event(
+        conn,
+        run_id=action.run_id,
+        step_id=action.step_id,
+        new_status=reason_code,
+        actor=actor,
+        reason_code=reason_code,
+        payload_json=json.dumps(payload, sort_keys=True),
+    )
+
+
+def _build_agent_action(
+    *,
+    run_id: str,
+    step_id: str,
+    actor: str,
+    role: str | None,
+    capability: CapabilityRecord,
+    invocation: AgentInvocation,
+) -> MachineAction:
+    return MachineAction(
+        kind="agent_node",
+        run_id=run_id,
+        step_id=step_id,
+        node_id=step_id,
+        operation=capability.effects.operation,
+        capability_ref=capability.ref,
+        risk_class=capability.risk_class,
+        approval=capability.approval,
+        target={
+            "adapter": actor,
+            "objective_digest": content_digest(invocation.objective),
+            "role": role,
+        },
+    )
+
+
+def _approval_status(conn: sqlite3.Connection, *, action: MachineAction, actor: str) -> dict | None:
+    row = conn.execute("SELECT * FROM approvals WHERE step_id = ?", (action.step_id,)).fetchone()
+    if row is None:
+        return None
+    if row["action_digest"] != action.digest:
+        raise AgentStepError(
+            "approved action digest does not match current agent action", failure_class="POLICY_DENIED"
+        )
+    if row["status"] == "pending":
+        return {"waiting_input": True, "approval_id": row["approval_id"]}
+    if row["status"] == "rejected":
+        _agent_event(
+            conn, action=action, reason_code="machine_action_denied", actor=actor, approval_id=row["approval_id"]
+        )
+        raise AgentStepError(f"approval {row['approval_id']} was rejected", failure_class="APPROVAL_REJECTED")
+    return None
+
+
+def _ensure_pending_agent_approval(conn: sqlite3.Connection, *, action: MachineAction, actor: str) -> dict:
+    row = conn.execute("SELECT * FROM approvals WHERE step_id = ?", (action.step_id,)).fetchone()
+    if row is not None:
+        if row["action_digest"] != action.digest:
+            raise AgentStepError(
+                "pending approval digest does not match current agent action", failure_class="POLICY_DENIED"
+            )
+        return {"waiting_input": True, "approval_id": row["approval_id"]}
+
+    from awf.clock import utc_now_rfc3339
+    from awf.ids import uuid7
+
+    approval_id = uuid7()
+    now = utc_now_rfc3339()
+    conn.execute(
+        "INSERT INTO approvals (approval_id, run_id, step_id, action_digest, status, requested_at, risk_class) "
+        "VALUES (?, ?, ?, ?, 'pending', ?, ?)",
+        (approval_id, action.run_id, action.step_id, action.digest, now, action.risk_class),
+    )
+    conn.execute(
+        "UPDATE steps SET status = 'WAITING_APPROVAL', started_at = ? WHERE step_id = ?",
+        (now, action.step_id),
+    )
+    conn.execute(
+        "UPDATE runs SET status = 'WAITING_APPROVAL', updated_at = ? WHERE run_id = ?",
+        (now, action.run_id),
+    )
+    conn.commit()
+    _agent_event(
+        conn, action=action, reason_code="machine_action_waiting_approval", actor=actor, approval_id=approval_id
+    )
+    return {"waiting_input": True, "approval_id": approval_id}
+
+
+def _authorize_agent_or_wait(
+    conn: sqlite3.Connection,
+    *,
+    capability: CapabilityRecord | None,
+    agent_allowlist: list[str] | None,
+    run_id: str,
+    step_id: str,
+    actor: str,
+    role: str | None,
+    invocation: AgentInvocation,
+) -> dict | None:
+    if capability is None:
+        return None
+    action = _build_agent_action(
+        run_id=run_id,
+        step_id=step_id,
+        actor=actor,
+        role=role,
+        capability=capability,
+        invocation=invocation,
+    )
+    waiting = _approval_status(conn, action=action, actor=actor)
+    if waiting is not None:
+        return waiting
+    if conn.execute("SELECT 1 FROM approvals WHERE step_id = ?", (step_id,)).fetchone() is not None:
+        return None
+    decision = authorize(
+        conn,
+        capability=capability,
+        agent_allowlist=agent_allowlist if agent_allowlist is not None else [capability.ref],
+        run_id=run_id,
+        actor=actor,
+        step_id=step_id,
+        role=role,
+        payload_extra={"agent_action_digest": action.digest},
+    )
+    if decision == Decision.DENY:
+        _agent_event(conn, action=action, reason_code="machine_action_denied", actor=actor)
+        from awf.clock import utc_now_rfc3339
+
+        conn.execute(
+            "UPDATE steps SET status = 'FAILED', failure_class = 'POLICY_DENIED', ended_at = ? WHERE step_id = ?",
+            (utc_now_rfc3339(), step_id),
+        )
+        conn.commit()
+        raise AgentStepError(f"blocked by Capability Guard: {decision.value}", failure_class="POLICY_DENIED")
+    if decision == Decision.APPROVAL_REQUIRED:
+        return _ensure_pending_agent_approval(conn, action=action, actor=actor)
+    _agent_event(conn, action=action, reason_code="machine_action_allowed", actor=actor)
+    return None
+
+
+def _result_text(result: AgentResult) -> str:
+    for key in ("result_text", "result", "response", "text", "message"):
+        value = result.output.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    if result.output:
+        return json.dumps(result.output, sort_keys=True)
+    return ""
+
+
+def _agent_output(
+    conn: sqlite3.Connection, *, repo_root: Path | None, run_id: str, step_id: str, result: AgentResult
+) -> dict:
+    result_text = _result_text(result)
+    output = {
+        "status": result.status.value,
+        "termination_reason": result.termination_reason,
+        "result_text": result_text[:MAX_AGENT_RESULT_TEXT_CHARS],
+        "usage": result.usage,
+        "findings": list(result.findings),
+        "artifact_candidates": list(result.artifact_candidates),
+    }
+    if len(result_text) > MAX_AGENT_RESULT_TEXT_CHARS and repo_root is not None:
+        payload = json.dumps(
+            {
+                "result_text": result_text,
+                "output": result.output,
+                "usage": result.usage,
+                "findings": list(result.findings),
+                "artifact_candidates": list(result.artifact_candidates),
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+        output["output_artifact_id"] = write_report_artifact(
+            conn,
+            artifacts_root=artifacts_dir(repo_root),
+            run_id=run_id,
+            step_id=step_id,
+            payload=payload,
+            media_type="application/json",
+        )
+    return output
 
 
 def _is_trusted(conn: sqlite3.Connection, kind: str, name: str, version: str, source: str) -> bool:
@@ -104,7 +303,14 @@ def _is_trusted(conn: sqlite3.Connection, kind: str, name: str, version: str, so
 
 
 def _resolve_mcp_servers(
-    conn: sqlite3.Connection, repo_root: Path, mcp_refs: list[str], capability_refs: list[str] | None
+    conn: sqlite3.Connection,
+    repo_root: Path,
+    mcp_refs: list[str],
+    capability_refs: list[str] | None,
+    *,
+    run_id: str,
+    step_id: str,
+    actor: str,
 ):
     """Returns (servers, refs_with_digest) for the refs that pass the trust gate."""
     servers = []
@@ -112,12 +318,30 @@ def _resolve_mcp_servers(
     allowed_capability_refs = set(capability_refs or [])
     for ref in mcp_refs:
         name, _, version = ref.partition("@")
-        path, source = resolve_registry_object(repo_root, "mcp", name, version)
+        try:
+            path, source = resolve_registry_object(repo_root, "mcp", name, version)
+        except Exception as exc:
+            _mcp_ref_skipped(
+                conn, run_id=run_id, step_id=step_id, actor=actor, ref=ref, reason="unresolvable", error=str(exc)
+            )
+            continue
         if not _is_trusted(conn, "mcp", name, version, source):
+            _mcp_ref_skipped(conn, run_id=run_id, step_id=step_id, actor=actor, ref=ref, reason="untrusted")
             continue
         server = load_mcp_server(path)
-        tools, capability_records = _allowed_mcp_tools(repo_root, server.name, server.tools, allowed_capability_refs)
+        tools, capability_records, skipped_tools = _allowed_mcp_tools(
+            repo_root, server.name, server.tools, allowed_capability_refs
+        )
         if server.tools and tuple(tools) != server.tools:
+            _mcp_ref_skipped(
+                conn,
+                run_id=run_id,
+                step_id=step_id,
+                actor=actor,
+                ref=ref,
+                reason="disallowed_tools",
+                tools=skipped_tools,
+            )
             continue
         servers.append(dataclasses.replace(server, tools=tuple(tools)))
         refs_with_digest.append(
@@ -131,23 +355,54 @@ def _resolve_mcp_servers(
     return servers, refs_with_digest
 
 
+def _mcp_ref_skipped(
+    conn: sqlite3.Connection,
+    *,
+    run_id: str,
+    step_id: str,
+    actor: str,
+    ref: str,
+    reason: str,
+    error: str | None = None,
+    tools: list[dict] | None = None,
+) -> None:
+    payload = {"ref": ref, "reason": reason}
+    if error:
+        payload["error"] = error
+    if tools:
+        payload["tools"] = tools
+    write_event(
+        conn,
+        run_id=run_id,
+        step_id=step_id,
+        new_status="mcp_ref_skipped",
+        actor=actor,
+        reason_code="mcp_ref_skipped",
+        payload_json=json.dumps(payload, sort_keys=True),
+    )
+
+
 def _allowed_mcp_tools(repo_root: Path, provider: str, tools: tuple[str, ...], allowed_refs: set[str]):
     allowed_tools = []
     capability_records = []
+    skipped = []
     for tool in tools:
         try:
             version = latest_version(repo_root, "capabilities", tool)
             cap_path, _source = resolve_registry_object(repo_root, "capabilities", tool, version)
             capability = load_capability_record(cap_path)
-        except Exception:
+        except Exception as exc:
+            skipped.append({"tool": tool, "reason": "unresolvable", "error": str(exc)})
             continue
         if capability.ref not in allowed_refs:
+            skipped.append({"tool": tool, "reason": "not_in_agent_allowlist", "capability_ref": capability.ref})
             continue
         if capability.identity.type != "mcp-tool" or capability.identity.provider != provider:
+            skipped.append({"tool": tool, "reason": "capability_provider_mismatch", "capability_ref": capability.ref})
             continue
         allowed_tools.append(tool)
         capability_records.append(capability)
-    return allowed_tools, capability_records
+    return allowed_tools, capability_records, skipped
 
 
 def _resolve_secrets(conn: sqlite3.Connection, repo_root: Path, servers) -> dict[str, str]:
@@ -181,7 +436,15 @@ def _apply_mcp(
             failure_class="POLICY_DENIED",
         )
 
-    servers, refs_with_digest = _resolve_mcp_servers(conn, repo_root, mcp_refs, capability_refs)
+    servers, refs_with_digest = _resolve_mcp_servers(
+        conn,
+        repo_root,
+        mcp_refs,
+        capability_refs,
+        run_id=run_id,
+        step_id=step_id,
+        actor=actor,
+    )
     if not servers:
         return invocation
 
@@ -292,10 +555,19 @@ def _codex_scratch_home_for_skills(
     for skill in skills:
         link_path = home_dir / "skills" / skill.name
         if not link_path.exists():
-            link_path.symlink_to(worktree_path / ".claude" / "skills" / skill.name)
+            source = worktree_path / ".claude" / "skills" / skill.name
+            try:
+                link_path.symlink_to(source, target_is_directory=True)
+            except OSError:
+                shutil.copytree(source, link_path)
     real_auth = Path.home() / ".codex" / "auth.json"
     if real_auth.is_file():
-        (home_dir / "auth.json").write_bytes(real_auth.read_bytes())
+        auth_target = home_dir / "auth.json"
+        try:
+            auth_target.symlink_to(real_auth)
+        except OSError:
+            auth_target.write_bytes(real_auth.read_bytes())
+            auth_target.chmod(0o600)
     return home_dir
 
 
@@ -468,27 +740,23 @@ def run_agent_step(
     model_profile_ref: str | None = None,
     repo_root: Path | None = None,
 ) -> dict:
-    def fn(_payload: dict) -> dict:
-        if capability is not None:
-            # A real Agent Manifest's declared `capabilities` (ADR-0002) is
-            # the caller-supplied allowlist; a caller with no manifest to
-            # resolve (no `agentRef` on the node) falls back to a
-            # self-permitting singleton, matching pre-ADR-0002 behavior.
-            decision = authorize(
-                conn,
-                capability=capability,
-                agent_allowlist=agent_allowlist if agent_allowlist is not None else [capability.ref],
-                run_id=run_id,
-                actor=actor,
-                step_id=step_id,
-                role=role,
-            )
-            if decision != Decision.ALLOW:
-                raise AgentStepError(
-                    f"blocked by Capability Guard: {decision.value}",
-                    failure_class="POLICY_DENIED",
-                )
+    cached_row = conn.execute("SELECT status, output_json FROM steps WHERE step_id = ?", (step_id,)).fetchone()
+    cached_before = cached_row is not None and cached_row["status"] == "SUCCEEDED"
+    if not cached_before:
+        waiting = _authorize_agent_or_wait(
+            conn,
+            capability=capability,
+            agent_allowlist=agent_allowlist,
+            run_id=run_id,
+            step_id=step_id,
+            actor=actor,
+            role=role,
+            invocation=invocation,
+        )
+        if waiting is not None:
+            return waiting
 
+    def fn(_payload: dict) -> dict:
         compiled_persona = _resolve_persona(repo_root, persona_ref)
 
         skilled_invocation = _apply_skills(
@@ -529,7 +797,11 @@ def run_agent_step(
                 "run_id": run_id,
                 "step_id": step_id,
                 "actor": actor,
-                "agent_allowlist": agent_allowlist if agent_allowlist is not None else [capability.ref] if capability else [],
+                "agent_allowlist": agent_allowlist
+                if agent_allowlist is not None
+                else [capability.ref]
+                if capability
+                else [],
                 "role": role,
             }
             modeled_invocation = AgentInvocation(
@@ -549,12 +821,14 @@ def run_agent_step(
                 f"adapter did not complete: status={result.status.value} reason={result.termination_reason!r}",
                 failure_class=AGENT_STATUS_FAILURE_CLASSES.get(result.status, "INTERNAL"),
             )
-        output = {"status": result.status.value, "termination_reason": result.termination_reason}
+        output = _agent_output(conn, repo_root=repo_root, run_id=run_id, step_id=step_id, result=result)
         if voice is not None:
             output["voice"] = voice
         return output
 
     output = run_step(conn, step_id=step_id, run_id=run_id, fn=fn, input_payload={})
+    if cached_before:
+        return output
     # Reached only when `fn` returned without raising, meaning the Step's
     # SUCCEEDED status is already committed to `steps` (Section 13.2).
     # Only now is it safe to commit the worktree's changes.

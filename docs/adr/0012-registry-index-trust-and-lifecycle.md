@@ -26,12 +26,18 @@ Covers Task A (items 1–4) and Task D (items 10–12) of the registry cohesion
 review. Depends on ADR-0011, which gives this record the kind vocabulary it
 indexes over.
 
+Alignment update, 2026-08-14: the index/trust lifecycle now spans the full
+twelve-kind vocabulary from ADR-0011, including `hardware-voice-manifests` and
+`llm-servers`. Registry list/get/publish/validate/reindex/retire/trust
+operations live in `awf.ops.registry`; `awf.cli.core_ops` re-exports them only
+for compatibility.
+
 ## Context
 
 **`registry_index` is an integrity and trust ledger.** The table carries
 `kind`, `name`, `version`, `digest`, `source`, `path`, `trust_status`, and
 `indexed_at`, keyed on `(kind, name, version)`. Current writers are
-`core_ops.op_registry_publish` and `registry reindex`. Resolution walks the
+`awf.ops.registry.op_registry_publish` and `awf registry reindex`. Resolution walks the
 filesystem, then verifies an indexed row when a connection is supplied or the
 repo DB already exists. Historical consequences from the pre-ADR state were:
 

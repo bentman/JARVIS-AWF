@@ -1,12 +1,35 @@
 """Integration tests for LLM CLI operations and activities (ADR-0017)."""
 
 import shutil
+from textwrap import indent
 
-from awf.cli import core_ops as ops
+from awf import ops
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
-from awf.paths import REPO_ROOT, config_voice_dir
+from awf.paths import REPO_ROOT, config_registry_dir
 from awf.workflow.activities import ACTIVITY_REGISTRY
+
+
+def copy_config_registry(repo_root):
+    target = config_registry_dir(repo_root)
+    if not target.exists():
+        shutil.copytree(config_registry_dir(REPO_ROOT), target)
+
+
+def write_llm_servers(repo_root, spec: str) -> None:
+    path = config_registry_dir(repo_root) / "llm-servers" / "default" / "1.0.0.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"""apiVersion: awf/v1
+kind: LlmServers
+metadata:
+  name: default
+  version: 1.0.0
+  digest: sha256:test
+spec:
+{indent(spec.strip(), "  ")}
+"""
+    )
 
 
 def test_llm_cli_servers_and_models(tmp_path):
@@ -14,20 +37,16 @@ def test_llm_cli_servers_and_models(tmp_path):
     init_db(conn_path)
     conn = get_connection(conn_path)
 
-    # Copy config/voice to tmp_path for voice manifest resolution
-    v_dir = config_voice_dir(tmp_path)
-    if not v_dir.exists():
-        shutil.copytree(config_voice_dir(REPO_ROOT), v_dir)
+    copy_config_registry(tmp_path)
 
     # Add dummy local model for managed server selection
     m_dir = tmp_path / "models" / "llm" / "qwen-4b"
     m_dir.mkdir(parents=True)
     (m_dir / "qwen.gguf").write_bytes(b"dummy gguf content")
 
-    # Add servers.yaml
-    cfg_dir = tmp_path / "config" / "llm"
-    cfg_dir.mkdir(parents=True)
-    (cfg_dir / "servers.yaml").write_text("""
+    write_llm_servers(
+        tmp_path,
+        """
 default_server: llama-server
 servers:
   llama-server:
@@ -42,7 +61,8 @@ servers:
         archive: tar_gz
         binary: llama-server
         accelerator: cpu
-""")
+""",
+    )
 
     servers_report = ops.op_llm_servers(tmp_path)
     assert servers_report["default_server"] == "llama-server"
@@ -65,14 +85,11 @@ def test_llm_activity_ensure_registered(tmp_path):
     init_db(conn_path)
     conn = get_connection(conn_path)
 
-    # Copy config/voice to tmp_path
-    v_dir = config_voice_dir(tmp_path)
-    if not v_dir.exists():
-        shutil.copytree(config_voice_dir(REPO_ROOT), v_dir)
+    copy_config_registry(tmp_path)
 
-    cfg_dir = tmp_path / "config" / "llm"
-    cfg_dir.mkdir(parents=True)
-    (cfg_dir / "servers.yaml").write_text("""
+    write_llm_servers(
+        tmp_path,
+        """
 default_server: llama-server
 servers:
   llama-server:
@@ -82,9 +99,11 @@ servers:
     provider: openai
     health_paths: [/health]
     artifacts: {}
-""")
+    """,
+    )
 
-    fn = ACTIVITY_REGISTRY["llm_server_ensure"]
+    fn = ACTIVITY_REGISTRY["llm_server_ensure"].fn
+    assert fn is not None
     res = fn(conn, {})
     assert "state" in res
 
@@ -104,9 +123,9 @@ def test_llm_serve_uses_cpu_fallback_when_host_artifact_missing(tmp_path, monkey
     cpu_binary.parent.mkdir(parents=True)
     cpu_binary.write_text("binary")
 
-    cfg_dir = tmp_path / "config" / "llm"
-    cfg_dir.mkdir(parents=True)
-    (cfg_dir / "servers.yaml").write_text("""
+    write_llm_servers(
+        tmp_path,
+        """
 default_server: llama-server
 servers:
   llama-server:
@@ -126,7 +145,8 @@ servers:
         archive: tar_gz
         binary: llama-server
         accelerator: cpu
-""")
+""",
+    )
 
     monkeypatch.setattr("awf.hardware.profiler.resolve_hardware_profile_id", lambda _repo_root: ("linux-x64-cuda", {}))
 

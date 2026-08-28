@@ -1,5 +1,7 @@
 """Unit tests for LLM selector and resident-mind publishing (ADR-0017)."""
 
+from textwrap import indent
+
 import pytest
 
 from awf.db.bootstrap import init_db
@@ -8,13 +10,26 @@ from awf.llm.selector import current_selection, select
 from awf.llm.servers import LlmServerError
 
 
+def write_llm_servers(repo_root, spec: str) -> None:
+    path = repo_root / "config" / "app_registry" / "llm-servers" / "default" / "1.0.0.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        f"""apiVersion: awf/v1
+kind: LlmServers
+metadata:
+  name: default
+  version: 1.0.0
+  digest: sha256:test
+spec:
+{indent(spec.strip(), "  ")}
+"""
+    )
+
+
 def test_select_loopback_and_remote(tmp_path):
     conn_path = tmp_path / "data" / "awf.db"
     init_db(conn_path)
     conn = get_connection(conn_path)
-
-    config_dir = tmp_path / "config" / "llm"
-    config_dir.mkdir(parents=True)
 
     servers_yaml = """
 default_server: llama-server
@@ -39,7 +54,7 @@ servers:
     provider: openai
     health_paths: [/v1/models]
 """
-    (config_dir / "servers.yaml").write_text(servers_yaml)
+    write_llm_servers(tmp_path, servers_yaml)
 
     # Setup dummy model directory
     m_dir = tmp_path / "models" / "llm" / "model1"
@@ -73,9 +88,6 @@ def test_select_openai_compatible_same_port_unambiguous(tmp_path):
     init_db(conn_path)
     conn = get_connection(conn_path)
 
-    config_dir = tmp_path / "config" / "llm"
-    config_dir.mkdir(parents=True)
-
     servers_yaml = """
 default_server: llama-server
 servers:
@@ -94,7 +106,7 @@ servers:
     provider: openai
     health_paths: [/v1/models]
 """
-    (config_dir / "servers.yaml").write_text(servers_yaml)
+    write_llm_servers(tmp_path, servers_yaml)
 
     # Select openai-compatible which shares base_url with llama-server
     select(tmp_path, conn, server_id="openai-compatible", model="llama.app/qwen")
@@ -111,9 +123,8 @@ def test_select_uses_hardware_profile_model_default(monkeypatch, tmp_path):
     init_db(conn_path)
     conn = get_connection(conn_path)
 
-    config_dir = tmp_path / "config" / "llm"
-    config_dir.mkdir(parents=True)
-    (config_dir / "servers.yaml").write_text(
+    write_llm_servers(
+        tmp_path,
         """
 default_server: llama-server
 servers:
@@ -127,7 +138,7 @@ servers:
     model_defaults:
       linux-x64-cuda: cuda-model
       linux-x64-cpu: cpu-model
-"""
+""",
     )
     for model_name in ("cuda-model", "cpu-model"):
         model_dir = tmp_path / "models" / "llm" / model_name
@@ -146,9 +157,8 @@ def test_select_model_default_falls_back_to_cpu_profile(monkeypatch, tmp_path):
     init_db(conn_path)
     conn = get_connection(conn_path)
 
-    config_dir = tmp_path / "config" / "llm"
-    config_dir.mkdir(parents=True)
-    (config_dir / "servers.yaml").write_text(
+    write_llm_servers(
+        tmp_path,
         """
 default_server: llama-server
 servers:
@@ -161,7 +171,7 @@ servers:
     artifacts: {}
     model_defaults:
       linux-x64-cpu: cpu-model
-"""
+""",
     )
     model_dir = tmp_path / "models" / "llm" / "cpu-model"
     model_dir.mkdir(parents=True)

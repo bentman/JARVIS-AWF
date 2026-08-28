@@ -4,6 +4,14 @@
 
 Implemented. Amended in part by ADR-0008 and ADR-0016.
 
+Alignment update, 2026-08-14: the four voice manifests remain one object per
+function, but they now use the registry layout:
+`config/app_registry/hardware-voice-manifests/{stt,tts,vad,wake}/1.0.0.yaml`
+with operator overrides under
+`data/registry/hardware-voice-manifests/{name}/{version}.yaml`. The obsolete
+`config/voice/` directory was removed. References below to `config/voice/*.yaml`
+record the historical ADR-0007 implementation shape, not the active path.
+
 ## Amended by ADR-0016
 
 `sync_models` no longer leaves artifacts that a current manifest does not

@@ -1,26 +1,21 @@
 """Voice Profile schema, loading, and validation (Section 16.5)."""
 
+import sqlite3
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 
 import yaml
 
 from awf.registry.persona import Persona, load_persona
 from awf.registry.resolve import resolve_registry_object
-from awf.registry.schema import require, require_enum
-
-FALLBACK_MODES = ("none", "ordered")
+from awf.registry.schema import validate_json_schema, validate_registry_identity
+from awf.registry.schemas.voice_profiles import SCHEMA
 
 DEFAULT_VOICE_PROFILE_REF = "narrator@1.0.0"
 
 
 class VoiceProfileValidationError(ValueError):
     pass
-
-
-_require = partial(require, error=VoiceProfileValidationError)
-_require_enum = partial(require_enum, error=VoiceProfileValidationError)
 
 
 @dataclass(frozen=True)
@@ -72,42 +67,38 @@ class VoiceProfile:
 def parse_voice_profile(raw: dict) -> VoiceProfile:
     if "persona" in raw:
         raise VoiceProfileValidationError("voice profile: 'persona' is replaced by 'persona_ref' (ADR-0018)")
-    name = _require(raw, "name", "voice profile")
-    version = _require(raw, "version", "voice profile")
-    persona_ref = _require(raw, "persona_ref", "voice profile")
-    tts_raw = _require(raw, "tts", "voice profile")
-    privacy_raw = _require(raw, "privacy", "voice profile")
-    limits_raw = _require(raw, "limits", "voice profile")
+    validate_json_schema(raw, SCHEMA, "voice profile", error=VoiceProfileValidationError)
+    tts_raw = raw["tts"]
+    privacy_raw = raw["privacy"]
+    limits_raw = raw["limits"]
 
-    candidates_raw = _require(tts_raw, "candidates", "tts")
-    if not isinstance(candidates_raw, list) or not candidates_raw:
-        raise VoiceProfileValidationError("tts.candidates must be a non-empty list")
+    candidates_raw = tts_raw["candidates"]
     candidates = tuple(
         TtsCandidate(
-            engine=_require(c, "engine", "candidate"),
-            model=_require(c, "model", "candidate"),
-            voice_id=_require(c, "voice_id", "candidate"),
-            speed=float(_require(c, "speed", "candidate")),
+            engine=c["engine"],
+            model=c["model"],
+            voice_id=c["voice_id"],
+            speed=c["speed"],
             style=c.get("style", {}),
-            priority=int(_require(c, "priority", "candidate")),
-            enabled=bool(_require(c, "enabled", "candidate")),
+            priority=c["priority"],
+            enabled=c["enabled"],
         )
         for c in candidates_raw
     )
 
-    fallback_raw = _require(tts_raw, "fallback", "tts")
+    fallback_raw = tts_raw["fallback"]
     fallback = Fallback(
-        mode=_require_enum(fallback_raw.get("mode", "none"), FALLBACK_MODES, "tts.fallback.mode"),
-        allow_quality_degrade=bool(fallback_raw.get("allow_quality_degrade", False)),
+        mode=fallback_raw.get("mode", "none"),
+        allow_quality_degrade=fallback_raw.get("allow_quality_degrade", False),
     )
 
-    privacy = Privacy(local_only=bool(_require(privacy_raw, "local_only", "privacy")))
-    limits = Limits(max_seconds_per_utterance=int(_require(limits_raw, "max_seconds_per_utterance", "limits")))
+    privacy = Privacy(local_only=privacy_raw["local_only"])
+    limits = Limits(max_seconds_per_utterance=limits_raw["max_seconds_per_utterance"])
 
     return VoiceProfile(
-        name=name,
-        version=version,
-        persona_ref=persona_ref,
+        name=raw["name"],
+        version=raw["version"],
+        persona_ref=raw["persona_ref"],
         persona=None,
         candidates=candidates,
         fallback=fallback,
@@ -116,15 +107,15 @@ def parse_voice_profile(raw: dict) -> VoiceProfile:
     )
 
 
-def _resolve_persona(repo_root: Path, persona_ref: str) -> Persona:
+def _resolve_persona(repo_root: Path, persona_ref: str, conn: sqlite3.Connection | None = None) -> Persona:
     name, sep, version = persona_ref.partition("@")
     if not sep or not name or not version:
         raise VoiceProfileValidationError(f"voice profile persona_ref must be '<name>@<version>', got {persona_ref!r}")
-    path, _source = resolve_registry_object(repo_root, "personas", name, version)
+    path, _source = resolve_registry_object(repo_root, "personas", name, version, conn=conn)
     return load_persona(path)
 
 
-def load_voice_profile(repo_root: Path, path: Path) -> VoiceProfile:
+def load_voice_profile(repo_root: Path, path: Path, conn: sqlite3.Connection | None = None) -> VoiceProfile:
     """`path` is `voice-profiles/<name>/<version>.yaml` - the parsed `name`
     and `version` MUST match the containing directory and the file's own
     stem, per the rule `load_skill` already applies to `SKILL.md`."""
@@ -132,18 +123,14 @@ def load_voice_profile(repo_root: Path, path: Path) -> VoiceProfile:
     if not isinstance(raw, dict):
         raise VoiceProfileValidationError(f"{path}: voice profile must be a YAML mapping")
     profile = parse_voice_profile(raw)
-
-    expected_name = path.parent.name
-    if profile.name != expected_name:
-        raise VoiceProfileValidationError(
-            f"voice profile name '{profile.name}' does not match its registry directory '{expected_name}'"
-        )
-    expected_version = path.stem
-    if profile.version != expected_version:
-        raise VoiceProfileValidationError(
-            f"voice profile version '{profile.version}' does not match its file name '{expected_version}'"
-        )
-    persona = _resolve_persona(repo_root, profile.persona_ref)
+    validate_registry_identity(
+        name=profile.name,
+        version=profile.version,
+        path=path,
+        context="voice profile",
+        error=VoiceProfileValidationError,
+    )
+    persona = _resolve_persona(repo_root, profile.persona_ref, conn=conn)
     return VoiceProfile(
         name=profile.name,
         version=profile.version,

@@ -11,6 +11,21 @@ can resolve the standard activity capability on a fresh checkout; operators
 still need custom `data/registry/capabilities/network_fetch/` records for real
 destinations beyond the shipped example.
 
+Corrective update, 2026-08-14: ADR-0026 extends the same pending-approval
+bridge to `agent` nodes. An agent capability that resolves to
+`APPROVAL_REQUIRED` now parks the Step/Run in `WAITING_APPROVAL` instead of
+failing as `POLICY_DENIED`; the historical gap notes below describe the
+pre-ADR-0026 state.
+
+Alignment update, 2026-08-14: standard machine activities are registered as
+metadata-only `ActivityRegistration(kind="machine", fn=None)` entries, not
+placeholder Python callables. `make_activity_node_executor` always routes
+`fs_read`, `fs_write`, `fs_delete`, `command_run`, and `network_fetch`
+through `awf.machine.activities.run_machine_activity`; injected activity
+registries can override only non-machine local activities. A machine activity
+without the repository context needed for authorization records
+`POLICY_DENIED` through the Step path and does not execute.
+
 Acceptance run: `backend/.venv/bin/python -m pytest backend/tests -q` outside
 the Codex sandbox -> 550 passed, 7 warnings; `backend/.venv/bin/python -m ruff
 check .` passed; `npm --prefix frontend run build --workspaces` passed; `npm
@@ -44,8 +59,10 @@ The current gaps are specific:
 - no first-class command execution activity with executable/argument policy;
 - no first-class network fetch activity with destination allowlisting;
 - no normalized machine-action digest shared by guard, approval, event, and UI;
-- `APPROVAL_REQUIRED` currently blocks agent/activity execution instead of
-  creating a pending approval for the exact machine action;
+- At ADR-0021 implementation time, `APPROVAL_REQUIRED` blocked agent/activity
+  execution instead of creating a pending approval for the exact machine
+  action. Machine activities were corrected here; ADR-0026 later corrected
+  agent nodes.
 - capability records do not yet carry path, command, or network constraints;
 - frontend approval summaries show an action digest but not a normalized
   machine-action preview.
@@ -136,7 +153,7 @@ and review; server-provided tool descriptions are not trusted policy.
 |---|---|---|
 | Section 9.1 Capability Record shape does not include path, command, or network policy | Adds optional `constraints` object | Existing records remain valid; machine activities require specific constraints before execution |
 | Section 12.2 activity nodes can run arbitrary registered Python functions | Adds standard machine activities with stricter policy checks | These activities require normalized action validation, guard authorization, and approval when required |
-| Current guard returns `APPROVAL_REQUIRED` but activity/agent execution treats it as policy denial | Adds machine-action approval bridge for machine activities | The exact action digest is persisted and reviewed before execution resumes |
+| Current guard returns `APPROVAL_REQUIRED` but activity/agent execution treats it as policy denial | Adds machine-action approval bridge for machine activities; ADR-0026 later extends the bridge to agent nodes | The exact action digest is persisted and reviewed before execution resumes |
 | Section 16.3 JSON-RPC method list has no machine-action preview/read surface | Adds approval detail/preview methods only | Frontends still do not execute machine actions directly |
 | MCP server records render adapter config but do not require per-tool Capability Records at render time | Requires declared MCP tool capability refs before exposure | Untrusted or unrecorded MCP tools are not rendered into adapter config |
 

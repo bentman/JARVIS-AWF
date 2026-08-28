@@ -13,6 +13,7 @@ done
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 venv_python="$repo_root/backend/.venv/bin/python"
+venv_root="$repo_root/backend/.venv"
 venv_awf_speech="$repo_root/backend/.venv/bin/awf-speech"
 venv_awf="$repo_root/backend/.venv/bin/awf"
 reports_dir="$repo_root/reports/diagnostics"
@@ -29,6 +30,14 @@ step() {
 
 cd "$repo_root"
 mkdir -p "$repo_root/cache/temp"
+
+pyvenv_cfg="$venv_root/pyvenv.cfg"
+if [[ -f "$pyvenv_cfg" && -x "$venv_root/Scripts/python.exe" ]]; then
+  if grep -Eq '(^home = [A-Za-z]:\\|Scripts\\python\.exe|\\)' "$pyvenv_cfg"; then
+    printf 'backend/.venv was created by Windows. Remove backend/.venv and rerun scripts/bootstrap.sh from Linux/WSL.\n' >&2
+    exit 1
+  fi
+fi
 
 if [[ ! -x "$venv_python" ]]; then
   step "Create backend venv"
@@ -71,5 +80,6 @@ fi
 step "Doctor"
 "$venv_awf" doctor
 
-printf '\nNext command:\n'
-printf 'backend/.venv/bin/awf run assistant-default@1.0.0 --objective "check the system"\n'
+printf '\nNext commands:\n'
+printf 'source scripts/use-awf.sh\n'
+printf 'awf run assistant-default@1.0.0 --objective "check the system"\n'

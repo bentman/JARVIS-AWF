@@ -17,8 +17,9 @@ Six commands, each returning a code from one shared contract:
 | unit          | python -m pytest -v backend/tests/unit            | reports/validation/<ts>-unit.txt        |
 | integration   | python -m pytest -v backend/tests/integration     | reports/validation/<ts>-integration.txt |
 | runtime       | python -m pytest -v -m live backend/tests         | reports/validation/<ts>-runtime.txt     |
-| regression    | the always-safe minimal set (backend/tests/unit)  | reports/validation/<ts>-regression.txt |
-| ci            | python -m pytest -v -m "not live" backend/tests   | reports/validation/<ts>-ci.txt          |
+| focus         | python -m pytest -v <path-or-keyword>             | reports/validation/<ts>-focus.txt       |
+| regression    | non-live backend regression tests                  | reports/validation/<ts>-regression.txt |
+| ci            | protocol drift checks + lint + non-live tests     | reports/validation/<ts>-ci.txt          |
 | lint          | ruff format --check + ruff check                  | reports/validation/<ts>-lint.txt        |
 
 `runtime` scans the whole suite filtered by the `live` marker rather than
@@ -289,6 +290,47 @@ def _run_lint_command() -> int:
     return validator_return_code
 
 
+def _run_ci_precheck_command() -> int:
+    started_at = _utc_now_rfc3339()
+    host_class_id = _resolve_host_class_id()
+    commands = [
+        [sys.executable, "scripts/generate_protocol.py", "--check"],
+        [sys.executable, "scripts/generate_protocol.py", "--check-argparse"],
+    ]
+    outputs: list[str] = []
+    validator_return_code = EXIT_PASS
+    for command in commands:
+        command_text = " ".join(command)
+        outputs.append(f"$ {command_text}\n")
+        print(f"$ {command_text}")
+        result = _run_streamed(command)
+        outputs.append(result.stdout)
+        outputs.append(f"return_code: {result.returncode}\n")
+        if result.returncode != 0:
+            validator_return_code = EXIT_FAIL
+            break
+
+    report = (
+        f"started_at: {started_at}\n"
+        "command: ci-precheck\n"
+        f"host_class_id: {host_class_id}\n"
+        "precheck_output:\n"
+        f"{''.join(outputs)}"
+        f"final_summary: {_SUMMARY_BY_CODE[validator_return_code]} "
+        "passed=0 failed=0 skipped=0 deselected=0 errors=0 warnings=0\n"
+    )
+    validation_dir = REPORTS_DIR / "validation"
+    validation_dir.mkdir(parents=True, exist_ok=True)
+    out_path = validation_dir / f"{_timestamp()}-ci-precheck.txt"
+    out_path.write_text(report)
+    print(
+        f"final_summary: {_SUMMARY_BY_CODE[validator_return_code]} "
+        "passed=0 failed=0 skipped=0 deselected=0 errors=0 warnings=0"
+    )
+    print(f"wrote {out_path}")
+    return validator_return_code
+
+
 def cmd_profile(_args: argparse.Namespace) -> int:
     lines = [
         f"started_at={_utc_now_rfc3339()}",
@@ -342,11 +384,21 @@ def cmd_runtime(_args: argparse.Namespace) -> int:
     return _run_test_command("runtime", ["-m", "live", "backend/tests"])
 
 
+def cmd_focus(args: argparse.Namespace) -> int:
+    target = args.target
+    path = Path(target)
+    pytest_args = [target] if path.exists() or "/" in target or "\\" in target else ["-k", target, "backend/tests"]
+    return _run_test_command("focus", pytest_args)
+
+
 def cmd_lint(_args: argparse.Namespace) -> int:
     return _run_lint_command()
 
 
 def cmd_ci(_args: argparse.Namespace) -> int:
+    precheck_result = _run_ci_precheck_command()
+    if precheck_result != EXIT_PASS:
+        return precheck_result
     lint_result = _run_lint_command()
     if lint_result != EXIT_PASS:
         return lint_result
@@ -354,13 +406,14 @@ def cmd_ci(_args: argparse.Namespace) -> int:
 
 
 def cmd_regression(_args: argparse.Namespace) -> int:
-    return _run_test_command("regression", ["backend/tests/unit"])
+    return _run_test_command("regression", ["-m", "not live", "backend/tests"])
 
 
 COMMANDS = {
     "profile": cmd_profile,
     "unit": cmd_unit,
     "integration": cmd_integration,
+    "focus": cmd_focus,
     "lint": cmd_lint,
     "runtime": cmd_runtime,
     "regression": cmd_regression,
@@ -371,7 +424,12 @@ COMMANDS = {
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="AWF backend validation harness (ADR-0006)")
     parser.add_argument("command", choices=sorted(COMMANDS))
+    parser.add_argument("target", nargs="?", help="path or pytest -k keyword for the focus command")
     args = parser.parse_args(argv)
+    if args.command == "focus" and not args.target:
+        parser.error("focus requires a path or pytest -k keyword")
+    if args.command != "focus" and args.target:
+        parser.error(f"{args.command} does not accept a target")
     result = COMMANDS[args.command](args)
     _trim_report_files()
     return result

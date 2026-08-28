@@ -1,24 +1,16 @@
 """Model Profile schema, loading, and validation (Section 11)."""
 
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 
 import yaml
 
-from awf.registry.schema import require, require_enum
-
-PURPOSES = ("general-reasoning", "coding", "judge", "adversary", "embedding")
-DATA_CLASSES = ("public", "internal", "confidential")
-FALLBACK_MODES = ("none", "ordered")
+from awf.registry.schema import validate_json_schema, validate_registry_identity
+from awf.registry.schemas.model_profiles import SCHEMA
 
 
 class ModelProfileValidationError(ValueError):
     pass
-
-
-_require = partial(require, error=ModelProfileValidationError)
-_require_enum = partial(require_enum, error=ModelProfileValidationError)
 
 
 @dataclass(frozen=True)
@@ -73,31 +65,23 @@ class ModelProfile:
 
 
 def parse_model_profile(raw: dict) -> ModelProfile:
-    name = _require(raw, "name", "model profile")
-    version = _require(raw, "version", "model profile")
-    privacy_raw = _require(raw, "privacy", "model profile")
-    candidates_raw = _require(raw, "candidates", "model profile")
-    fallback_raw = _require(raw, "fallback", "model profile")
-    limits_raw = _require(raw, "limits", "model profile")
-
-    if not isinstance(candidates_raw, list) or not candidates_raw:
-        raise ModelProfileValidationError("model profile: 'candidates' must be a non-empty list")
+    validate_json_schema(raw, SCHEMA, "model profile", error=ModelProfileValidationError)
+    privacy_raw = raw["privacy"]
+    candidates_raw = raw["candidates"]
+    fallback_raw = raw["fallback"]
+    limits_raw = raw["limits"]
 
     privacy = Privacy(
-        maximum_data_class=_require_enum(
-            _require(privacy_raw, "maximum_data_class", "privacy"),
-            DATA_CLASSES,
-            "privacy.maximum_data_class",
-        ),
-        local_only=bool(_require(privacy_raw, "local_only", "privacy")),
+        maximum_data_class=privacy_raw["maximum_data_class"],
+        local_only=privacy_raw["local_only"],
     )
 
     candidates = tuple(
         Candidate(
-            provider=_require(c, "provider", "candidate"),
-            model=_require(c, "model", "candidate"),
-            priority=int(_require(c, "priority", "candidate")),
-            enabled=bool(_require(c, "enabled", "candidate")),
+            provider=c["provider"],
+            model=c["model"],
+            priority=c["priority"],
+            enabled=c["enabled"],
             api_base=c.get("api_base"),
             api_key_secret_name=c.get("api_key_secret_name"),
         )
@@ -105,20 +89,20 @@ def parse_model_profile(raw: dict) -> ModelProfile:
     )
 
     fallback = Fallback(
-        mode=_require_enum(_require(fallback_raw, "mode", "fallback"), FALLBACK_MODES, "fallback.mode"),
-        allow_quality_degrade=bool(_require(fallback_raw, "allow_quality_degrade", "fallback")),
+        mode=fallback_raw["mode"],
+        allow_quality_degrade=fallback_raw["allow_quality_degrade"],
     )
 
     limits = Limits(
-        max_input_tokens_per_call=int(_require(limits_raw, "max_input_tokens_per_call", "limits")),
-        max_output_tokens_per_call=int(_require(limits_raw, "max_output_tokens_per_call", "limits")),
-        max_cost_usd_per_call=float(_require(limits_raw, "max_cost_usd_per_call", "limits")),
+        max_input_tokens_per_call=limits_raw["max_input_tokens_per_call"],
+        max_output_tokens_per_call=limits_raw["max_output_tokens_per_call"],
+        max_cost_usd_per_call=limits_raw["max_cost_usd_per_call"],
     )
 
     return ModelProfile(
-        name=name,
-        version=version,
-        purpose=_require_enum(_require(raw, "purpose", "model profile"), PURPOSES, "purpose"),
+        name=raw["name"],
+        version=raw["version"],
+        purpose=raw["purpose"],
         privacy=privacy,
         candidates=candidates,
         fallback=fallback,
@@ -134,15 +118,11 @@ def load_model_profile(path: Path) -> ModelProfile:
     if not isinstance(raw, dict):
         raise ModelProfileValidationError(f"{path}: model profile must be a YAML mapping")
     profile = parse_model_profile(raw)
-
-    expected_name = path.parent.name
-    if profile.name != expected_name:
-        raise ModelProfileValidationError(
-            f"model profile name '{profile.name}' does not match its registry directory '{expected_name}'"
-        )
-    expected_version = path.stem
-    if profile.version != expected_version:
-        raise ModelProfileValidationError(
-            f"model profile version '{profile.version}' does not match its file name '{expected_version}'"
-        )
+    validate_registry_identity(
+        name=profile.name,
+        version=profile.version,
+        path=path,
+        context="model profile",
+        error=ModelProfileValidationError,
+    )
     return profile

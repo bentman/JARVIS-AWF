@@ -17,12 +17,11 @@ contents.
 """
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
 
-from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
+from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus, parse_jsonl_events, run_cli
 
 DEFAULT_TIMEOUT_SECONDS = 300
 DEFAULT_ALLOWED_TOOLS = ("write",)
@@ -34,19 +33,6 @@ HOOK_POWERSHELL_RELATIVE = Path(".github/hooks/scripts/awf-pre-tool-use.ps1")
 
 class CopilotAdapterError(RuntimeError):
     pass
-
-
-def _parse_events(stdout: str) -> list[dict]:
-    events = []
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return events
 
 
 def _final_assistant_message(events: list[dict]) -> str | None:
@@ -98,7 +84,7 @@ def _write_hook_files(workspace_root: Path) -> tuple[Path, ...]:
     paths[2].write_text(
         '$ErrorActionPreference = "Stop"\n'
         '$python = if ($env:AWF_HOOK_PYTHON) { $env:AWF_HOOK_PYTHON } else { "python" }\n'
-        '& $python -m awf.adapters.copilot_guard_hook\n'
+        "& $python -m awf.adapters.copilot_guard_hook\n"
         "exit $LASTEXITCODE\n",
         encoding="utf-8",
     )
@@ -157,26 +143,20 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
         hook_paths = _write_hook_files(invocation.workspace_root)
 
     try:
-        result = subprocess.run(
+        result = run_cli(
             command,
-            cwd=invocation.workspace_root,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            stdin=subprocess.DEVNULL,
-            env={**os.environ, **invocation.constraints.get("mcp_env_overlay", {}), **guard_env},
+            invocation,
+            timeout_seconds=timeout_seconds,
+            extra_env=guard_env,
+            run_fn=subprocess.run,
         )
-    except subprocess.TimeoutExpired:
-        return AgentResult(
-            status=AgentStatus.LIMIT_EXCEEDED,
-            output={},
-            termination_reason=f"timed out after {timeout_seconds}s",
-        )
+        if isinstance(result, AgentResult):
+            return result
     finally:
         if hook_paths:
             _cleanup_hook_files(invocation.workspace_root, hook_paths)
 
-    events = _parse_events(result.stdout)
+    events = parse_jsonl_events(result.stdout)
 
     if result.returncode != 0:
         return AgentResult(

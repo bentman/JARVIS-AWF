@@ -114,6 +114,7 @@ def test_resolution_without_explicit_connection_uses_existing_index(tmp_path):
     path = _write_capability(repo_root / "data" / "registry", "demo", "1.0.0")
     reindex(repo_root, conn)
     path.write_text("identity: {mutated: true}\n")
+    conn.close()
 
     with pytest.raises(RegistryIntegrityError):
         resolve_registry_object(repo_root, "capabilities", "demo", "1.0.0")

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  COMMAND_NAMES,
   DEFAULT_ASSISTANT_WORKFLOW_REF,
+  HELP_TEXT,
   CommandError,
   dispatchAssistantInput,
   dispatchCommand,
@@ -67,8 +69,25 @@ describe("dispatchCommand", () => {
   it("/help returns the built-in command list as text", async () => {
     const client = makeFakeClient();
     const result = await dispatchCommand(client, "/help", DEFAULT_SETTINGS);
-    expect(result.kind).toBe("text");
-    if (result.kind === "text") expect(result.text).toContain("/run <workflow>@<version>");
+    expect(result).toEqual({ kind: "text", text: HELP_TEXT });
+  });
+
+  it("derives autocomplete command names from help text", () => {
+    const helpCommands = HELP_TEXT.split("\n")
+      .map((line) => line.match(/^\/([a-z0-9-]+)/)?.[1])
+      .filter(Boolean);
+
+    expect(COMMAND_NAMES).toEqual(helpCommands);
+    expect(COMMAND_NAMES).toContain("memory-search");
+    expect(COMMAND_NAMES).toContain("proposal-publish");
+  });
+
+  it("keeps slash commands alphabetized in help text", () => {
+    const helpCommands = HELP_TEXT.split("\n")
+      .map((line) => line.match(/^\/([a-z0-9-]+)/)?.[1])
+      .filter((name): name is string => Boolean(name));
+
+    expect(helpCommands).toEqual([...helpCommands].sort((left, right) => left.localeCompare(right)));
   });
 
   it("/run calls runStart with the workflow ref", async () => {

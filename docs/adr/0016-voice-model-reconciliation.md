@@ -4,10 +4,17 @@
 
 Implemented.
 
-Corrective update, 2026-08-12: live GUI push-to-talk now consumes browser
-speech recognition results when available. The deterministic
-`awf-speech round-trip` file path remains the fixture/debug path and is not
-the only way recognized text can reach `voice.submitText`.
+Corrective update, 2026-08-12: the deterministic `awf-speech round-trip` file
+path is the fixture/debug path and is not the only way recognized text can
+reach `voice.submitText`.
+
+Corrective update, 2026-08-15: live GUI push-to-talk no longer uses browser
+`SpeechRecognition`. The renderer records via `MediaRecorder` and routes the
+audio to the main process through `awf:voiceTranscribe`, which spawns
+`awf-speech transcribe` — a new one-shot subcommand added to `speech/cli.py`
+alongside `round-trip`, `synthesize`, and `models`. The subcommand resolves
+STT readiness and calls `stt_onnx.transcribe` directly, making the local STT
+adapter the only transcription path for push-to-talk.
 
 ## Context
 

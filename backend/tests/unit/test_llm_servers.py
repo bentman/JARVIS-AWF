@@ -1,13 +1,29 @@
 """Unit tests for LLM server configuration parsing (ADR-0017)."""
 
+from textwrap import indent
+
 import pytest
 
 from awf.llm.servers import LlmServerError, artifact_for, load_servers
 
 
+def write_llm_servers(repo_root, spec: str) -> None:
+    path = repo_root / "config" / "app_registry" / "llm-servers" / "default" / "1.0.0.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        f"""apiVersion: awf/v1
+kind: LlmServers
+metadata:
+  name: default
+  version: 1.0.0
+  digest: sha256:test
+spec:
+{indent(spec.strip(), "  ")}
+"""
+    )
+
+
 def test_load_servers_valid(tmp_path):
-    config_dir = tmp_path / "config" / "llm"
-    config_dir.mkdir(parents=True)
     yaml_content = """
 default_server: llama-server
 servers:
@@ -26,7 +42,7 @@ servers:
     launch:
       ctx_size: 4096
 """
-    (config_dir / "servers.yaml").write_text(yaml_content)
+    write_llm_servers(tmp_path, yaml_content)
 
     default_id, servers = load_servers(tmp_path)
     assert default_id == "llama-server"
@@ -62,8 +78,6 @@ def test_load_real_servers_declares_every_canonical_profile(repo_root):
 
 
 def test_load_servers_invalid_canonical_profile(tmp_path):
-    config_dir = tmp_path / "config" / "llm"
-    config_dir.mkdir(parents=True)
     yaml_content = """
 default_server: llama-server
 servers:
@@ -80,7 +94,7 @@ servers:
         binary: llama-server
         accelerator: cpu
 """
-    (config_dir / "servers.yaml").write_text(yaml_content)
+    write_llm_servers(tmp_path, yaml_content)
 
     with pytest.raises(LlmServerError) as exc_info:
         load_servers(tmp_path)

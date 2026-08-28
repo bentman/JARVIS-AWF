@@ -3,7 +3,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { registerIpcHandlers } from "./ipc.js";
-import { registerVoiceIpcHandler, registerVoiceSessionIpcHandlers, registerVoiceSpeakIpcHandler } from "./voicePipeline.js";
+import { registerVoiceIpcHandler, registerVoiceSessionIpcHandlers, registerVoiceSpeakIpcHandler, registerVoiceTranscribeIpcHandler } from "./voicePipeline.js";
 
 /**
  * Resolves a backend console-script name to its `backend/.venv` path when
@@ -48,6 +48,10 @@ function createWindow(client: ProtocolClient, repoRoot: string): void {
   });
   registerVoiceSessionIpcHandlers(ipcMain, client);
   registerVoiceSpeakIpcHandler(ipcMain, {
+    command: speechCommand,
+    cwd: repoRoot,
+  });
+  registerVoiceTranscribeIpcHandler(ipcMain, {
     command: speechCommand,
     cwd: repoRoot,
   });

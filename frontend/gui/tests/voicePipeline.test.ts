@@ -9,6 +9,16 @@ vi.mock("node:child_process", () => {
   return { ...mod, default: mod };
 });
 
+const writeFileMock = vi.fn().mockResolvedValue(undefined);
+const unlinkMock = vi.fn().mockResolvedValue(undefined);
+vi.mock("node:fs/promises", () => {
+  const mod = {
+    writeFile: (...args: unknown[]) => writeFileMock(...args),
+    unlink: (...args: unknown[]) => unlinkMock(...args),
+  };
+  return { ...mod, default: mod };
+});
+
 function makeFakeChild() {
   const child = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter };
   child.stdout = new EventEmitter();
@@ -315,6 +325,105 @@ describe("registerVoiceSessionIpcHandlers", () => {
 
     await handlers.get(VOICE_SESSION_CHANNELS.stop)?.({}, "vs-1", "done");
     expect(client.voiceSessionClose).toHaveBeenCalledWith("vs-1", "done");
+  });
+});
+
+describe("runVoiceTranscribe", () => {
+  beforeEach(() => {
+    spawnMock.mockReset();
+    writeFileMock.mockReset().mockResolvedValue(undefined);
+    unlinkMock.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("writes audio to a temp WAV, spawns awf-speech transcribe, and returns text+language", async () => {
+    const { runVoiceTranscribe } = await import("../src/main/voicePipeline.js");
+    const child = makeFakeChild();
+    spawnMock.mockReturnValue(child);
+    const audio = new Uint8Array([1, 2, 3]);
+
+    const promise = runVoiceTranscribe({ cwd: "/repo", audioData: audio });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(writeFileMock).toHaveBeenCalledWith(expect.stringMatching(/awf-transcribe-.*\.wav$/), audio);
+    const tmpPath = writeFileMock.mock.calls[0][0] as string;
+    expect(spawnMock).toHaveBeenCalledWith("awf-speech", ["transcribe", tmpPath], { cwd: "/repo" });
+
+    child.stdout.emit("data", Buffer.from(JSON.stringify({ text: "Hello world.", language: "en" }) + "\n"));
+    child.emit("close", 0);
+
+    const result = await promise;
+    expect(result).toEqual({ text: "Hello world.", language: "en" });
+    expect(unlinkMock).toHaveBeenCalledWith(tmpPath);
+  });
+
+  it("cleans up the temp file even when the subprocess fails", async () => {
+    const { runVoiceTranscribe } = await import("../src/main/voicePipeline.js");
+    const child = makeFakeChild();
+    spawnMock.mockReturnValue(child);
+
+    const promise = runVoiceTranscribe({ cwd: "/repo", audioData: new Uint8Array([0]) });
+    await Promise.resolve();
+    await Promise.resolve();
+    const tmpPath = writeFileMock.mock.calls[0][0] as string;
+
+    child.stdout.emit("data", Buffer.from(JSON.stringify({ error: "STT not ready: no STT runtime importable" }) + "\n"));
+    child.emit("close", 1);
+
+    await expect(promise).rejects.toThrow(/STT not ready/);
+    expect(unlinkMock).toHaveBeenCalledWith(tmpPath);
+  });
+
+  it("uses a custom command when provided", async () => {
+    const { runVoiceTranscribe } = await import("../src/main/voicePipeline.js");
+    const child = makeFakeChild();
+    spawnMock.mockReturnValue(child);
+
+    const promise = runVoiceTranscribe({ command: "/custom/awf-speech", cwd: "/repo", audioData: new Uint8Array([0]) });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(spawnMock).toHaveBeenCalledWith("/custom/awf-speech", expect.any(Array), { cwd: "/repo" });
+
+    child.stdout.emit("data", Buffer.from(JSON.stringify({ text: "hi", language: "en" })));
+    child.emit("close", 0);
+
+    await promise;
+  });
+});
+
+describe("registerVoiceTranscribeIpcHandler", () => {
+  beforeEach(() => {
+    spawnMock.mockReset();
+    writeFileMock.mockReset().mockResolvedValue(undefined);
+    unlinkMock.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("wires the transcribe channel to runVoiceTranscribe", async () => {
+    const { registerVoiceTranscribeIpcHandler, VOICE_SESSION_CHANNELS } = await import("../src/main/voicePipeline.js");
+    const child = makeFakeChild();
+    spawnMock.mockReturnValue(child);
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    const ipcMain = {
+      handle: (channel: string, listener: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, listener);
+      },
+    };
+
+    registerVoiceTranscribeIpcHandler(ipcMain, { command: "awf-speech", cwd: "/repo" });
+
+    const audioBuffer = new ArrayBuffer(4);
+    const promise = handlers.get(VOICE_SESSION_CHANNELS.transcribe)?.({}, audioBuffer);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(spawnMock).toHaveBeenCalledWith("awf-speech", expect.arrayContaining(["transcribe"]), { cwd: "/repo" });
+
+    child.stdout.emit("data", Buffer.from(JSON.stringify({ text: "test phrase", language: "en" })));
+    child.emit("close", 0);
+
+    const result = await promise;
+    expect(result).toEqual({ text: "test phrase", language: "en" });
   });
 });
 

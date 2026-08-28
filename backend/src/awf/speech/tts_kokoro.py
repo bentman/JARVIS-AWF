@@ -17,10 +17,6 @@ _DEVICE_TO_PROVIDER = {
 }
 
 
-class TtsAdapterError(RuntimeError):
-    pass
-
-
 def synthesize(
     text: str,
     voice_id: str,

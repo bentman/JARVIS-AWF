@@ -25,11 +25,9 @@ not sufficient.
 `constraints["model_override"]` (ADR-0005), when set, is passed through `-m`.
 """
 
-import json
-import os
 import subprocess
 
-from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
+from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus, parse_jsonl_events, run_cli
 
 DEFAULT_TIMEOUT_SECONDS = 300
 FORBIDDEN_CONSTRAINT_KEYS = ("yolo", "dangerously_skip_permissions")
@@ -38,19 +36,6 @@ _SUCCESS_FINISH_REASONS = {"done", "success", "successful", "completed"}
 
 class ClineAdapterError(RuntimeError):
     pass
-
-
-def _parse_events(stdout: str) -> list[dict]:
-    events = []
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return events
 
 
 def _fatal_error_message(events: list[dict]) -> str | None:
@@ -93,24 +78,11 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
         command += ["-m", model_override]
     command += list(invocation.constraints.get("mcp_extra_args", []))
 
-    try:
-        result = subprocess.run(
-            command,
-            cwd=invocation.workspace_root,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            stdin=subprocess.DEVNULL,
-            env={**os.environ, **invocation.constraints.get("mcp_env_overlay", {})},
-        )
-    except subprocess.TimeoutExpired:
-        return AgentResult(
-            status=AgentStatus.LIMIT_EXCEEDED,
-            output={},
-            termination_reason=f"timed out after {timeout_seconds}s",
-        )
+    result = run_cli(command, invocation, timeout_seconds=timeout_seconds, run_fn=subprocess.run)
+    if isinstance(result, AgentResult):
+        return result
 
-    events = _parse_events(result.stdout)
+    events = parse_jsonl_events(result.stdout)
     fatal_message = _fatal_error_message(events)
     run_result = _run_result(events)
     finish_reason = (run_result or {}).get("finishReason", "") if run_result else ""

@@ -131,11 +131,17 @@ def test_command_policy_uses_exact_executable_and_argument_patterns(tmp_path):
         validate_command(argv=["/bin/sh", "-c", "echo bad"], cwd=worktree, worktree=worktree, constraints=constraints)
 
     with pytest.raises(MachinePolicyError, match="shell metacharacters"):
-        validate_command(argv=["/bin/echo", "hello", "world;rm"], cwd=worktree, worktree=worktree, constraints=constraints)
+        validate_command(
+            argv=["/bin/echo", "hello", "world;rm"], cwd=worktree, worktree=worktree, constraints=constraints
+        )
 
 
 def test_network_policy_requires_allowed_host_method_and_public_address():
-    constraints = {"allowedHosts": ["example.com", "*.example.org"], "allowedMethods": ["GET"], "maxResponseBytes": 1024}
+    constraints = {
+        "allowedHosts": ["example.com", "*.example.org"],
+        "allowedMethods": ["GET"],
+        "maxResponseBytes": 1024,
+    }
 
     validate_url("https://example.com/docs", "GET", constraints)
     validate_url("https://api.example.org/docs", "GET", constraints)

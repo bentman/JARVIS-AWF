@@ -1,6 +1,6 @@
 from backend.tests.support import make_awf_repo
 
-from awf.cli.core_ops import op_session_append, op_session_show, op_session_start, op_session_summarize
+from awf.ops.memory import op_session_append, op_session_show, op_session_start, op_session_summarize
 
 
 def test_active_session_lifecycle(tmp_path):

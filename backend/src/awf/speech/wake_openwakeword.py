@@ -41,7 +41,7 @@ def detect_wake_word(
 ) -> dict:
     """Returns {"detected": bool, "score": float, "model_key": str}.
 
-    Loads every artifact `config/voice/wake.yaml` names explicitly, rather
+    Loads every artifact the wake hardware voice manifest names explicitly, rather
     than falling back to openWakeWord's own bundled package defaults, so
     `awf-speech models sync`/`verify` govern what's actually loaded."""
     from openwakeword.model import Model

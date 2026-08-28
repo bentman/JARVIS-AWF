@@ -4,20 +4,20 @@ from pathlib import Path
 
 import pytest
 
-from awf.cli.core_ops import (
-    CoreOpError,
-    op_improvement_mark_ready,
-    op_improvement_merge,
-    op_improvement_prepare,
-    op_improvement_reject,
-    op_improvement_request_merge,
-)
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.run import create_run, create_step
 from awf.gates.artifacts import write_verdict_artifact
 from awf.gates.schema import Verdict
 from awf.isolation.worktree import branch_name, commit_all_changes, create_worktree, worktree_path
+from awf.ops.improvement import (
+    op_improvement_mark_ready,
+    op_improvement_merge,
+    op_improvement_prepare,
+    op_improvement_reject,
+    op_improvement_request_merge,
+)
+from awf.ops.shared import CoreOpError
 from awf.paths import artifacts_dir
 
 
@@ -97,7 +97,11 @@ def test_prepare_after_amend_updates_digest_and_resets_review_state(repo_conn):
     first = op_improvement_prepare(repo_root, conn, run_id=run_id)
     verdict_id = _write_verdict(repo_root, conn, run_id)
     ready = op_improvement_mark_ready(
-        repo_root, conn, improvement_id=first["improvement_id"], verdict_artifact_id=verdict_id, validation_artifact_ids=[]
+        repo_root,
+        conn,
+        improvement_id=first["improvement_id"],
+        verdict_artifact_id=verdict_id,
+        validation_artifact_ids=[],
     )
     assert ready["status"] == "ready_for_review"
 
@@ -134,7 +138,11 @@ def test_request_merge_creates_step_and_exact_approval(repo_conn):
     proposal = op_improvement_prepare(repo_root, conn, run_id=run_id)
     verdict_id = _write_verdict(repo_root, conn, run_id)
     ready = op_improvement_mark_ready(
-        repo_root, conn, improvement_id=proposal["improvement_id"], verdict_artifact_id=verdict_id, validation_artifact_ids=[]
+        repo_root,
+        conn,
+        improvement_id=proposal["improvement_id"],
+        verdict_artifact_id=verdict_id,
+        validation_artifact_ids=[],
     )
 
     requested = op_improvement_request_merge(repo_root, conn, improvement_id=ready["improvement_id"])
@@ -153,7 +161,11 @@ def test_merge_requires_approved_matching_digest_and_merges(repo_conn):
     proposal = op_improvement_prepare(repo_root, conn, run_id=run_id)
     verdict_id = _write_verdict(repo_root, conn, run_id)
     ready = op_improvement_mark_ready(
-        repo_root, conn, improvement_id=proposal["improvement_id"], verdict_artifact_id=verdict_id, validation_artifact_ids=[]
+        repo_root,
+        conn,
+        improvement_id=proposal["improvement_id"],
+        verdict_artifact_id=verdict_id,
+        validation_artifact_ids=[],
     )
     requested = op_improvement_request_merge(repo_root, conn, improvement_id=ready["improvement_id"])
 
@@ -183,7 +195,11 @@ def test_changed_candidate_invalidates_merge_approval(repo_conn):
     proposal = op_improvement_prepare(repo_root, conn, run_id=run_id)
     verdict_id = _write_verdict(repo_root, conn, run_id)
     ready = op_improvement_mark_ready(
-        repo_root, conn, improvement_id=proposal["improvement_id"], verdict_artifact_id=verdict_id, validation_artifact_ids=[]
+        repo_root,
+        conn,
+        improvement_id=proposal["improvement_id"],
+        verdict_artifact_id=verdict_id,
+        validation_artifact_ids=[],
     )
     requested = op_improvement_request_merge(repo_root, conn, improvement_id=ready["improvement_id"])
     conn.execute(

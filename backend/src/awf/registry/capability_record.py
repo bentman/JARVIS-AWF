@@ -1,17 +1,12 @@
 """Capability Record schema, loading, and validation (Section 9.1)."""
 
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 
 import yaml
 
-from awf.registry.schema import require, require_enum
-
-IDENTITY_TYPES = ("mcp-tool", "activity", "cli-adapter-action")
-OPERATIONS = ("read", "create", "update", "delete", "execute", "communicate")
-RISK_CLASSES = ("R0", "R1", "R2", "R3")
-APPROVAL_MODES = ("never", "per-run", "per-invocation")
+from awf.registry.schema import validate_json_schema, validate_registry_identity
+from awf.registry.schemas.capability_records import SCHEMA
 
 
 class CapabilityRecordValidationError(ValueError):
@@ -49,39 +44,34 @@ class CapabilityRecord:
         return f"{self.identity.name}@{self.identity.version}"
 
 
-_require = partial(require, error=CapabilityRecordValidationError)
-_require_enum = partial(require_enum, error=CapabilityRecordValidationError)
-
-
 def parse_capability_record(raw: dict) -> CapabilityRecord:
-    identity_raw = _require(raw, "identity", "capability record")
-    schema_raw = _require(raw, "schema", "capability record")
-    effects_raw = _require(raw, "effects", "capability record")
-    risk_class = _require(raw, "risk_class", "capability record")
-    approval = _require(raw, "approval", "capability record")
+    validate_json_schema(raw, SCHEMA, "capability record", error=CapabilityRecordValidationError)
+    identity_raw = raw["identity"]
+    schema_raw = raw["schema"]
+    effects_raw = raw["effects"]
 
     identity = Identity(
-        type=_require_enum(_require(identity_raw, "type", "identity"), IDENTITY_TYPES, "identity.type"),
-        provider=_require(identity_raw, "provider", "identity"),
-        name=_require(identity_raw, "name", "identity"),
-        version=_require(identity_raw, "version", "identity"),
+        type=identity_raw["type"],
+        provider=identity_raw["provider"],
+        name=identity_raw["name"],
+        version=identity_raw["version"],
     )
     effects = Effects(
-        operation=_require_enum(_require(effects_raw, "operation", "effects"), OPERATIONS, "effects.operation"),
-        reversible=bool(_require(effects_raw, "reversible", "effects")),
-        idempotent=bool(_require(effects_raw, "idempotent", "effects")),
-        external_side_effect=bool(_require(effects_raw, "external_side_effect", "effects")),
+        operation=effects_raw["operation"],
+        reversible=effects_raw["reversible"],
+        idempotent=effects_raw["idempotent"],
+        external_side_effect=effects_raw["external_side_effect"],
     )
 
     constraints = raw.get("constraints", {})
-    _validate_constraints(identity, effects, risk_class, constraints)
+    _validate_constraints(identity, effects, raw["risk_class"], constraints)
     return CapabilityRecord(
         identity=identity,
-        schema_input=_require(schema_raw, "input", "schema"),
-        schema_output=_require(schema_raw, "output", "schema"),
+        schema_input=schema_raw["input"],
+        schema_output=schema_raw["output"],
         effects=effects,
-        risk_class=_require_enum(risk_class, RISK_CLASSES, "risk_class"),
-        approval=_require_enum(approval, APPROVAL_MODES, "approval"),
+        risk_class=raw["risk_class"],
+        approval=raw["approval"],
         constraints=constraints,
     )
 
@@ -119,4 +109,12 @@ def load_capability_record(path: Path) -> CapabilityRecord:
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise CapabilityRecordValidationError(f"{path}: capability record must be a YAML mapping")
-    return parse_capability_record(raw)
+    record = parse_capability_record(raw)
+    validate_registry_identity(
+        name=record.identity.name,
+        version=record.identity.version,
+        path=path,
+        context="capability record",
+        error=CapabilityRecordValidationError,
+    )
+    return record

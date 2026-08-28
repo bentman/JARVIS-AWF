@@ -24,6 +24,13 @@ The shipped `assistant-default@1.0.0` workflow now routes its
 `assistant_reply` activity through that Model Profile and the Model Gateway
 instead of returning a canned deterministic string.
 
+Alignment update, 2026-08-14: server settings now use the registry layout
+`config/app_registry/llm-servers/default/1.0.0.yaml`, with operator overrides
+under `data/registry/llm-servers/default/<version>.yaml`. The obsolete
+`config/llm/servers.yaml` file and empty `config/llm/` directory were removed.
+References below to `config/llm/servers.yaml` describe the historical
+ADR-0017 implementation shape.
+
 ## Context
 
 The Model Gateway calls `litellm.completion` in-process.
@@ -502,7 +509,7 @@ select(repo_root, conn, *, server_id, model=None, allow_remote=False) -> dict
 ```
 
 `select` builds a Model Profile and publishes it through
-`core_ops.op_registry_publish`, so it is indexed, digested, and trust-marked
+`awf.ops.registry.op_registry_publish`, so it is indexed, digested, and trust-marked
 like any other object:
 
 ```yaml

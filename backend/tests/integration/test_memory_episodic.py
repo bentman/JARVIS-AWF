@@ -1,7 +1,7 @@
 from backend.tests.support import make_awf_repo, seed_run_step
 
-from awf.cli.core_ops import op_episodic_search, op_episodic_timeline
 from awf.events.writer import write_event
+from awf.ops.memory import op_episodic_search, op_episodic_timeline
 
 
 def test_episodic_search_and_timeline_read_events(tmp_path):

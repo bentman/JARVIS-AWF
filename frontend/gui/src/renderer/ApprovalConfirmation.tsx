@@ -6,6 +6,7 @@ export interface ApprovalConfirmationProps {
   approvalId: string;
   actionDigest: string;
   riskClass: RiskClass;
+  preview?: { machine_action?: Record<string, unknown>; machine_action_digest?: string } | null;
   voiceConfirmed: boolean;
   onApprove: (approvalId: string) => void;
   onReject: (approvalId: string, reason: string) => void;
@@ -18,11 +19,13 @@ export function ApprovalConfirmation({
   approvalId,
   actionDigest,
   riskClass,
+  preview,
   voiceConfirmed,
   onApprove,
   onReject,
 }: ApprovalConfirmationProps): React.JSX.Element {
   const decision = decideVoiceAcknowledgement(riskClass, voiceConfirmed);
+  const action = preview?.machine_action;
 
   React.useEffect(() => {
     if (decision.decided) {
@@ -36,6 +39,14 @@ export function ApprovalConfirmation({
       <p>
         Action digest: <code className="mono">{actionDigest}</code>
       </p>
+      {action && (
+        <div aria-label="Action preview">
+          <p>
+            Action: {String(action.kind ?? "action")} {String(action.capability_ref ?? "")}
+          </p>
+          <pre className="pre-scroll">{JSON.stringify(action.target ?? {}, null, 2)}</pre>
+        </div>
+      )}
       <p className={`chip ${stateClass(riskClass)}`}>Risk class: {riskClass}</p>
       {decision.requiresOnScreenConfirmation && (
         <p role="alert">Voice alone cannot approve this action - confirm on screen.</p>

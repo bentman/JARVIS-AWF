@@ -96,9 +96,7 @@ def derive_tts_readiness(inventory: "HardwareInventory", tokens: list[str]) -> R
     if inventory.os_name == "windows" and inventory.gpu_available and f"ep:{_DML_PROVIDER}" in tokens:
         return Readiness(device="directml", ready=True, reason="windows, gpu_available, DmlExecutionProvider available")
     if _qnn_host_capable(inventory, tokens) and _qnn_runtime_capable(tokens):
-        return Readiness(
-            device="qnn", ready=True, reason=_qnn_reason(inventory)
-        )
+        return Readiness(device="qnn", ready=True, reason=_qnn_reason(inventory))
     return Readiness(device="cpu", ready=True, reason="no verified accelerator execution provider for ONNX Runtime")
 
 

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProtocolClient } from "@awf/protocol-client";
@@ -13,6 +14,7 @@ export const VOICE_SESSION_CHANNELS = {
   interrupt: "awf:voiceInterrupt",
   submitText: "awf:voiceSubmitText",
   speakText: "awf:voiceSpeakText",
+  transcribe: "awf:voiceTranscribe",
 } as const;
 
 export interface VoiceRoundTripResult {
@@ -47,6 +49,17 @@ export interface RunVoiceSpeakTextOptions {
   text: string;
   voiceId?: string;
   responseAudioOutPath?: string;
+}
+
+export interface VoiceTranscribeResult {
+  text: string;
+  language: string;
+}
+
+export interface RunVoiceTranscribeOptions {
+  command?: string;
+  cwd: string;
+  audioData: Uint8Array;
 }
 
 function parseLastJsonLine<T>(stdout: string, stderr: string, code: number | null): T {
@@ -193,5 +206,52 @@ export function registerVoiceSpeakIpcHandler(
       voiceId: voiceId as string | undefined,
       responseAudioOutPath: responseAudioOutPath as string | undefined,
     }),
+  );
+}
+
+export async function runVoiceTranscribe(options: RunVoiceTranscribeOptions): Promise<VoiceTranscribeResult> {
+  const tmpPath = join(tmpdir(), `awf-transcribe-${Date.now()}.wav`);
+  await writeFile(tmpPath, options.audioData);
+  try {
+    return await new Promise<VoiceTranscribeResult>((resolve, reject) => {
+      const args = ["transcribe", tmpPath];
+      const child = spawn(options.command ?? "awf-speech", args, { cwd: options.cwd });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+      child.on("error", (err) => reject(err));
+      child.on("close", (code) => {
+        try {
+          const parsed = parseLastJsonLine<(VoiceTranscribeResult & { error?: undefined }) | { error: string }>(
+            stdout,
+            stderr,
+            code,
+          );
+          if (parsed.error) {
+            reject(new Error(parsed.error));
+            return;
+          }
+          resolve(parsed as VoiceTranscribeResult);
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+  } finally {
+    await unlink(tmpPath).catch(() => {});
+  }
+}
+
+export function registerVoiceTranscribeIpcHandler(
+  ipcMain: IpcMainLike,
+  defaults: Pick<RunVoiceTranscribeOptions, "command" | "cwd">,
+): void {
+  ipcMain.handle(VOICE_SESSION_CHANNELS.transcribe, (_event, audioData) =>
+    runVoiceTranscribe({ ...defaults, audioData: new Uint8Array(audioData as ArrayBuffer) }),
   );
 }

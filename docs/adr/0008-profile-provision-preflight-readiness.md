@@ -4,6 +4,13 @@
 
 Implemented.
 
+Alignment update, 2026-08-14: speech model settings are no longer read from
+`config/voice/stt.yaml`. They are registry objects under
+`config/app_registry/hardware-voice-manifests/{stt,tts,vad,wake}/1.0.0.yaml`
+with operator overrides under `data/registry/hardware-voice-manifests/`.
+Historical references below to `config/voice/stt.yaml` now mean the `stt`
+hardware-voice-manifest object.
+
 Separately, `scripts/validate_backend.py`'s `profile` command called
 `resolve_hardware_profile_id()` with no arguments — a stale call site missed
 when this ADR added the required `repo_root` parameter to that function's

@@ -9,7 +9,7 @@ stream.
 
 `models sync`/`models verify` resolve STT readiness (the only readiness
 result `speech.models` needs), then acquire or check presence of the
-artifacts `config/voice/{stt,tts,vad,wake}.yaml` name.
+artifacts `config/app_registry/hardware-voice-manifests/*/1.0.0.yaml` names.
 """
 
 import argparse
@@ -43,6 +43,9 @@ def build_parser() -> argparse.ArgumentParser:
     synthesize_cmd.add_argument("text")
     synthesize_cmd.add_argument("--voice-id", default=None)
     synthesize_cmd.add_argument("--response-audio-out", required=True)
+
+    transcribe_cmd = sub.add_parser("transcribe")
+    transcribe_cmd.add_argument("audio_path", type=Path)
 
     models = sub.add_parser("models")
     models_sub = models.add_subparsers(dest="models_command", required=True)
@@ -105,6 +108,25 @@ def _run_round_trip(args: argparse.Namespace, repo_root: Path) -> int:
     return 0
 
 
+def _run_transcribe(args: argparse.Namespace, repo_root: Path) -> int:
+    from awf.hardware.preflight import collect_preflight_tokens
+    from awf.hardware.profiler import collect_inventory
+    from awf.hardware.readiness import derive_stt_readiness
+    from awf.speech.models import stt_runtime
+    from awf.speech.stt_onnx import transcribe
+
+    inventory = collect_inventory()
+    tokens = collect_preflight_tokens(inventory)
+    readiness = derive_stt_readiness(inventory, tokens)
+    if not readiness.ready:
+        print(json.dumps({"error": f"STT not ready: {readiness.reason}"}))
+        return 1
+    runtime = stt_runtime(repo_root, readiness.device)
+    result = transcribe(args.audio_path, repo_root=repo_root, runtime=runtime)
+    print(json.dumps({"text": result["text"], "language": result["language"]}))
+    return 0
+
+
 def _run_models(args: argparse.Namespace, repo_root: Path) -> int:
     from awf.hardware.preflight import collect_preflight_tokens
     from awf.hardware.profiler import collect_inventory
@@ -137,7 +159,9 @@ def _run_synthesize(args: argparse.Namespace, repo_root: Path) -> int:
         voices_path=tts_paths["voices-v1.0.bin"],
     )
     write_wav(samples, sample_rate, Path(args.response_audio_out))
-    print(json.dumps({"response_text": args.text, "voice_id": voice_id, "response_audio_path": args.response_audio_out}))
+    print(
+        json.dumps({"response_text": args.text, "voice_id": voice_id, "response_audio_path": args.response_audio_out})
+    )
     return 0
 
 
@@ -148,6 +172,8 @@ def run(argv: list[str], repo_root: Path) -> int:
         return _run_round_trip(args, repo_root)
     if args.command == "synthesize":
         return _run_synthesize(args, repo_root)
+    if args.command == "transcribe":
+        return _run_transcribe(args, repo_root)
     if args.command == "models":
         return _run_models(args, repo_root)
     raise AssertionError(f"unhandled command: {args.command}")

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProtocolClient } from "../src/client.js";
 import { ProtocolError } from "../src/types.js";
 import { FakeTransport } from "./fake_transport.js";
@@ -10,6 +10,9 @@ function setup() {
 }
 
 describe("ProtocolClient", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   it("sends a well-formed JSON-RPC request for runStart", () => {
     const { transport, client } = setup();
     void client.runStart("demo@1.0.0", { objective: "x" });
@@ -61,6 +64,40 @@ describe("ProtocolClient", () => {
     transport.emitExit(1);
 
     await expect(promise).rejects.toThrow(/exited/);
+  });
+
+  it("rejects all pending requests when the transport errors", async () => {
+    const { transport, client } = setup();
+    const promise = client.runStatus("run-1");
+
+    transport.emitError(new Error("ENOENT"));
+
+    await expect(promise).rejects.toThrow("ENOENT");
+  });
+
+  it("rejects method-aware timeouts", async () => {
+    vi.useFakeTimers();
+    const transport = new FakeTransport();
+    const client = new ProtocolClient(transport, { callTimeoutMs: 25 });
+    const promise = client.runStatus("run-1");
+    const expectation = expect(promise).rejects.toThrow("awf awf/run.status timed out after 25ms");
+
+    await vi.advanceTimersByTimeAsync(25);
+
+    await expectation;
+  });
+
+  it("uses the longer run timeout for run.start", async () => {
+    vi.useFakeTimers();
+    const transport = new FakeTransport();
+    const client = new ProtocolClient(transport, { callTimeoutMs: 25, runCallTimeoutMs: 1000 });
+    const promise = client.runStart("demo@1.0.0");
+    const request = transport.lastRequest();
+
+    await vi.advanceTimersByTimeAsync(25);
+    transport.emit({ jsonrpc: "2.0", id: request.id, result: { run_id: "run-1", status: "SUCCEEDED" } });
+
+    await expect(promise).resolves.toMatchObject({ run_id: "run-1" });
   });
 
   it("increments request ids across calls", () => {

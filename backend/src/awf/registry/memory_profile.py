@@ -1,21 +1,16 @@
 """Memory Profile schema, loading, and validation (ADR-0020)."""
 
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 
 import yaml
 
-from awf.registry.model_profile import DATA_CLASSES
-from awf.registry.schema import require, require_enum
+from awf.registry.schema import validate_json_schema, validate_registry_identity
+from awf.registry.schemas.memory_profiles import SCHEMA
 
 
 class MemoryProfileValidationError(ValueError):
     pass
-
-
-_require = partial(require, error=MemoryProfileValidationError)
-_require_enum = partial(require_enum, error=MemoryProfileValidationError)
 
 
 @dataclass(frozen=True)
@@ -64,54 +59,40 @@ class MemoryProfile:
 
 
 def parse_memory_profile(raw: dict) -> MemoryProfile:
-    api_version = _require(raw, "apiVersion", "memory profile")
-    kind = _require(raw, "kind", "memory profile")
-    metadata_raw = _require(raw, "metadata", "memory profile")
-    spec_raw = _require(raw, "spec", "memory profile")
-    retrieval_raw = _require(spec_raw, "retrieval", "spec")
-    retention_raw = _require(spec_raw, "retention", "spec")
-    embedding_raw = _require(spec_raw, "embedding", "spec")
-
-    if api_version != "awf/v1":
-        raise MemoryProfileValidationError("memory profile apiVersion must be awf/v1")
-    if kind != "MemoryProfile":
-        raise MemoryProfileValidationError("memory profile kind must be MemoryProfile")
+    validate_json_schema(raw, SCHEMA, "memory profile", error=MemoryProfileValidationError)
+    metadata_raw = raw["metadata"]
+    spec_raw = raw["spec"]
+    retrieval_raw = spec_raw["retrieval"]
+    retention_raw = spec_raw["retention"]
+    embedding_raw = spec_raw["embedding"]
 
     retrieval = MemoryRetrieval(
-        max_items=int(_require(retrieval_raw, "maxItems", "spec.retrieval")),
-        max_tokens=int(_require(retrieval_raw, "maxTokens", "spec.retrieval")),
-        include_episodic=bool(_require(retrieval_raw, "includeEpisodic", "spec.retrieval")),
-        include_semantic=bool(_require(retrieval_raw, "includeSemantic", "spec.retrieval")),
-        min_confidence=float(_require(retrieval_raw, "minConfidence", "spec.retrieval")),
+        max_items=retrieval_raw["maxItems"],
+        max_tokens=retrieval_raw["maxTokens"],
+        include_episodic=retrieval_raw["includeEpisodic"],
+        include_semantic=retrieval_raw["includeSemantic"],
+        min_confidence=retrieval_raw["minConfidence"],
     )
-    if retrieval.max_items < 1 or retrieval.max_tokens < 1:
-        raise MemoryProfileValidationError("memory profile retrieval limits must be positive")
-    if not 0.0 <= retrieval.min_confidence <= 1.0:
-        raise MemoryProfileValidationError("memory profile minConfidence must be between 0.0 and 1.0")
 
     return MemoryProfile(
-        api_version=api_version,
-        kind=kind,
+        api_version=raw["apiVersion"],
+        kind=raw["kind"],
         metadata=MemoryProfileMetadata(
-            name=_require(metadata_raw, "name", "metadata"),
-            version=_require(metadata_raw, "version", "metadata"),
-            digest=_require(metadata_raw, "digest", "metadata"),
+            name=metadata_raw["name"],
+            version=metadata_raw["version"],
+            digest=metadata_raw["digest"],
         ),
-        enabled=bool(_require(spec_raw, "enabled", "spec")),
-        maximum_data_class=_require_enum(
-            _require(spec_raw, "maximum_data_class", "spec"), DATA_CLASSES, "spec.maximum_data_class"
-        ),
+        enabled=spec_raw["enabled"],
+        maximum_data_class=spec_raw["maximum_data_class"],
         retrieval=retrieval,
         retention=MemoryRetention(
-            active_session_ttl_hours=int(_require(retention_raw, "activeSessionTtlHours", "spec.retention")),
-            require_explicit_semantic_publish=bool(
-                _require(retention_raw, "requireExplicitSemanticPublish", "spec.retention")
-            ),
+            active_session_ttl_hours=retention_raw["activeSessionTtlHours"],
+            require_explicit_semantic_publish=retention_raw["requireExplicitSemanticPublish"],
         ),
         embedding=MemoryEmbedding(
-            enabled=bool(_require(embedding_raw, "enabled", "spec.embedding")),
+            enabled=embedding_raw["enabled"],
             model_profile_ref=embedding_raw.get("modelProfileRef"),
-            version=str(_require(embedding_raw, "version", "spec.embedding")),
+            version=embedding_raw["version"],
         ),
     )
 
@@ -121,12 +102,11 @@ def load_memory_profile(path: Path) -> MemoryProfile:
     if not isinstance(raw, dict):
         raise MemoryProfileValidationError(f"{path}: memory profile must be a YAML mapping")
     profile = parse_memory_profile(raw)
-    if profile.metadata.name != path.parent.name:
-        raise MemoryProfileValidationError(
-            f"memory profile name '{profile.metadata.name}' does not match its registry directory '{path.parent.name}'"
-        )
-    if profile.metadata.version != path.stem:
-        raise MemoryProfileValidationError(
-            f"memory profile version '{profile.metadata.version}' does not match its file name '{path.stem}'"
-        )
+    validate_registry_identity(
+        name=profile.metadata.name,
+        version=profile.metadata.version,
+        path=path,
+        context="memory profile",
+        error=MemoryProfileValidationError,
+    )
     return profile

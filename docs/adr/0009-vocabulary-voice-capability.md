@@ -38,6 +38,12 @@ record's file path stay `claude_code_invoke` as originally specified - that
 is the registry object's own name, not the actor string, and the two are
 allowed to differ.
 
+Alignment update, 2026-08-14: `config/voice/` is no longer an active path.
+Voice model manifests are registry objects under
+`config/app_registry/hardware-voice-manifests/` and
+`data/registry/hardware-voice-manifests/`, so path helpers and validation now
+flow through the registry roots instead of a dedicated `config_voice_dir`.
+
 ## Context
 
 **Repo-relative locations are spelled in five modules.** `awf/paths.py` owns

@@ -23,7 +23,9 @@ def start_session(conn: sqlite3.Connection, *, title: str | None = None, expires
     return show_session(conn, session_id=session_id)
 
 
-def append_entry(conn: sqlite3.Connection, *, session_id: str, role: str, content: dict, summary: str | None = None) -> dict:
+def append_entry(
+    conn: sqlite3.Connection, *, session_id: str, role: str, content: dict, summary: str | None = None
+) -> dict:
     row = conn.execute("SELECT status FROM active_sessions WHERE session_id = ?", (session_id,)).fetchone()
     if row is None:
         raise SessionError(f"no such session: {session_id}")
@@ -64,7 +66,9 @@ def summarize_session(conn: sqlite3.Connection, *, session_id: str, summary: str
             parts.append(f"{entry['role']}: {entry_summary}")
         summary = "\n".join(parts)
     now = utc_now_rfc3339()
-    conn.execute("UPDATE active_sessions SET status = 'summarized', updated_at = ? WHERE session_id = ?", (now, session_id))
+    conn.execute(
+        "UPDATE active_sessions SET status = 'summarized', updated_at = ? WHERE session_id = ?", (now, session_id)
+    )
     conn.commit()
     result = show_session(conn, session_id=session_id)
     result["summary"] = summary

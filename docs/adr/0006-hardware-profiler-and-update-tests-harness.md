@@ -4,6 +4,13 @@
 
 Implemented. Amended in part by ADR-0008.
 
+Alignment update, 2026-08-14: the validation harness now includes
+`scripts/validate_backend.py focus <path-or-keyword>`. `unit` runs
+`backend/tests/unit`, while `regression` runs the broader deterministic
+non-live backend suite. `ci` first runs protocol generated-file drift checks
+and argparse parity checks, then lint, then non-live pytest; generator or
+parity failures map to the existing `FAIL` report contract.
+
 ## Amended by ADR-0008
 
 ADR-0008 split profile resolution into four stages, which retires several
@@ -233,8 +240,9 @@ preserved across the move (`git mv`, no renames).
 | `unit` | `python -m pytest -q backend/tests/unit` | — |
 | `integration` | `python -m pytest -q backend/tests/integration` | — |
 | `runtime` | `python -m pytest -q -m live backend/tests` | — |
-| `regression` | the always-safe minimal set, starting at `backend/tests/unit` | `reports/validation/<ts>-regression.txt` |
-| `ci` | `python -m pytest -q -m "not live" backend/tests` | — |
+| `focus <path-or-keyword>` | focused pytest selection with the same pass/fail/skip mapping as other pytest commands | `reports/validation/<ts>-focus.txt` |
+| `regression` | `python -m pytest -q -m "not live" backend/tests` | `reports/validation/<ts>-regression.txt` |
+| `ci` | protocol generation `--check`, argparse parity, lint, then `python -m pytest -q -m "not live" backend/tests` | `reports/validation/<ts>-ci.txt` |
 
 Exit codes, shared by every command:
 

@@ -5,7 +5,7 @@ and `runtime/`.
 Every test database is a throwaway file under `tmp_path`, discarded at the
 end of its own test - none of them need `fsync`-backed crash durability
 (that's a production guarantee, Section 13.2, exercised by
-`test_phase4_durable_execution.py::test_mid_run_crash_and_resume...`, which
+`test_engine_durable_execution.py::test_mid_run_crash_and_resume...`, which
 runs in a separate `subprocess.run` process that imports its own unpatched
 `sqlite3` module, so this has no effect on that test).
 

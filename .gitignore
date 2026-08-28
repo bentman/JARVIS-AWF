@@ -8,7 +8,6 @@
 /.env.*
 # tracked example
 !/.env.example
-
 # local agent/client state
 /.agents/
 /.claude/
@@ -100,6 +99,8 @@ Thumbs.db
 !/data/registry
 !/data/registry/agents
 !/data/registry/capabilities
+!/data/registry/hardware-voice-manifests/
+!/data/registry/llm-servers/
 !/data/registry/mcp/
 !/data/registry/memory-profiles/
 !/data/registry/model-profiles/
@@ -124,6 +125,14 @@ Thumbs.db
 # data/registry/capabilities
 /data/registry/capabilities/*
 !/data/registry/capabilities/.gitkeep
+
+# data/registry/hardware-voice-manifests
+/data/registry/hardware-voice-manifests/*
+!/data/registry/hardware-voice-manifests/.gitkeep
+
+# data/registry/llm-servers
+/data/registry/llm-servers/*
+!/data/registry/llm-servers/.gitkeep
 
 # data/registry/mcp
 /data/registry/mcp/*

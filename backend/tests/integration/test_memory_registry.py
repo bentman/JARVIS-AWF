@@ -3,11 +3,8 @@ import hashlib
 import yaml
 from backend.tests.support import make_awf_repo
 
-from awf.cli.core_ops import (
-    op_memory_block,
-    op_memory_propose,
-    op_memory_publish,
-    op_memory_search,
+from awf.ops.memory import op_memory_block, op_memory_propose, op_memory_publish, op_memory_search
+from awf.ops.registry import (
     op_registry_get,
     op_registry_publish,
     op_registry_validate,

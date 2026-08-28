@@ -15,7 +15,9 @@ from awf.events.writer import write_event
 from awf.hardware.profiler import SYSTEM_RUN_ID, _ensure_system_run
 from awf.memory.sessions import append_entry, start_session
 
-VoiceSessionState = Literal["idle", "armed", "listening", "transcribing", "submitting", "speaking", "recovering", "closed"]
+VoiceSessionState = Literal[
+    "idle", "armed", "listening", "transcribing", "submitting", "speaking", "recovering", "closed"
+]
 VoiceFrameType = Literal[
     "session.started",
     "session.idle",
@@ -147,7 +149,9 @@ def accept_frame(conn: sqlite3.Connection, *, voice_session_id: str, frame: Voic
     return next_session
 
 
-def append_operator_utterance(conn: sqlite3.Connection, *, voice_session_id: str, text: str, turn_id: str | None) -> dict:
+def append_operator_utterance(
+    conn: sqlite3.Connection, *, voice_session_id: str, text: str, turn_id: str | None
+) -> dict:
     return append_entry(
         conn,
         session_id=voice_session_id,

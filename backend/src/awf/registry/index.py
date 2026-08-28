@@ -2,7 +2,7 @@
 
 The filesystem stays the resolution source of truth; this module reads and
 writes `registry_index`, the table `resolve.resolve_registry_object` and
-`cli.core_ops` consult for digest verification, trust status, and
+`ops.registry` consult for digest verification, trust status, and
 latest-version lookup. A rebuild (`reindex`) is idempotent and never touches
 an existing row's `trust_status`, so an operator's `blocked`/`quarantined`/
 `trusted` decision survives it.
@@ -25,7 +25,11 @@ _DEFAULT_TRUST_STATUS = {"config": "trusted", "data": "local"}
 def compute_digest(path: Path, kind: RegistryKind) -> str:
     if kind.layout == "directory":
         return directory_digest(path.parent)
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    hasher = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(65536):
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def index_row(conn: sqlite3.Connection, kind: str, name: str, version: str) -> dict | None:

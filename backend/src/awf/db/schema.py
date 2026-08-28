@@ -20,6 +20,7 @@ DDL_STATEMENTS = [
         updated_at TEXT NOT NULL
     )
     """,
+    "CREATE INDEX IF NOT EXISTS idx_runs_status_created ON runs (status, created_at)",
     """
     CREATE TABLE IF NOT EXISTS steps (
         step_id TEXT PRIMARY KEY,
@@ -43,6 +44,7 @@ DDL_STATEMENTS = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_steps_run_id ON steps (run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_steps_run_node_attempt ON steps (run_id, node_id, attempt)",
     """
     CREATE TABLE IF NOT EXISTS events (
         event_id TEXT PRIMARY KEY,
@@ -58,6 +60,7 @@ DDL_STATEMENTS = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_events_run_id ON events (run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_events_run_occurred ON events (run_id, occurred_at)",
     """
     CREATE TABLE IF NOT EXISTS artifacts (
         artifact_id TEXT PRIMARY KEY,
@@ -88,6 +91,7 @@ DDL_STATEMENTS = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_approvals_run_id ON approvals (run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals (status)",
     """
     CREATE TABLE IF NOT EXISTS secrets (
         name TEXT PRIMARY KEY,
@@ -186,6 +190,7 @@ DDL_STATEMENTS = [
         expires_at TEXT
     )
     """,
+    "CREATE INDEX IF NOT EXISTS idx_active_sessions_status ON active_sessions (status)",
     """
     CREATE TABLE IF NOT EXISTS active_session_entries (
         entry_id TEXT PRIMARY KEY,

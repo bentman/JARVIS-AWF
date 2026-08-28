@@ -20,6 +20,8 @@ merge conflict between two items' changes is a real failure
 """
 
 import concurrent.futures
+import inspect
+import os
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
@@ -27,14 +29,24 @@ from pathlib import Path
 from awf.engine.executor import run_step
 from awf.isolation.worktree import WorktreeError, branch_name, current_head, merge_branch, remove_worktree
 
-# (parent_head_sha, index, workflow_ref, item) -> (child_run_id, item_worktree_path, result)
-RunMapItemFn = Callable[[str, int, str, object], tuple[str, Path, dict]]
+# (parent_head_sha, index, workflow_ref, item, optional sqlite connection) -> (child_run_id, item_worktree_path, result)
+RunMapItemFn = Callable[[str, int, str, object, sqlite3.Connection | None], tuple[str, Path, dict]]
 
 
 class MapNodeError(RuntimeError):
     def __init__(self, message: str, *, failure_class: str = "TOOL_ERROR"):
         super().__init__(message)
         self.failure_class = failure_class
+
+
+def _run_map_item(run_map_item: RunMapItemFn, parent_head: str, index: int, workflow_ref: str, item, conn):
+    try:
+        signature = inspect.signature(run_map_item)
+    except (TypeError, ValueError):
+        return run_map_item(parent_head, index, workflow_ref, item, conn)
+    if len(signature.parameters) >= 5:
+        return run_map_item(parent_head, index, workflow_ref, item, conn)
+    return run_map_item(parent_head, index, workflow_ref, item)
 
 
 def make_map_node_executor(run_map_item: RunMapItemFn, *, worktree_path: Path, repo_root: Path):
@@ -48,17 +60,23 @@ def make_map_node_executor(run_map_item: RunMapItemFn, *, worktree_path: Path, r
                     failure_class="INVALID_INPUT",
                 )
             max_concurrency = max(1, node["maxConcurrency"])
+            if os.name == "nt":
+                max_concurrency = 1
             workflow_ref = node["workflowRef"]
             parent_head = current_head(worktree_path)
 
             results_by_index: dict[int, tuple[str, Path, dict]] = {}
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrency) as pool:
-                futures = {
-                    pool.submit(run_map_item, parent_head, index, workflow_ref, item): index
-                    for index, item in enumerate(items)
-                }
-                for future in concurrent.futures.as_completed(futures):
-                    results_by_index[futures[future]] = future.result()
+            if max_concurrency == 1:
+                for index, item in enumerate(items):
+                    results_by_index[index] = _run_map_item(run_map_item, parent_head, index, workflow_ref, item, conn)
+            else:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrency) as pool:
+                    futures = {
+                        pool.submit(_run_map_item, run_map_item, parent_head, index, workflow_ref, item, None): index
+                        for index, item in enumerate(items)
+                    }
+                    for future in concurrent.futures.as_completed(futures):
+                        results_by_index[futures[future]] = future.result()
 
             child_run_ids = []
             try:

@@ -13,14 +13,26 @@ awf.speech.cli models verify` passed with configured TTS/VAD/wake artifacts OK.
 Corrective update, 2026-08-12: `voice.submitText` no longer requires the GUI
 to provide a workflow ref. The core defaults missing `workflowRef` to
 `assistant-default@1.0.0`, advances idle/listening sessions through the same
-visible frame sequence used by push-to-talk, then submits the turn. The GUI
-push-to-talk path now uses browser speech recognition when available to fill
-the final recognized text field; manual text entry remains the fallback.
-Browser interim recognition text is currently renderer-local UI state, not a
-backend `stt.partial` stream. The backend receives `stt.final` during
-`voice.submitText`; browser SpeechRecognition availability depends on
-Electron/Chromium and may require a network speech service, so the textarea
-path remains the reliable fallback.
+visible frame sequence used by push-to-talk, then submits the turn.
+
+Corrective update, 2026-08-15: browser `SpeechRecognition` is removed from
+the push-to-talk path. `VoiceActivation.tsx` now records the open
+`getUserMedia` stream with `MediaRecorder` and, on stop, sends the audio bytes
+to the main process via the new `awf:voiceTranscribe` IPC channel.
+`voicePipeline.ts` writes the bytes to a temp WAV and spawns `awf-speech
+transcribe <path>`, which resolves STT readiness (same hardware/preflight/
+readiness chain used by `awf-speech models`), constructs the appropriate
+`SttRuntime`, and calls `stt_onnx.transcribe`. The JSON result `{text,
+language}` is returned to the renderer and populates `recognizedText`. Manual
+textarea editing remains the fallback for any error. `partialText` display
+stays in the UI but is no longer populated on this path — interim text
+requires a streaming STT contract and is reserved for a future frame.
+
+Alignment update, 2026-08-14: voice JSON-RPC handlers now live in
+`awf.ops.voice`; approval handlers live in `awf.ops.approval`. Shared
+R2+ voice-acknowledgement policy lives in `awf.approval_policy`, so
+`awf.gates.voice_approval` and approval operations do not import each other.
+`awf.cli.core_ops` remains a compatibility re-export surface only.
 
 ## Context
 
@@ -44,7 +56,7 @@ The current codebase has the foundation:
   interruption controls.
 - `frontend/gui/src/renderer/App.tsx` appends recognized command text and
   response text into the visible transcript.
-- `backend/src/awf/cli/core_ops.py` already enforces that voice alone cannot
+- `backend/src/awf/ops/approval.py` already enforces that voice alone cannot
   grant R2+ approvals.
 - ADR-0020 added active sessions; `backend/src/awf/memory/sessions.py` can
   persist bounded turn entries.
@@ -275,12 +287,14 @@ Add main-process session orchestration with explicit IPC:
 - `awf:voiceInterrupt`
 - `awf:voiceSubmitText`
 - `awf:voiceSpeakText`
+- `awf:voiceTranscribe`
 
 The renderer receives state changes for UI display. Browser microphone access
-is used for push-to-talk permission and capture lifecycle. Browser speech
-recognition is used when available to produce final/interim text; the
-implemented
-submission path uses final text rather than streamed audio frames.
+is used for push-to-talk permission and capture lifecycle. `MediaRecorder`
+captures the stream; on stop the audio bytes are sent through
+`awf:voiceTranscribe` to the main process, which writes a temp WAV and spawns
+`awf-speech transcribe` to produce the final transcript. The submission path
+uses that final text; partial/interim text is not streamed in v1.
 
 ### Task D — Interruption and recovery
 

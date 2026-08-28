@@ -3,6 +3,17 @@ import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/renderer/App.js";
 
+// `blobToWav16` needs a real AudioContext, which jsdom does not provide.
+// Its encoding contract is covered directly in `wav.test.ts`; here we only
+// care that push-to-talk routes the recording through it to
+// `window.awf.voiceTranscribe` and lands the result in the transcript.
+const blobToWav16Mock = vi.fn().mockResolvedValue(new ArrayBuffer(8));
+vi.mock("../src/renderer/wav.js", () => ({
+  STT_SAMPLE_RATE: 16000,
+  encodeWav16: vi.fn(),
+  blobToWav16: (...args: unknown[]) => blobToWav16Mock(...args),
+}));
+
 function liveVoiceProps() {
   return {
     onVoiceSessionStart: vi.fn().mockResolvedValue({ voice_session_id: "vs-1", memory_session_id: "vs-1", state: "idle" }),
@@ -35,8 +46,9 @@ function liveVoiceProps() {
 
 describe("App live voice session (text-first invariant)", () => {
   afterEach(() => {
-    delete (window as any).SpeechRecognition;
-    delete (window as any).webkitSpeechRecognition;
+    delete (globalThis as any).MediaRecorder;
+    delete (window as any).awf;
+    blobToWav16Mock.mockClear();
   });
 
   it("renders recognized voice text and response text in the visible transcript", async () => {
@@ -96,21 +108,28 @@ describe("App live voice session (text-first invariant)", () => {
     );
   });
 
-  it("captures live speech recognition results during push to talk", async () => {
+  it("transcribes the push-to-talk recording through awf-speech, not a browser recognizer", async () => {
     const props = liveVoiceProps();
-    let recognition: any;
-    (window as any).SpeechRecognition = vi.fn(function FakeSpeechRecognition(this: any) {
-      recognition = {
-        continuous: false,
-        interimResults: false,
-        lang: "",
-        onresult: null,
-        onerror: null,
-        start: vi.fn(),
-        stop: vi.fn(),
+    let recorder: any;
+    (globalThis as any).MediaRecorder = vi.fn(function FakeMediaRecorder(this: any) {
+      recorder = {
+        mimeType: "audio/webm",
+        state: "inactive",
+        ondataavailable: null as ((event: { data: Blob }) => void) | null,
+        onstop: null as (() => void) | null,
+        start: vi.fn(() => {
+          recorder.state = "recording";
+        }),
+        stop: vi.fn(() => {
+          recorder.state = "inactive";
+          recorder.ondataavailable?.({ data: new Blob([new Uint8Array([1, 2, 3])]) });
+          recorder.onstop?.();
+        }),
       };
-      return recognition;
+      return recorder;
     });
+    const voiceTranscribe = vi.fn().mockResolvedValue({ text: "Hello from microphone.", language: "en" });
+    (window as any).awf = { voiceTranscribe };
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
       value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop: vi.fn() }] }) },
@@ -120,17 +139,13 @@ describe("App live voice session (text-first invariant)", () => {
     fireEvent.click(screen.getByText("Start voice session"));
     expect(await screen.findByText(/Voice session: vs-1/)).toBeTruthy();
     fireEvent.click(screen.getByText("Push to talk"));
-    await waitFor(() => expect(recognition.start).toHaveBeenCalled());
+    await waitFor(() => expect(recorder.start).toHaveBeenCalled());
 
-    recognition.onresult({
-      resultIndex: 0,
-      results: {
-        length: 1,
-        0: { isFinal: true, 0: { transcript: "Hello from microphone." } },
-      },
-    });
+    fireEvent.click(screen.getByText("Stop talking"));
 
     expect(await screen.findByDisplayValue("Hello from microphone.")).toBeTruthy();
+    expect(blobToWav16Mock).toHaveBeenCalledTimes(1);
+    expect(voiceTranscribe).toHaveBeenCalledWith(expect.any(ArrayBuffer));
   });
 
   it("does not render live voice controls when session handlers are absent", () => {

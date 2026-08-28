@@ -8,21 +8,18 @@ parses and validates it, and computes the directory digest ADR-0004's
 """
 
 import hashlib
-import re
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 
-from awf.registry.schema import require, split_frontmatter
-
-_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+from awf.registry.schema import split_frontmatter, validate_json_schema
+from awf.registry.schemas.skills import SCHEMA
 
 
 class SkillValidationError(ValueError):
     pass
 
 
-_require = partial(require, error=SkillValidationError)
 _split_frontmatter = partial(split_frontmatter, label="SKILL.md", error=SkillValidationError)
 
 
@@ -42,25 +39,11 @@ class Skill:
         return f"{self.name}@{self.version}"
 
 
-def _validate_name(name: str) -> None:
-    if len(name) < 1 or len(name) > 64:
-        raise SkillValidationError(f"skill name {name!r} must be 1-64 characters")
-    if not _NAME_RE.match(name):
-        raise SkillValidationError(
-            f"skill name {name!r} must be lowercase alphanumeric with single hyphens, "
-            "no leading/trailing/doubled hyphen"
-        )
-
-
 def parse_skill(raw: dict, *, body: str = "", version: str | None = None) -> Skill:
-    name = _require(raw, "name", "SKILL.md")
-    _validate_name(name)
-    description = _require(raw, "description", "SKILL.md")
-    if len(description) < 1 or len(description) > 1024:
-        raise SkillValidationError("description must be 1-1024 characters")
+    validate_json_schema(raw, SCHEMA, "SKILL.md", error=SkillValidationError)
+    name = raw["name"]
+    description = raw["description"]
     compatibility = raw.get("compatibility")
-    if compatibility is not None and len(compatibility) > 500:
-        raise SkillValidationError("compatibility must be at most 500 characters")
 
     return Skill(
         name=name,

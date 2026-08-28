@@ -17,7 +17,9 @@ class MemoryProposalError(RuntimeError):
     pass
 
 
-def _event(conn: sqlite3.Connection, proposal_id: str, event_type: str, payload: dict, *, actor: str = "operator") -> None:
+def _event(
+    conn: sqlite3.Connection, proposal_id: str, event_type: str, payload: dict, *, actor: str = "operator"
+) -> None:
     conn.execute(
         "INSERT INTO registry_proposal_events "
         "(event_id, proposal_id, event_type, occurred_at, actor, payload_json) "
@@ -26,7 +28,9 @@ def _event(conn: sqlite3.Connection, proposal_id: str, event_type: str, payload:
     )
 
 
-def propose_semantic_memory(repo_root: Path, conn: sqlite3.Connection, *, path: Path, summary: str | None = None) -> dict:
+def propose_semantic_memory(
+    repo_root: Path, conn: sqlite3.Connection, *, path: Path, summary: str | None = None
+) -> dict:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise MemoryProposalError(f"{path}: semantic memory proposal must be a YAML mapping")
@@ -34,7 +38,13 @@ def propose_semantic_memory(repo_root: Path, conn: sqlite3.Connection, *, path: 
     content = yaml.safe_dump(raw, sort_keys=False).encode("utf-8")
     draft_digest = hashlib.sha256(content).hexdigest()
     proposal_id = uuid7()
-    draft_path = proposals_dir(repo_root) / "semantic-memories" / proposal_id / memory.metadata.name / f"{memory.metadata.version}.yaml"
+    draft_path = (
+        proposals_dir(repo_root)
+        / "semantic-memories"
+        / proposal_id
+        / memory.metadata.name
+        / f"{memory.metadata.version}.yaml"
+    )
     draft_path.parent.mkdir(parents=True, exist_ok=True)
     draft_path.write_bytes(content)
     rel_path = draft_path.relative_to(repo_root).as_posix()

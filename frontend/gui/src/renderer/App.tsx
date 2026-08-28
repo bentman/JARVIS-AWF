@@ -159,30 +159,39 @@ export function App({
   const [chatSubmitting, setChatSubmitting] = useState(false);
   const [chatSubmitError, setChatSubmitError] = useState<string | null>(null);
   const [approvalPreview, setApprovalPreview] = useState<PendingApproval["preview"]>(undefined);
+  const refreshInFlight = useRef<Promise<void> | null>(null);
 
   const refresh = async () => {
     if (!onControlSummary && !onRunList && !onApprovalList && !onImprovementList) return;
-    setRefreshing(true);
-    try {
-      if (onControlSummary) {
-        const summary = await onControlSummary();
-        setControlSummary(summary);
-        setRuns(summary.runs);
-        setApprovals(summary.approvals);
-        setImprovements(summary.improvements);
-        return;
-      }
-      const [nextRuns, nextApprovals, nextImprovements] = await Promise.all([
-        onRunList ? onRunList() : Promise.resolve(runs),
-        onApprovalList ? onApprovalList() : Promise.resolve(approvals),
-        onImprovementList ? onImprovementList() : Promise.resolve(improvements),
-      ]);
-      setRuns(nextRuns);
-      setApprovals(nextApprovals);
-      setImprovements(nextImprovements);
-    } finally {
-      setRefreshing(false);
+    if (refreshInFlight.current) {
+      return refreshInFlight.current;
     }
+    setRefreshing(true);
+    const inFlight = (async () => {
+      try {
+        if (onControlSummary) {
+          const summary = await onControlSummary();
+          setControlSummary(summary);
+          setRuns(summary.runs);
+          setApprovals(summary.approvals);
+          setImprovements(summary.improvements);
+          return;
+        }
+        const [nextRuns, nextApprovals, nextImprovements] = await Promise.all([
+          onRunList ? onRunList() : Promise.resolve(runs),
+          onApprovalList ? onApprovalList() : Promise.resolve(approvals),
+          onImprovementList ? onImprovementList() : Promise.resolve(improvements),
+        ]);
+        setRuns(nextRuns);
+        setApprovals(nextApprovals);
+        setImprovements(nextImprovements);
+      } finally {
+        setRefreshing(false);
+        refreshInFlight.current = null;
+      }
+    })();
+    refreshInFlight.current = inFlight;
+    return inFlight;
   };
 
   const handleRunDetail = async (runId: string) => {

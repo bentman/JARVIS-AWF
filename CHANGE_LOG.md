@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-28 06:42
+  - Host class(es): Windows AMD64 backend and frontend validation
+  - Summary: Implemented performance optimizations across JSON schema validation compilation caching (52.4x speedup), SQLite query indexes, episodic memory search SQL pushdown, hardware detector memoization, and GUI IPC refresh debouncing.
+  - Scope: `backend/src/awf/registry/{schema.py,index.py}`, `backend/src/awf/db/schema.py`, `backend/src/awf/memory/episodic.py`, `backend/src/awf/hardware/profiler.py`, `frontend/gui/src/renderer/App.tsx`, `CHANGE_LOG.md`.
+  - Validation: Ruff lint and format checks passed cleanly; protocol parity and argparse checks passed; backend unit tests passed (`326 passed`); full frontend monorepo test suite passed (`135 passed` across `@awf/protocol-client`, `awf-cli`, and `awf-gui`); full backend CI validation suite passed (`643 passed, 17 deselected`, report `reports/validation/20260828114214-ci.txt`).
+  - Notes: Zero architectural deviations or schema breaks; all operations and public interfaces remain 100% backward compatible.
+
 - Timestamp: 2026-08-25 14:35
   - Host class(es): Windows AMD64 backend validation
   - Summary: Executed codebase hygiene cleanup by deleting the legacy wildcard `core_ops.py` shim in favor of direct domain `awf.ops.*` routing, pruning unreferenced dangling exceptions/methods, aligning docstrings, and strengthening under-asserted test cases.

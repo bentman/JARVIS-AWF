@@ -15,6 +15,23 @@ def search_events(
     run_id: str | None = None,
     limit: int = 20,
 ) -> list[dict]:
+    cleaned = query.strip()
+    if not cleaned:
+        rows = conn.execute(
+            """
+            SELECT e.*, r.workflow_ref, s.node_id
+            FROM events e
+            LEFT JOIN runs r ON r.run_id = e.run_id
+            LEFT JOIN steps s ON s.step_id = e.step_id
+            WHERE (? IS NULL OR e.run_id = ?)
+            ORDER BY e.occurred_at DESC, e.event_id DESC
+            LIMIT ?
+            """,
+            (run_id, run_id, limit),
+        ).fetchall()
+        return [{**dict(row), "source": "events", "score": 1.0} for row in rows]
+
+    like_pat = f"%{cleaned}%"
     rows = conn.execute(
         """
         SELECT e.*, r.workflow_ref, s.node_id
@@ -22,23 +39,19 @@ def search_events(
         LEFT JOIN runs r ON r.run_id = e.run_id
         LEFT JOIN steps s ON s.step_id = e.step_id
         WHERE (? IS NULL OR e.run_id = ?)
+          AND (
+              e.reason_code LIKE ?
+              OR e.actor LIKE ?
+              OR e.payload_json LIKE ?
+              OR r.workflow_ref LIKE ?
+              OR s.node_id LIKE ?
+          )
         ORDER BY e.occurred_at DESC, e.event_id DESC
+        LIMIT ?
         """,
-        (run_id, run_id),
+        (run_id, run_id, like_pat, like_pat, like_pat, like_pat, like_pat, limit),
     ).fetchall()
-    results = []
-    for row in rows:
-        data = dict(row)
-        if query and not _matches(
-            query, data["reason_code"], data["actor"], data["payload_json"], data["workflow_ref"], data["node_id"]
-        ):
-            continue
-        data["source"] = "events"
-        data["score"] = 1.0
-        results.append(data)
-        if len(results) >= limit:
-            break
-    return results
+    return [{**dict(row), "source": "events", "score": 1.0} for row in rows]
 
 
 def run_timeline(conn: sqlite3.Connection, *, run_id: str) -> dict:

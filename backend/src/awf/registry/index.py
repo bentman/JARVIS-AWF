@@ -25,7 +25,11 @@ _DEFAULT_TRUST_STATUS = {"config": "trusted", "data": "local"}
 def compute_digest(path: Path, kind: RegistryKind) -> str:
     if kind.layout == "directory":
         return directory_digest(path.parent)
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    hasher = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(65536):
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def index_row(conn: sqlite3.Connection, kind: str, name: str, version: str) -> dict | None:

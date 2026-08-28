@@ -43,6 +43,7 @@ import platform
 import sqlite3
 import subprocess
 from dataclasses import asdict, dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 from awf.clock import utc_now_rfc3339
@@ -184,6 +185,7 @@ def _detect_arch() -> str:
     return arch
 
 
+@lru_cache(maxsize=4)
 def _detect_device_class(os_name: str) -> str:
     psutil = _load_optional("psutil")
     if psutil is not None:
@@ -619,6 +621,7 @@ def collect_inventory(*, refresh: bool = False) -> HardwareInventory:
 def reset_inventory_cache() -> None:
     global _INVENTORY_CACHE
     _INVENTORY_CACHE = None
+    _detect_device_class.cache_clear()
 
 
 def resolve_hardware_profile_id(repo_root: Path) -> tuple[str, dict]:

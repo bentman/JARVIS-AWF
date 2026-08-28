@@ -3,7 +3,18 @@
 from collections.abc import Callable
 
 import yaml
-from jsonschema import ValidationError, validate
+from jsonschema import Draft202012Validator, ValidationError
+
+_VALIDATOR_CACHE: dict[int, Draft202012Validator] = {}
+
+
+def _get_validator(schema: dict) -> Draft202012Validator:
+    key = id(schema)
+    validator = _VALIDATOR_CACHE.get(key)
+    if validator is None:
+        validator = Draft202012Validator(schema)
+        _VALIDATOR_CACHE[key] = validator
+    return validator
 
 
 class RegistryValidationError(ValueError):
@@ -27,8 +38,9 @@ def split_frontmatter(text: str, *, label: str, error: Callable = RegistryValida
 
 
 def validate_json_schema(raw: dict, schema: dict, context: str, *, error: Callable = RegistryValidationError) -> None:
+    validator = _get_validator(schema)
     try:
-        validate(instance=raw, schema=schema)
+        validator.validate(instance=raw)
     except ValidationError as exc:
         path = ".".join(str(part) for part in exc.absolute_path)
         location = f"{context}.{path}" if path else context

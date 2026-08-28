@@ -23,9 +23,10 @@ bash scripts/bootstrap.sh
 ```
 
 The bootstrap script creates `backend/.venv`, installs the repo package and
-host-selected runtime dependencies, initializes local state, acquires speech
-models, installs frontend dependencies when npm is available, runs `awf doctor`,
-and writes a transcript to `reports/diagnostics/`.
+host-selected runtime dependencies (including speech, wake-word, model-gateway,
+and accelerator packages), initializes local state, acquires speech models,
+installs frontend dependencies when npm is available, runs `awf doctor`, and
+writes a transcript to `reports/diagnostics/`.
 
 Load the repo-local command helper in the same terminal:
 
@@ -40,7 +41,7 @@ global commands, or change `PATH`.
 
 ```bash
 awf doctor
-awf run assistant-default@1.0.0 --objective "check the system"
+awf readiness
 ```
 
 Start the GUI:
@@ -49,16 +50,19 @@ Start the GUI:
 awf-gui
 ```
 
-Start the terminal UI after the frontend has been built:
+Start the terminal UI:
 
 ```bash
 awf-cli
 ```
 
-## Optional LLM Runtime
+## LLM Runtime
 
-If AWF should manage its own `llama-server`, acquire the runtime and provide a
-local `.gguf` model under `models/llm/<model-name>/`:
+The default assistant workflow routes model calls through a local
+OpenAI-compatible endpoint (e.g. `http://127.0.0.1:8080/v1`).
+
+To have AWF manage a local `llama-server`, acquire the runtime and provide a
+`.gguf` model under `models/llm/<model-name>/`:
 
 ```bash
 awf llm acquire
@@ -66,16 +70,21 @@ awf llm select llama-server
 awf llm serve start
 ```
 
-For an operator-run OpenAI-compatible server, select it instead:
+For an existing operator-run OpenAI-compatible server (e.g. Ollama, LM Studio, or vLLM):
 
 ```bash
 awf llm select openai-compatible --model "<server-model-name>"
 ```
 
+Run the assistant workflow once an LLM server is active:
+
+```bash
+awf run assistant-default@1.0.0 --objective "check the system"
+```
+
 ## Useful Checks
 
 ```bash
-awf readiness
 awf llm servers
 awf llm serve status
 awf-speech models verify

@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-28 10:18
+  - Host class(es): Windows AMD64 and Linux/WSL2 provisioning and documentation validation
+  - Summary: Integrated `model-gateway` into default hardware provisioning extras on both Windows and Linux, and aligned QuickStart documentation to clearly delineate baseline system readiness from LLM runtime activation.
+  - Scope: `backend/src/awf/hardware/provisioning.py`, `backend/tests/unit/test_hardware_provisioning.py`, `docs/QuickStart-{windows,linux}.md`, `frontend/shared/src/types.ts`, `frontend/gui/src/main/voicePipeline.ts`, `CHANGE_LOG.md`.
+  - Validation: Ruff linting passed; protocol parity passed; backend unit tests passed (`326 passed`); frontend workspace builds (`npm run build`) and test suites passed (`135 passed` across all packages); `git diff --check` passed.
+  - Notes: `awf-setup --provision` and `awf-setup --install` now automatically install `model-gateway` alongside speech and accelerator packages across all platforms.
+
 - Timestamp: 2026-08-28 06:42
   - Host class(es): Windows AMD64 backend and frontend validation
   - Summary: Implemented performance optimizations across JSON schema validation compilation caching (52.4x speedup), SQLite query indexes, episodic memory search SQL pushdown, hardware detector memoization, and GUI IPC refresh debouncing.

@@ -1,7 +1,7 @@
 # Dot-source from the repository root:
 # . .\scripts\use-awf.ps1
 
-$AwfRepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$AwfRepoRoot = (Resolve-Path (Join-Path "$PSScriptRoot" "..")).Path
 
 function Invoke-AwfRepoCommand {
     param(
@@ -19,21 +19,13 @@ function Invoke-AwfRepoCommand {
     & $commandPath @Arguments
 }
 
-function awf {
-    Invoke-AwfRepoCommand -Name "awf" -Arguments $args
-}
+function awf { Invoke-AwfRepoCommand -Name "awf" -Arguments $args }
 
-function awf-setup {
-    Invoke-AwfRepoCommand -Name "awf-setup" -Arguments $args
-}
+function awf-setup { Invoke-AwfRepoCommand -Name "awf-setup" -Arguments $args }
 
-function awf-secret {
-    Invoke-AwfRepoCommand -Name "awf-secret" -Arguments $args
-}
+function awf-secret { Invoke-AwfRepoCommand -Name "awf-secret" -Arguments $args }
 
-function awf-speech {
-    Invoke-AwfRepoCommand -Name "awf-speech" -Arguments $args
-}
+function awf-speech { Invoke-AwfRepoCommand -Name "awf-speech" -Arguments $args }
 
 function awf-gui {
     if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
@@ -42,11 +34,8 @@ function awf-gui {
     }
 
     Push-Location $AwfRepoRoot
-    try {
-        & npm --prefix frontend run dev @args
-    } finally {
-        Pop-Location
-    }
+    try { & npm --prefix frontend run dev @args }
+    finally { Pop-Location }
 }
 
 function awf-cli {
@@ -62,11 +51,8 @@ function awf-cli {
     }
 
     Push-Location $AwfRepoRoot
-    try {
-        & node "frontend\cli\dist\cli.js" @args
-    } finally {
-        Pop-Location
-    }
+    try { & node "frontend\cli\dist\cli.js" @args }
+    finally { Pop-Location }
 }
 
 Write-Host "AWF commands loaded for this PowerShell session: awf, awf-setup, awf-secret, awf-speech, awf-gui, awf-cli"

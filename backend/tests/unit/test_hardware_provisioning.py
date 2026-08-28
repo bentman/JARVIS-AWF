@@ -90,16 +90,16 @@ def test_explain_ort_extra_returns_a_nonempty_reason():
 def test_required_extras_add_speech_and_dev_symmetrically():
     inventory = _inventory(os_name="windows", arch="arm64", npu_vendor="qualcomm")
 
-    assert resolve_required_extras(inventory) == ["hw-ort-qnn", "speech", "wake-word", "dev"]
+    assert resolve_required_extras(inventory) == ["hw-ort-qnn", "speech", "wake-word", "model-gateway", "dev"]
 
 
 def test_required_extras_add_qnn_speech_and_dev_for_linux_arm64_qualcomm():
     inventory = _inventory(os_name="linux", arch="arm64", npu_vendor="qualcomm")
 
-    assert resolve_required_extras(inventory) == ["hw-ort-qnn", "speech", "wake-word", "dev"]
+    assert resolve_required_extras(inventory) == ["hw-ort-qnn", "speech", "wake-word", "model-gateway", "dev"]
 
 
 def test_required_extras_add_qnn_speech_and_dev_for_linux_arm64_candidate():
     inventory = _inventory(os_name="linux", arch="arm64")
 
-    assert resolve_required_extras(inventory) == ["hw-ort-qnn", "speech", "wake-word", "dev"]
+    assert resolve_required_extras(inventory) == ["hw-ort-qnn", "speech", "wake-word", "model-gateway", "dev"]

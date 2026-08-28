@@ -251,7 +251,7 @@ export function registerVoiceTranscribeIpcHandler(
   ipcMain: IpcMainLike,
   defaults: Pick<RunVoiceTranscribeOptions, "command" | "cwd">,
 ): void {
-  ipcMain.handle(VOICE_SESSION_CHANNELS.transcribe, (_event, audioData: ArrayBuffer) =>
-    runVoiceTranscribe({ ...defaults, audioData: new Uint8Array(audioData) }),
+  ipcMain.handle(VOICE_SESSION_CHANNELS.transcribe, (_event, audioData) =>
+    runVoiceTranscribe({ ...defaults, audioData: new Uint8Array(audioData as ArrayBuffer) }),
   );
 }

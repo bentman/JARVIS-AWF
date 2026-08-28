@@ -1,4 +1,6 @@
-export type { MethodName } from "./protocol.generated.js";
+import type { MethodName } from "./protocol.generated.js";
+
+export type { MethodName };
 
 export interface JsonRpcRequest {
   jsonrpc: "2.0";

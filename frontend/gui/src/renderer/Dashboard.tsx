@@ -274,9 +274,6 @@ export function ImprovementProposals({
 
                 <div style={{ marginTop: "0.75rem" }}>
                   <div style={{ fontSize: "0.85em", fontWeight: 600, color: "var(--text-muted, #8b949e)", textTransform: "uppercase", letterSpacing: "0.5px" }}>4. Why It's Safe To Consider</div>
-
-                <div style={{ marginTop: "0.75rem" }}>
-                  <div style={{ fontSize: "0.85em", fontWeight: 600, color: "var(--text-muted, #8b949e)", textTransform: "uppercase", letterSpacing: "0.5px" }}>4. Why It's Safe To Consider</div>
                   {proposal.safety_assessment && (
                     <div style={{ marginTop: "0.4rem", padding: "0.5rem", background: "var(--bg-subtle, rgba(255,255,255,0.03))", borderLeft: "3px solid var(--accent, #58a6ff)", borderRadius: "2px", fontSize: "0.85em", lineHeight: 1.5, color: "var(--text-secondary, #8b949e)" }}>
                       {proposal.safety_assessment}

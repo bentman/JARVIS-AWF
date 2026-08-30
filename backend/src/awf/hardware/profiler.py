@@ -373,13 +373,15 @@ def _gpu_from_windows_cim() -> dict | None:
         # silently trusted as exact.
         vram_gb = _bytes_to_gb(adapter_ram) if isinstance(adapter_ram, (int, float)) else None
         vendor = _normalize_gpu_vendor(name)
-        candidates.append({
-            "gpu_available": True,
-            "gpu_name": name,
-            "gpu_vendor": vendor or "unknown",
-            "gpu_vram_gb": vram_gb,
-            "gpu_vram_source": "windows-cim",
-        })
+        candidates.append(
+            {
+                "gpu_available": True,
+                "gpu_name": name,
+                "gpu_vendor": vendor or "unknown",
+                "gpu_vram_gb": vram_gb,
+                "gpu_vram_source": "windows-cim",
+            }
+        )
     # Prefer recognized physical hardware vendors over generic/remote display adapters
     for candidate in candidates:
         if candidate["gpu_vendor"] != "unknown":

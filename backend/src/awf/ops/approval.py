@@ -9,12 +9,11 @@ from awf.ops.shared import CoreOpError
 
 
 def _machine_action_preview_for_step(conn: sqlite3.Connection, *, step_id: str) -> dict | None:
-
     rows = conn.execute(
-        "SELECT payload_json FROM events "
+        "SELECT payload_json, reason_code FROM events "
         "WHERE step_id = ? AND reason_code IN ("
         "'machine_action_waiting_approval', 'machine_action_allowed', 'machine_action_denied', "
-        "'machine_action_executed'"
+        "'machine_action_executed', 'improvement_merge_approval_requested'"
         ") ORDER BY occurred_at DESC",
         (step_id,),
     ).fetchall()
@@ -26,6 +25,26 @@ def _machine_action_preview_for_step(conn: sqlite3.Connection, *, step_id: str) 
         action = payload.get("machine_action")
         if action:
             return {"machine_action": action, "machine_action_digest": payload.get("machine_action_digest")}
+        if payload.get("improvement_id"):
+            imp_id = payload["improvement_id"]
+            from awf.improvement.proposals import get as get_proposal
+
+            try:
+                proposal = get_proposal(conn, improvement_id=imp_id)
+                return {
+                    "kind": "improvement_merge",
+                    "improvement_id": imp_id,
+                    "human_summary": proposal.get("human_summary"),
+                    "scope_classification": proposal.get("scope_classification"),
+                    "safety_assessment": proposal.get("safety_assessment"),
+                    "proposal_review": proposal.get("proposal_review"),
+                    "diff_stats": proposal.get("diff_stats"),
+                    "verdict_artifact_id": proposal.get("verdict_artifact_id"),
+                    "merge_action_digest": payload.get("merge_action_digest"),
+                    "proposal": proposal,
+                }
+            except Exception:
+                pass
     return None
 
 

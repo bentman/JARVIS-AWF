@@ -85,6 +85,9 @@ export interface AppProps extends VoiceSessionFns {
   onProposalGet?: (proposalId: string) => Promise<ProposalSummary>;
   onProposalPublish?: (proposalId: string, digest: string) => Promise<unknown>;
   onProposalReject?: (proposalId: string, reason?: string) => Promise<unknown>;
+  onImprovementRequestMerge?: (improvementId: string) => Promise<unknown>;
+  onImprovementMerge?: (improvementId: string, approvalId: string) => Promise<unknown>;
+  onImprovementReject?: (improvementId: string, reason?: string) => Promise<unknown>;
   onMemorySearch?: (query: string) => Promise<MemorySearchResult>;
   onMemoryBlock?: (ref: string) => Promise<unknown>;
   onMemoryPublish?: (proposalId: string, digest: string) => Promise<unknown>;
@@ -139,6 +142,9 @@ export function App({
   onProposalGet,
   onProposalPublish,
   onProposalReject,
+  onImprovementRequestMerge,
+  onImprovementMerge,
+  onImprovementReject,
   onMemorySearch,
   onMemoryBlock,
   onMemoryPublish,
@@ -462,7 +468,13 @@ export function App({
                   onProposalReject={onProposalReject}
                 />
               )}
-              <ImprovementProposals improvements={improvements} onArtifactRead={onArtifactRead} />
+              <ImprovementProposals
+                improvements={improvements}
+                onArtifactRead={onArtifactRead}
+                onRequestMerge={onImprovementRequestMerge}
+                onMerge={onImprovementMerge}
+                onReject={onImprovementReject}
+              />
             </>
           )}
           {activeView === "memory" && onMemorySearch && onMemoryBlock && onMemoryPublish && onMemoryReject && (

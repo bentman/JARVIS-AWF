@@ -118,7 +118,14 @@ The Capability Guard, resolution precedence, the Model Gateway's existing
 PERSONAS = RegistryKind("personas", "yaml", False)
 
 KINDS: tuple[RegistryKind, ...] = (
-    WORKFLOWS, AGENTS, CAPABILITIES, MCP, SKILLS, VOICE_PROFILES, MODEL_PROFILES, PERSONAS
+    WORKFLOWS,
+    AGENTS,
+    CAPABILITIES,
+    MCP,
+    SKILLS,
+    VOICE_PROFILES,
+    MODEL_PROFILES,
+    PERSONAS,
 )
 ```
 
@@ -240,35 +247,35 @@ The four instruction tables are fixed module constants:
 
 ```python
 WARMTH_INSTRUCTIONS = {
-    "none":   "Use direct helpfulness with no extra warmth.",
-    "low":    "Keep warmth minimal and practical.",
+    "none": "Use direct helpfulness with no extra warmth.",
+    "low": "Keep warmth minimal and practical.",
     "medium": "Use a calm, friendly tone without extra reassurance.",
-    "high":   "Use clearly warm and supportive phrasing without overstating certainty.",
+    "high": "Use clearly warm and supportive phrasing without overstating certainty.",
     "strong": "Use strongly warm and encouraging phrasing while staying truthful.",
 }
 
 ASSERTIVENESS_INSTRUCTIONS = {
-    "none":   "Avoid recommendations unless one is requested.",
-    "low":    "Offer suggestions gently and avoid sounding commanding.",
+    "none": "Avoid recommendations unless one is requested.",
+    "low": "Offer suggestions gently and avoid sounding commanding.",
     "medium": "Give clear recommendations while allowing uncertainty.",
-    "high":   "State the recommended path plainly when evidence supports it.",
+    "high": "State the recommended path plainly when evidence supports it.",
     "strong": "Be decisive and action-oriented when the answer is clear.",
 }
 
 DETAIL_INSTRUCTIONS = {
-    "none":   "Keep detail to the minimum needed for the answer.",
-    "low":    "Keep details sparse and action-focused.",
+    "none": "Keep detail to the minimum needed for the answer.",
+    "low": "Keep details sparse and action-focused.",
     "medium": "Include enough detail to explain the answer.",
-    "high":   "Add useful context and tradeoffs when they help.",
+    "high": "Add useful context and tradeoffs when they help.",
     "strong": "Provide fuller context, tradeoffs, and reasoning when useful.",
 }
 
 HUMOR_INSTRUCTIONS = {
-    "none":   "Use no humor.",
-    "light":  "Use light humor rarely and only when natural.",
+    "none": "Use no humor.",
+    "light": "Use light humor rarely and only when natural.",
     "medium": "Use occasional light humor on low-risk topics; omit it when the answer carries risk.",
-    "high":   "Use humor readily on low-risk topics; skip it for analysis, troubleshooting, and reliability details.",
-    "dry":    "Use at most one dry aside when it sharpens the answer; never force it.",
+    "high": "Use humor readily on low-risk topics; skip it for analysis, troubleshooting, and reliability details.",
+    "dry": "Use at most one dry aside when it sharpens the answer; never force it.",
 }
 ```
 
@@ -324,7 +331,7 @@ role: the verifier raises `detail` and drops `warmth`; the adversary raises
 `persona` block with:
 
 ```python
-persona_ref: str        # "<name>@<version>", required
+persona_ref: str  # "<name>@<version>", required
 ```
 
 `parse_voice_profile` requires `persona_ref` and rejects a `persona` key with
@@ -340,11 +347,11 @@ already hold.
 **`awf/cognition/envelope.py`:**
 
 ```python
-AUTHORITIES = ("application", "persona", "contract", "session",
-               "memory", "retrieval", "skill", "tool", "user")
+AUTHORITIES = ("application", "persona", "contract", "session", "memory", "retrieval", "skill", "tool", "user")
 CONTENT_TYPES = ("instruction", "style", "context", "result", "input", "contract")
 
 SYSTEM_AUTHORITIES = ("application", "persona", "contract")
+
 
 @dataclass(frozen=True)
 class PromptSegment:
@@ -352,6 +359,7 @@ class PromptSegment:
     content_type: str
     trusted: bool
     text: str
+
 
 @dataclass(frozen=True)
 class PromptEnvelope:

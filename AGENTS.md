@@ -1,4 +1,4 @@
-# JARVIS Workspace Governance
+# AGENTS.md - Repository Operating Contract for JARVIS-AWF
 
 ## Source Of Truth
 
@@ -73,3 +73,22 @@ The system must support these targets without assuming any one acceleration path
 - The harness should expose focused targets plus a cumulative smoke target.
 - Do not claim runtime support from documentation alone; include command evidence.
 - Producer reports are evidence, not acceptance; final acceptance requires independent gate evidence where applicable.
+
+## Testing Discipline And Test-Sprawl Control
+
+Testing is evidence, not a work product. Preserve the smallest durable test surface that can falsify the changed behavior.
+
+- Search existing tests before creating any test artifact.
+- Prefer extending, parameterizing, reformatting, or consolidating an existing test over adding another test or fixture.
+- Add a new test only for a distinct contract, branch, regression, boundary, or failure mode that existing tests cannot represent cleanly.
+- Do not add tests to justify implementation choices, restate existing assertions, increase test counts, or duplicate coverage at another layer without a distinct risk reason.
+- Prefer the cheapest layer that can falsify the change; use integration/E2E only when the changed behavior crosses that boundary.
+- Do not create new test helpers, fixture frameworks, test directories, snapshots, or harness paths unless the existing shape cannot express the required behavior.
+- Before adding a test, identify the unique failure it would catch. If an existing test already catches it, do not add another.
+- Follow the proportional validation ladder already defined above; passing a focused check does not require automatically escalating to broader suites.
+- After a corrective edit, rerun the failed/focused test first.
+- Do not rerun an unchanged passing command for reassurance.
+- Do not repeat the same failing command when code, tests, environment, and inputs are unchanged; diagnose or report the blocker.
+- Run broad `ci`/full-suite validation once at a natural closeout milestone when required by blast radius or repository policy, not after each intermediate edit.
+- Report exactly what each command proves; test quantity and repeated green runs are not completion evidence.
+- When redundant tests are encountered within task scope, prefer consolidation or removal of obsolete duplication while preserving the strongest behavioral contract.

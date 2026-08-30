@@ -20,11 +20,11 @@ Section 10 names five CLI coding agents "driven through one adapter
 contract." Four are implemented and registered:
 
 ```python
-ADAPTER_REGISTRY = {                      # cli/core_ops.py:57
-    "claude-code": claude_code_invoke,     # adapters/claude_code.py
-    "codex":       codex_invoke,           # adapters/codex_cli.py
-    "antigravity": antigravity_invoke,     # adapters/antigravity_cli.py
-    "copilot":     copilot_invoke,         # adapters/copilot_cli.py
+ADAPTER_REGISTRY = {  # cli/core_ops.py:57
+    "claude-code": claude_code_invoke,  # adapters/claude_code.py
+    "codex": codex_invoke,  # adapters/codex_cli.py
+    "antigravity": antigravity_invoke,  # adapters/antigravity_cli.py
+    "copilot": copilot_invoke,  # adapters/copilot_cli.py
 }
 ```
 
@@ -134,10 +134,13 @@ Command built by `invoke`:
 
 ```python
 command = [
-    "cline", invocation.objective,
+    "cline",
+    invocation.objective,
     "--json",
-    "--auto-approve", "true",
-    "--cwd", str(invocation.workspace_root),
+    "--auto-approve",
+    "true",
+    "--cwd",
+    str(invocation.workspace_root),
 ]
 if invocation.constraints.get("model_override"):
     command += ["-m", invocation.constraints["model_override"]]

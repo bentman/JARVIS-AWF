@@ -40,7 +40,43 @@ def _format_outcome(outcome: dict) -> str:
     evidence = outcome.get("evidence") if isinstance(outcome.get("evidence"), list) else []
     failures = outcome.get("failures") if isinstance(outcome.get("failures"), list) else []
     pending = outcome.get("pending_approvals") if isinstance(outcome.get("pending_approvals"), list) else []
-    if evidence:
+    proposal = outcome.get("proposal") if isinstance(outcome.get("proposal"), dict) else None
+
+    if proposal:
+        lines.append("\n" + "=" * 60)
+        lines.append("AWF IMPROVEMENT PROPOSAL REVIEW")
+        lines.append(
+            f"Proposal: {proposal.get('improvement_id')}  •  Status: {proposal.get('status', '').upper()} [{str(proposal.get('scope_classification', 'localized')).capitalize()}]"
+        )
+        lines.append("=" * 60)
+        lines.append(f"\n1. WHAT CHANGED:\n  {proposal.get('human_summary') or proposal.get('summary')}")
+
+        verdict = proposal.get("verdict_artifact_id")
+        if verdict:
+            lines.append(f"\n2. VALIDATION STATUS:\n  PASSED — All gate checks and tests passed (verdict: {verdict})")
+
+        if proposal.get("safety_assessment"):
+            lines.append(f"\n3. WHY IT IS SAFE TO CONSIDER:\n  {proposal.get('safety_assessment')}")
+
+        diff_stats = proposal.get("diff_stats") or []
+        if diff_stats:
+            lines.append("\n4. CHANGED FILES & DIFF PREVIEW:")
+            for f in diff_stats:
+                lines.append(f"  • {f.get('path')} (+{f.get('additions', 0)} / -{f.get('deletions', 0)} lines)")
+                if f.get("preview_lines"):
+                    for pl in f["preview_lines"][:6]:
+                        lines.append(f"      {pl}")
+
+        next_action = proposal.get("next_action")
+        if next_action and next_action.get("command"):
+            lines.append("\n" + "-" * 60)
+            lines.append(
+                f"5. NEXT OPERATOR ACTION:\n  {next_action.get('label')}\n  Command: {next_action.get('command')}"
+            )
+            lines.append("-" * 60)
+        lines.append("=" * 60)
+
+    if evidence and not proposal:
         lines.append("Evidence:")
         lines.extend(f"  - {item.get('type')}: {item.get('path')} ({item.get('artifact_id')})" for item in evidence)
     if failures:
@@ -53,7 +89,96 @@ def _format_outcome(outcome: dict) -> str:
         lines.append("Pending approvals:")
         lines.extend(f"  - {item.get('approval_id')} {item.get('risk_class') or ''}".rstrip() for item in pending)
     if outcome.get("next_action"):
-        lines.append(f"Next: {outcome['next_action']}")
+        lines.append(f"\nNext: {outcome['next_action']}")
+    return "\n".join(lines)
+
+
+def _format_improvement_proposal(proposal: dict, full_diff: bool = False, raw_patch: str | None = None) -> str:
+    imp_id = proposal.get("improvement_id", "unknown")
+    status = proposal.get("status", "draft")
+    summary = proposal.get("human_summary") or proposal.get("summary") or "No summary"
+    scope = proposal.get("scope_classification") or "localized"
+    safety = proposal.get("safety_assessment") or ""
+
+    lines = [
+        "=" * 60,
+        f"AWF IMPROVEMENT PROPOSAL REVIEW: {imp_id}",
+        f"Status: {status.upper()} [{scope.capitalize()}]",
+        "=" * 60,
+        f"\n1. WHAT CHANGED:\n  {summary}",
+    ]
+
+    diff_stats = proposal.get("diff_stats") or []
+    if diff_stats:
+        lines.append("\n2. WHERE IT CHANGED:")
+        for f in diff_stats:
+            add = f.get("additions", 0)
+            dele = f.get("deletions", 0)
+            path = f.get("path", "")
+            lines.append(f"  • {path} (+{add} / -{dele} lines)")
+
+    verdict_id = proposal.get("verdict_artifact_id")
+    if verdict_id:
+        lines.append(
+            f"\n3. VALIDATION STATUS:\n  PASSED — All deterministic verification checks and automated tests passed (verdict: {verdict_id})."
+        )
+    else:
+        lines.append("\n3. VALIDATION STATUS:\n  PENDING — Awaiting verification verdict.")
+
+    if safety:
+        lines.append(f"\n4. WHY IT IS SAFE TO CONSIDER:\n  {safety}")
+
+    approval = proposal.get("approval")
+    if approval:
+        lines.append(f"\nApproval Gate: {approval.get('approval_id')} [{approval.get('status')}]")
+
+    if diff_stats:
+        lines.append("\n5. DIFF PREVIEW:")
+        for f in diff_stats:
+            lines.append(f"  --- {f.get('path')} ---")
+            if f.get("preview_lines"):
+                for pl in f["preview_lines"][:8]:
+                    lines.append(f"    {pl}")
+                if f.get("truncated") and not full_diff:
+                    lines.append("    ... [diff truncated; run with --full-diff to inspect entire patch]")
+
+    if full_diff and raw_patch:
+        lines.append("\nFULL PATCH:")
+        lines.append(raw_patch)
+
+    next_action = proposal.get("next_action")
+    if next_action:
+        cmd = next_action.get("command")
+        label = next_action.get("label") or "Next Action"
+        lines.append("\n" + "-" * 60)
+        lines.append(f"6. NEXT OPERATOR ACTION:\n  {label}")
+        if cmd:
+            lines.append(f"  Command:   {cmd}")
+        if next_action.get("description"):
+            lines.append(f"  Rationale: {next_action['description']}")
+        lines.append("-" * 60)
+
+    # Technical provenance footer
+    target = proposal.get("target_branch") or "main"
+    base = str(proposal.get("base_commit", ""))[:10]
+    cand = str(proposal.get("candidate_commit", ""))[:10]
+    digest = proposal.get("diff_digest") or ""
+    lines.append(f"\n[Provenance: target={target} ({base}..{cand}) digest={digest}]")
+
+    return "\n".join(lines)
+
+
+def _format_improvement_list(proposals: list[dict]) -> str:
+    if not proposals:
+        return "No improvement proposals."
+    lines = ["Improvement Proposals:"]
+    for p in proposals:
+        summary = p.get("human_summary") or p.get("summary") or "No summary"
+        status = p.get("status", "draft")
+        next_cmd = p.get("next_action", {}).get("command") or ""
+        lines.append(f"  - {p.get('improvement_id')} [{status.upper()}] {summary}")
+        if next_cmd:
+            lines.append(f"    Next: {next_cmd}")
     return "\n".join(lines)
 
 
@@ -89,12 +214,64 @@ def _format_run_list(runs: list[dict]) -> str:
 def _format_approvals(approvals: list[dict]) -> str:
     if not approvals:
         return "No pending approvals."
-    lines = ["Pending approvals:"]
+    lines = ["Pending Approvals:"]
     for approval in approvals:
-        risk = approval.get("risk_class") or "risk?"
-        lines.append(
-            f"  - {approval.get('approval_id')} {risk} run={approval.get('run_id')} digest={approval.get('action_digest')}"
-        )
+        risk = approval.get("risk_class") or "R2"
+        appr_id = approval.get("approval_id")
+        preview = approval.get("preview") or {}
+        human = preview.get("human_summary")
+        if human:
+            lines.append(f"  - {appr_id} [{risk}] {human}")
+        else:
+            lines.append(f"  - {appr_id} [{risk}] run={approval.get('run_id')} digest={approval.get('action_digest')}")
+        lines.append(f"    Next: awf approval {appr_id}  (or: awf approve {appr_id})")
+    return "\n".join(lines)
+
+
+def _format_approval_detail(detail: dict) -> str:
+    approval = detail.get("approval") or {}
+    preview = detail.get("preview") or {}
+    appr_id = approval.get("approval_id")
+    status = approval.get("status", "pending")
+    risk = approval.get("risk_class") or "R2"
+    digest = approval.get("action_digest")
+
+    lines = [
+        "=" * 60,
+        f"AWF APPROVAL REVIEW: {appr_id} [{status.upper()}]",
+        f"Risk Class: {risk}  •  Requested: {approval.get('requested_at')}",
+        "=" * 60,
+    ]
+
+    proposal = preview.get("proposal") if isinstance(preview.get("proposal"), dict) else None
+    if proposal:
+        summary = proposal.get("human_summary") or proposal.get("summary") or ""
+        lines.append(f"\n1. WHAT IS BEING APPROVED:\n  {summary}")
+        if proposal.get("safety_assessment"):
+            lines.append(f"\n2. WHY IT IS SAFE TO APPROVE:\n  {proposal.get('safety_assessment')}")
+        if proposal.get("verdict_artifact_id"):
+            lines.append(
+                f"\n3. VALIDATION STATUS:\n  PASSED — All gate checks verified (verdict: {proposal['verdict_artifact_id']})"
+            )
+        diff_stats = proposal.get("diff_stats") or []
+        if diff_stats:
+            lines.append("\n4. CHANGED FILES & DIFF PREVIEW:")
+            for f in diff_stats:
+                lines.append(f"  • {f.get('path')} (+{f.get('additions', 0)} / -{f.get('deletions', 0)} lines)")
+                if f.get("preview_lines"):
+                    for pl in f["preview_lines"][:8]:
+                        lines.append(f"      {pl}")
+    elif preview.get("machine_action"):
+        action = preview["machine_action"]
+        lines.append(f"\nAction: {action.get('kind')} {action.get('capability_ref') or ''}")
+        lines.append(f"Target: {json.dumps(action.get('target') or {})}")
+
+    lines.append("\n" + "-" * 60)
+    lines.append("DECISION ACTIONS:")
+    lines.append(f"  Approve: awf approve {appr_id}")
+    lines.append(f'  Reject:  awf reject {appr_id} --reason "..."')
+    lines.append("-" * 60)
+    lines.append(f"\n[Digest: {digest}]")
     return "\n".join(lines)
 
 
@@ -172,6 +349,12 @@ def cmd_approvals(args: argparse.Namespace, repo_root: Path, conn) -> int:
     return 0
 
 
+def cmd_approval(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    result = ops.op_approval_detail(conn, approval_id=args.approval_id)
+    _print_or_json(args, result, _format_approval_detail(result))
+    return 0
+
+
 def cmd_approve(args: argparse.Namespace, repo_root: Path, conn) -> int:
     _print(ops.op_approval_approve(conn, approval_id=args.approval_id))
     return 0
@@ -201,12 +384,31 @@ def cmd_doctor(args: argparse.Namespace, repo_root: Path, conn) -> int:
 
 
 def cmd_improvement_list(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    _print(ops.op_improvement_list(conn, status=args.status))
+    result = ops.op_improvement_list(conn, status=args.status)
+    _print_or_json(args, result, _format_improvement_list(result))
     return 0
 
 
 def cmd_improvement_show(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    _print(ops.op_improvement_get(conn, improvement_id=args.improvement_id))
+    result = ops.op_improvement_get(conn, improvement_id=args.improvement_id)
+    raw_patch = None
+    if getattr(args, "full_diff", False):
+        patch_art_id = result.get("patch_artifact_id")
+        if patch_art_id:
+            from awf.paths import artifacts_dir
+
+            art_row = conn.execute(
+                "SELECT relative_path FROM artifacts WHERE artifact_id = ?", (patch_art_id,)
+            ).fetchone()
+            if art_row is not None:
+                patch_file = artifacts_dir(repo_root) / art_row["relative_path"]
+                if patch_file.is_file():
+                    raw_patch = patch_file.read_text(encoding="utf-8", errors="replace")
+    _print_or_json(
+        args,
+        result,
+        _format_improvement_proposal(result, full_diff=getattr(args, "full_diff", False), raw_patch=raw_patch),
+    )
     return 0
 
 
@@ -433,6 +635,11 @@ CLI_COMMAND_SPECS = (
     {"path": ("resume",), "func": cmd_resume, "args": ({"flags": ("--json",), "action": "store_true"},)},
     {"path": ("runs",), "func": cmd_runs, "args": ({"flags": ("--json",), "action": "store_true"},)},
     {"path": ("approvals",), "func": cmd_approvals, "args": ({"flags": ("--json",), "action": "store_true"},)},
+    {
+        "path": ("approval",),
+        "func": cmd_approval,
+        "args": ({"flags": ("approval_id",)}, {"flags": ("--json",), "action": "store_true"}),
+    },
     {"path": ("approve",), "func": cmd_approve, "args": ({"flags": ("approval_id",)},)},
     {
         "path": ("reject",),
@@ -449,9 +656,17 @@ CLI_COMMAND_SPECS = (
     {
         "path": ("improvement", "list"),
         "func": cmd_improvement_list,
-        "args": ({"flags": ("--status",), "default": None},),
+        "args": ({"flags": ("--status",), "default": None}, {"flags": ("--json",), "action": "store_true"}),
     },
-    {"path": ("improvement", "show"), "func": cmd_improvement_show, "args": ({"flags": ("improvement_id",)},)},
+    {
+        "path": ("improvement", "show"),
+        "func": cmd_improvement_show,
+        "args": (
+            {"flags": ("improvement_id",)},
+            {"flags": ("--json",), "action": "store_true"},
+            {"flags": ("--full-diff",), "action": "store_true"},
+        ),
+    },
     {
         "path": ("improvement", "prepare"),
         "func": cmd_improvement_prepare,

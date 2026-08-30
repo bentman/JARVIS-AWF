@@ -147,8 +147,44 @@ function formatOutcome(result: Record<string, unknown>): string {
     `Status: ${String(outcome.status ?? result.status ?? "UNKNOWN")}`,
     `Result: ${String(outcome.response_text ?? assistantResponseText(String(outcome.workflow_ref ?? "workflow"), result))}`,
   ];
+  const proposal = outcome.proposal as Record<string, unknown> | undefined;
+  if (proposal) {
+    lines.push(
+      "\n============================================================",
+      "AWF IMPROVEMENT PROPOSAL REVIEW",
+      `Proposal: ${String(proposal.improvement_id)}  •  Status: ${String(proposal.status ?? "").toUpperCase()} [${String(proposal.scope_classification ?? "localized").toUpperCase()}]`,
+      "============================================================",
+      `\n1. WHAT CHANGED:\n  ${String(proposal.human_summary ?? proposal.summary ?? "")}`,
+    );
+    if (proposal.verdict_artifact_id) {
+      lines.push(`\n2. VALIDATION STATUS:\n  PASSED — All gate checks and tests passed (verdict: ${String(proposal.verdict_artifact_id)})`);
+    }
+    if (proposal.safety_assessment) {
+      lines.push(`\n3. WHY IT IS SAFE TO CONSIDER:\n  ${String(proposal.safety_assessment)}`);
+    }
+    const diffStats = Array.isArray(proposal.diff_stats) ? (proposal.diff_stats as Record<string, unknown>[]) : [];
+    if (diffStats.length > 0) {
+      lines.push("\n4. CHANGED FILES & DIFF PREVIEW:");
+      for (const f of diffStats) {
+        lines.push(`  • ${String(f.path)} (+${String(f.additions ?? 0)} / -${String(f.deletions ?? 0)} lines)`);
+        const previewLines = Array.isArray(f.preview_lines) ? (f.preview_lines as string[]) : [];
+        for (const pl of previewLines.slice(0, 6)) {
+          lines.push(`      ${pl}`);
+        }
+      }
+    }
+    const nextAction = proposal.next_action as Record<string, unknown> | undefined;
+    if (nextAction && nextAction.command) {
+      lines.push(
+        "\n------------------------------------------------------------",
+        `5. NEXT OPERATOR ACTION:\n  ${String(nextAction.label)}\n  Command: ${String(nextAction.command)}`,
+        "------------------------------------------------------------",
+      );
+    }
+    lines.push("============================================================");
+  }
   const evidence = Array.isArray(outcome.evidence) ? (outcome.evidence as Record<string, unknown>[]) : [];
-  if (evidence.length > 0) {
+  if (evidence.length > 0 && !proposal) {
     lines.push("Evidence:");
     for (const item of evidence) lines.push(`  - ${String(item.type)}: ${String(item.path)} (${String(item.artifact_id)})`);
   }
@@ -164,7 +200,7 @@ function formatOutcome(result: Record<string, unknown>): string {
     lines.push("Pending approvals:");
     for (const item of pending) lines.push(`  - ${String(item.approval_id)} ${String(item.risk_class ?? "")}`.trimEnd());
   }
-  if (outcome.next_action) lines.push(`Next: ${String(outcome.next_action)}`);
+  if (outcome.next_action) lines.push(`\nNext: ${String(outcome.next_action)}`);
   return lines.join("\n");
 }
 
@@ -206,14 +242,18 @@ function formatDoctor(report: Record<string, unknown>): string {
 
 function formatApprovals(items: Record<string, unknown>[]): string {
   if (items.length === 0) return "No pending approvals.";
-  const lines = ["Pending approvals:"];
+  const lines = ["Pending Approvals:"];
   for (const item of items) {
     const preview = item.preview as Record<string, unknown> | null | undefined;
-    const action = preview?.machine_action as Record<string, unknown> | undefined;
-    lines.push(
-      `  - ${String(item.approval_id)} ${String(item.risk_class ?? "")} run=${String(item.run_id)} digest=${String(item.action_digest)}`.trimEnd(),
-    );
-    if (action) lines.push(`    ${String(action.kind)} ${String(action.capability_ref ?? "")}`.trimEnd());
+    const human = preview?.human_summary as string | undefined;
+    const risk = String(item.risk_class ?? "R2");
+    const apprId = String(item.approval_id);
+    if (human) {
+      lines.push(`  - ${apprId} [${risk}] ${human}`);
+    } else {
+      lines.push(`  - ${apprId} [${risk}] run=${String(item.run_id)} digest=${String(item.action_digest)}`);
+    }
+    lines.push(`    Next: /approval ${apprId}  (or: /approve ${apprId})`);
   }
   return lines.join("\n");
 }
@@ -222,16 +262,45 @@ function formatApprovalDetail(detail: Record<string, unknown>): string {
   const approval = detail.approval as Record<string, unknown>;
   const preview = detail.preview as Record<string, unknown> | null | undefined;
   const lines = [
-    `Approval: ${String(approval.approval_id)}`,
-    `Status: ${String(approval.status)}`,
-    `Risk: ${String(approval.risk_class ?? "unknown")}`,
-    `Digest: ${String(approval.action_digest)}`,
+    "============================================================",
+    `AWF APPROVAL REVIEW: ${String(approval.approval_id)} [${String(approval.status).toUpperCase()}]`,
+    `Risk Class: ${String(approval.risk_class ?? "unknown")}  •  Requested: ${String(approval.requested_at)}`,
+    "============================================================",
   ];
-  const action = preview?.machine_action as Record<string, unknown> | undefined;
-  if (action) {
-    lines.push(`Action: ${String(action.kind)} ${String(action.capability_ref ?? "")}`.trimEnd());
+
+  const proposal = (preview?.proposal as Record<string, unknown> | undefined) ?? (preview?.kind === "improvement_merge" ? preview : undefined);
+  if (proposal) {
+    const summary = String(proposal.human_summary ?? proposal.summary ?? "");
+    lines.push(`\n1. WHAT IS BEING APPROVED:\n  ${summary}`);
+    if (proposal.safety_assessment) {
+      lines.push(`\n2. WHY IT IS SAFE TO APPROVE:\n  ${String(proposal.safety_assessment)}`);
+    }
+    if (proposal.verdict_artifact_id) {
+      lines.push(`\n3. VALIDATION STATUS:\n  PASSED — All gate checks verified (verdict artifact: ${String(proposal.verdict_artifact_id)})`);
+    }
+    const diffStats = Array.isArray(proposal.diff_stats) ? (proposal.diff_stats as Record<string, unknown>[]) : [];
+    if (diffStats.length > 0) {
+      lines.push("\n4. CHANGED FILES & DIFF PREVIEW:");
+      for (const f of diffStats) {
+        lines.push(`  • ${String(f.path)} (+${String(f.additions ?? 0)} / -${String(f.deletions ?? 0)} lines)`);
+        const previewLines = Array.isArray(f.preview_lines) ? (f.preview_lines as string[]) : [];
+        for (const pl of previewLines.slice(0, 8)) {
+          lines.push(`      ${pl}`);
+        }
+      }
+    }
+  } else if (preview?.machine_action) {
+    const action = preview.machine_action as Record<string, unknown>;
+    lines.push(`\nAction: ${String(action.kind)} ${String(action.capability_ref ?? "")}`.trimEnd());
     lines.push(`Target: ${JSON.stringify(action.target ?? {})}`);
   }
+
+  lines.push("\n------------------------------------------------------------");
+  lines.push("DECISION ACTIONS:");
+  lines.push(`  Approve: /approve ${String(approval.approval_id)}`);
+  lines.push(`  Reject:  /reject ${String(approval.approval_id)} <reason>`);
+  lines.push("------------------------------------------------------------");
+  lines.push(`\n[Digest: ${String(approval.action_digest)}]`);
   return lines.join("\n");
 }
 
@@ -260,6 +329,95 @@ function formatLlmStatus(report: Record<string, unknown>): string {
     `Default: ${String((report.servers as Record<string, unknown> | undefined)?.default_server ?? "unknown")}`,
     `Models: ${Array.isArray((report.models as Record<string, unknown> | undefined)?.local_models) ? ((report.models as Record<string, unknown>).local_models as unknown[]).length : 0}`,
   ].join("\n");
+}
+
+function formatImprovementProposal(proposal: Record<string, unknown>): string {
+  const impId = String(proposal.improvement_id ?? "unknown");
+  const status = String(proposal.status ?? "draft");
+  const summary = String(proposal.human_summary ?? proposal.summary ?? "No summary");
+  const scope = String(proposal.scope_classification ?? "localized");
+
+  const lines = [
+    "============================================================",
+    `AWF IMPROVEMENT PROPOSAL REVIEW: ${impId}`,
+    `Status: ${status.toUpperCase()} [${scope.toUpperCase()}]`,
+    "============================================================",
+    `\n1. WHAT CHANGED:\n  ${summary}`,
+  ];
+
+  const diffStats = Array.isArray(proposal.diff_stats) ? (proposal.diff_stats as Record<string, unknown>[]) : [];
+  if (diffStats.length > 0) {
+    lines.push("\n2. WHERE IT CHANGED:");
+    for (const f of diffStats) {
+      lines.push(`  • ${String(f.path)} (+${String(f.additions ?? 0)} / -${String(f.deletions ?? 0)} lines)`);
+    }
+  }
+
+  if (proposal.verdict_artifact_id) {
+    lines.push(
+      `\n3. VALIDATION STATUS:\n  PASSED — All deterministic verification checks and automated tests passed (verdict: ${String(proposal.verdict_artifact_id)}).`,
+    );
+  } else {
+    lines.push("\n3. VALIDATION STATUS:\n  PENDING — Awaiting verification verdict.");
+  }
+
+  if (proposal.safety_assessment) {
+    lines.push(`\n4. WHY IT IS SAFE TO CONSIDER:\n  ${String(proposal.safety_assessment)}`);
+  }
+
+  const approval = proposal.approval as Record<string, unknown> | undefined;
+  if (approval) {
+    lines.push(`\nApproval Gate: ${String(approval.approval_id)} [${String(approval.status ?? "")}]`);
+  }
+
+  if (diffStats.length > 0) {
+    lines.push("\n5. DIFF PREVIEW:");
+    for (const f of diffStats) {
+      lines.push(`  --- ${String(f.path)} ---`);
+      const previewLines = Array.isArray(f.preview_lines) ? (f.preview_lines as string[]) : [];
+      if (previewLines.length > 0) {
+        for (const pl of previewLines.slice(0, 8)) {
+          lines.push(`    ${pl}`);
+        }
+        if (f.truncated) {
+          lines.push("    ... [diff truncated; inspect full patch if needed]");
+        }
+      }
+    }
+  }
+
+  const nextAction = proposal.next_action as Record<string, unknown> | undefined;
+  if (nextAction) {
+    const label = String(nextAction.label ?? "Next Action");
+    const cmd = String(nextAction.command ?? "");
+    lines.push("\n------------------------------------------------------------");
+    lines.push(`6. NEXT OPERATOR ACTION:\n  ${label}`);
+    if (cmd) lines.push(`  Command:   ${cmd}`);
+    if (nextAction.description) lines.push(`  Rationale: ${String(nextAction.description)}`);
+    lines.push("------------------------------------------------------------");
+  }
+
+  const target = String(proposal.target_branch ?? "main");
+  const base = String(proposal.base_commit ?? "").slice(0, 10);
+  const cand = String(proposal.candidate_commit ?? "").slice(0, 10);
+  const digest = String(proposal.diff_digest ?? "");
+  lines.push(`\n[Provenance: target=${target} (${base}..${cand}) digest=${digest}]`);
+
+  return lines.join("\n");
+}
+
+function formatImprovementList(proposals: Record<string, unknown>[]): string {
+  if (proposals.length === 0) return "No improvement proposals.";
+  const lines = ["Improvement Proposals:"];
+  for (const p of proposals) {
+    const summary = String(p.human_summary ?? p.summary ?? "No summary");
+    const status = String(p.status ?? "draft").toUpperCase();
+    const nextAction = p.next_action as Record<string, unknown> | undefined;
+    const nextCmd = String(nextAction?.command ?? "");
+    lines.push(`  - ${String(p.improvement_id)} [${status}] ${summary}`);
+    if (nextCmd) lines.push(`    Next: ${nextCmd}`);
+  }
+  return lines.join("\n");
 }
 
 export async function dispatchAssistantInput(
@@ -342,10 +500,14 @@ export async function dispatchCommand(
     if (!args[0]) throw new CommandError("usage: /artifacts <run-id>");
     return { kind: "json", data: await client.artifactList(args[0]) };
   }
-  if (name === "improvements") return { kind: "json", data: await client.improvementList() };
+  if (name === "improvements") {
+    const list = (await client.improvementList()) as unknown as Record<string, unknown>[];
+    return { kind: "text", text: formatImprovementList(list) };
+  }
   if (name === "improvement") {
     if (!args[0]) throw new CommandError("usage: /improvement <id>");
-    return { kind: "json", data: await client.improvementGet(args[0]) };
+    const prop = (await client.improvementGet(args[0])) as unknown as Record<string, unknown>;
+    return { kind: "text", text: formatImprovementProposal(prop) };
   }
   if (name === "improvement-prepare") {
     if (!args[0]) throw new CommandError("usage: /improvement-prepare <run-id>");

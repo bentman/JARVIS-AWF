@@ -224,7 +224,9 @@ def author_workflow_draft(
     profile_ref: str = "resident-mind@1.0.0",
 ) -> dict: ...
 
+
 def get_proposal(repo_root: Path, conn: sqlite3.Connection, *, proposal_id: str) -> dict: ...
+
 
 def update_proposal(
     repo_root: Path,
@@ -235,6 +237,7 @@ def update_proposal(
     summary: str | None = None,
 ) -> dict: ...
 
+
 def reject_proposal(
     repo_root: Path,
     conn: sqlite3.Connection,
@@ -242,6 +245,7 @@ def reject_proposal(
     proposal_id: str,
     reason: str | None = None,
 ) -> dict: ...
+
 
 def mark_published(
     repo_root: Path,
@@ -305,7 +309,7 @@ def complete_structured(
 For each candidate, call LiteLLM with:
 
 ```python
-response_format={
+response_format = {
     "type": "json_schema",
     "json_schema": {
         "name": schema_name,

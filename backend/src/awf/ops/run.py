@@ -74,7 +74,13 @@ def _response_text_from_run_record(run: dict, workflow_ref: str) -> str:
     return _default_response_text(workflow_ref, {"status": run.get("status", "UNKNOWN")})
 
 
-def _run_outcome_from_parts(run: dict, steps: list[dict], artifacts: list[dict], approvals: list[dict]) -> dict:
+def _run_outcome_from_parts(
+    run: dict,
+    steps: list[dict],
+    artifacts: list[dict],
+    approvals: list[dict],
+    conn: sqlite3.Connection | None = None,
+) -> dict:
     status = run.get("status", "UNKNOWN")
     workflow_ref = run.get("workflow_ref", "unknown@0.0.0")
     pending_approvals = [approval for approval in approvals if approval.get("status") == "pending"]
@@ -97,7 +103,24 @@ def _run_outcome_from_parts(run: dict, steps: list[dict], artifacts: list[dict],
         }
         for step in failed_steps
     ]
-    if pending_approvals:
+    proposal = None
+    if conn is not None and run.get("run_id"):
+        try:
+            prop_row = conn.execute(
+                "SELECT improvement_id FROM improvement_proposals WHERE run_id = ?", (run["run_id"],)
+            ).fetchone()
+            if prop_row is not None:
+                from awf.improvement.proposals import get as get_proposal
+
+                proposal = get_proposal(conn, improvement_id=prop_row["improvement_id"])
+        except Exception:
+            proposal = None
+
+    if proposal is not None:
+        cmd = proposal.get("next_action", {}).get("command")
+        label = proposal.get("next_action", {}).get("label") or "Review proposal"
+        next_action = f"{label}: {cmd}" if cmd else label
+    elif pending_approvals:
         next_action = f"Review {len(pending_approvals)} pending approval(s) with `awf approvals`."
     elif status == "FAILED":
         next_action = "Inspect the failed step and artifacts, then rerun or prepare a repair."
@@ -109,7 +132,7 @@ def _run_outcome_from_parts(run: dict, steps: list[dict], artifacts: list[dict],
         next_action = "No operator action required."
     else:
         next_action = "Check run status again or resume after a restart."
-    return {
+    out = {
         "run_id": run.get("run_id"),
         "workflow_ref": workflow_ref,
         "status": status,
@@ -137,6 +160,9 @@ def _run_outcome_from_parts(run: dict, steps: list[dict], artifacts: list[dict],
         "updated_at": run.get("updated_at"),
         "next_action": next_action,
     }
+    if proposal is not None:
+        out["proposal"] = proposal
+    return out
 
 
 def _adapt_objective_input(input_data: dict, input_schema: dict) -> dict:
@@ -175,7 +201,7 @@ def op_run_outcome(conn: sqlite3.Connection, *, run_id: str) -> dict:
     approvals = [
         dict(row) for row in conn.execute("SELECT * FROM approvals WHERE run_id = ? ORDER BY requested_at", (run_id,))
     ]
-    return _run_outcome_from_parts(run, steps, artifacts, approvals)
+    return _run_outcome_from_parts(run, steps, artifacts, approvals, conn=conn)
 
 
 def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str, input_data: dict) -> dict:
@@ -206,11 +232,35 @@ def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str
         (json.dumps(result), utc_now_rfc3339(), run_id),
     )
     conn.commit()
+
+    retain_worktree = _retain_worktree_for_improvement(workflow.ref, input_data)
+    if result.get("status") == "SUCCEEDED" and retain_worktree:
+        try:
+            from awf.improvement.proposals import mark_ready as mark_proposal_ready
+            from awf.improvement.proposals import prepare as prepare_proposal
+
+            summary_text = input_data.get("objective") or f"Improvement from run {run_id}"
+            prop = prepare_proposal(repo_root, conn, run_id=run_id, summary=summary_text)
+            verdict_id = result.get("outputs", {}).get("verdict_artifact_id")
+            if verdict_id:
+                try:
+                    mark_proposal_ready(
+                        repo_root,
+                        conn,
+                        improvement_id=prop["improvement_id"],
+                        verdict_artifact_id=verdict_id,
+                        validation_artifact_ids=[verdict_id],
+                    )
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     _cleanup_run_workspace(
         repo_root,
         run_id,
         result,
-        retain_worktree=_retain_worktree_for_improvement(workflow.ref, input_data),
+        retain_worktree=retain_worktree,
     )
     return {"run_id": run_id, **result, "outcome": op_run_outcome(conn, run_id=run_id)}
 

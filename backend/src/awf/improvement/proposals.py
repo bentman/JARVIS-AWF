@@ -16,10 +16,18 @@ from awf.improvement.diff import (
     diff_digest,
     git_text,
     merge_base,
+    parse_patch_diff_previews,
     write_patch_artifact,
 )
+from awf.improvement.summary import (
+    derive_next_action,
+    derive_safety_assessment,
+    derive_scope_classification,
+    generate_human_summary,
+    generate_proposal_review_narrative,
+)
 from awf.isolation.worktree import branch_name, current_head, merge_branch, remove_worktree, worktree_path
-from awf.paths import artifacts_dir
+from awf.paths import REPO_ROOT, artifacts_dir
 
 MERGE_NODE_ID = "improvement.merge"
 
@@ -81,7 +89,7 @@ def merge_action_digest(row: sqlite3.Row) -> str:
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
-def _serialize(row: sqlite3.Row, conn: sqlite3.Connection) -> dict:
+def _serialize(row: sqlite3.Row, conn: sqlite3.Connection, repo_root: Path | None = None) -> dict:
     data = dict(row)
     data["changed_paths"] = json.loads(data.pop("changed_paths_json"))
     data["validation_artifact_ids"] = json.loads(data.pop("validation_artifact_ids_json"))
@@ -98,6 +106,45 @@ def _serialize(row: sqlite3.Row, conn: sqlite3.Connection) -> dict:
     ).fetchone()
     data["approval"] = dict(approval) if approval is not None else None
     data["merge_action_digest"] = merge_action_digest(row)
+
+    # Extract diff statistics and compact preview lines
+    diff_stats: list[dict] = []
+    root = repo_root or REPO_ROOT
+    patch_art_id = data.get("patch_artifact_id")
+    if patch_art_id:
+        art_row = conn.execute("SELECT relative_path FROM artifacts WHERE artifact_id = ?", (patch_art_id,)).fetchone()
+        if art_row is not None:
+            patch_file = artifacts_dir(root) / art_row["relative_path"]
+            if patch_file.is_file():
+                try:
+                    patch_text = patch_file.read_text(encoding="utf-8", errors="replace")
+                    diff_stats = parse_patch_diff_previews(patch_text)
+                except Exception:
+                    diff_stats = []
+
+    if not diff_stats:
+        for p in data["changed_paths"]:
+            added_str = str(p.get("added", "0"))
+            deleted_str = str(p.get("deleted", "0"))
+            is_bin = added_str == "-" or deleted_str == "-"
+            diff_stats.append(
+                {
+                    "path": p.get("path", ""),
+                    "additions": int(added_str) if not is_bin and added_str.isdigit() else 0,
+                    "deletions": int(deleted_str) if not is_bin and deleted_str.isdigit() else 0,
+                    "is_binary": is_bin,
+                    "preview_lines": [],
+                    "truncated": False,
+                    "total_lines": 0,
+                }
+            )
+
+    data["diff_stats"] = diff_stats
+    data["scope_classification"] = derive_scope_classification(diff_stats)
+    data["human_summary"] = generate_human_summary(data, diff_stats)
+    data["safety_assessment"] = derive_safety_assessment(data, diff_stats)
+    data["proposal_review"] = generate_proposal_review_narrative(data, diff_stats)
+    data["next_action"] = derive_next_action(data)
     return data
 
 

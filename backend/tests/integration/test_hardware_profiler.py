@@ -295,10 +295,12 @@ def test_detect_cuda_info_prefers_nvcc_version(monkeypatch):
 def test_gpu_from_windows_cim_prefers_recognized_vendor(monkeypatch):
     import awf.hardware.profiler as profiler
 
-    cim_output = json.dumps([
-        {"Name": "Microsoft Remote Display Adapter", "AdapterRAM": 0},
-        {"Name": "Qualcomm Adreno(TM) GPU", "AdapterRAM": 4294967296},
-    ])
+    cim_output = json.dumps(
+        [
+            {"Name": "Microsoft Remote Display Adapter", "AdapterRAM": 0},
+            {"Name": "Qualcomm Adreno(TM) GPU", "AdapterRAM": 4294967296},
+        ]
+    )
     monkeypatch.setattr(profiler.platform, "system", lambda: "Windows")
     monkeypatch.setattr(profiler, "_powershell", lambda script: cim_output)
 

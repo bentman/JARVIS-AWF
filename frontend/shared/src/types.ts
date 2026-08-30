@@ -44,6 +44,7 @@ export interface RunOutcome {
   created_at?: string;
   updated_at?: string;
   next_action: string;
+  proposal?: ImprovementProposal;
 }
 
 export interface RunStatus {
@@ -78,12 +79,13 @@ export interface Approval {
   run_id: string;
   step_id: string;
   action_digest: string;
-  status: string;
-  reason: string | null;
+  status: "pending" | "approved" | "rejected";
+  risk_class: RiskClass;
   requested_at: string;
-  decided_at: string | null;
-  risk_class?: string | null;
-  preview?: MachineActionPreview | null;
+  decided_at?: string | null;
+  decided_by?: string | null;
+  reason?: string | null;
+  [key: string]: unknown;
 }
 
 export type RiskClass = "R0" | "R1" | "R2" | "R3";
@@ -94,13 +96,41 @@ export interface ApprovalApproveOptions {
 }
 
 export interface MachineActionPreview {
-  machine_action: Record<string, unknown>;
-  machine_action_digest: string;
+  machine_action?: Record<string, unknown>;
+  machine_action_digest?: string;
+  kind?: string;
+  improvement_id?: string;
+  human_summary?: string;
+  scope_classification?: "localized" | "broad";
+  safety_assessment?: string;
+  proposal_review?: Record<string, unknown>;
+  diff_stats?: FileDiffPreview[];
+  verdict_artifact_id?: string | null;
+  merge_action_digest?: string;
+  proposal?: ImprovementProposal;
+  [key: string]: unknown;
 }
 
 export interface ApprovalDetail {
   approval: Approval;
   preview: MachineActionPreview | null;
+}
+
+export interface FileDiffPreview {
+  path: string;
+  additions: number;
+  deletions: number;
+  is_binary: boolean;
+  preview_lines: string[];
+  truncated: boolean;
+  total_lines: number;
+}
+
+export interface NextActionInfo {
+  action: string;
+  label: string;
+  command: string;
+  description?: string;
 }
 
 export interface ImprovementProposal {
@@ -115,6 +145,12 @@ export interface ImprovementProposal {
   patch_artifact_id: string;
   status: "draft" | "ready_for_review" | "approved" | "merged" | "rejected" | "abandoned";
   summary: string;
+  human_summary?: string;
+  scope_classification?: "localized" | "broad";
+  safety_assessment?: string;
+  proposal_review?: Record<string, unknown>;
+  diff_stats?: FileDiffPreview[];
+  next_action?: NextActionInfo;
   changed_paths: Record<string, unknown>[];
   verdict_artifact_id: string | null;
   validation_artifact_ids: string[];

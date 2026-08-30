@@ -182,14 +182,74 @@ describe("dispatchCommand", () => {
     expect(client.artifactList).toHaveBeenCalledWith("run-1");
   });
 
-  it("dispatches improvement commands", async () => {
-    const client = makeFakeClient();
+  it("dispatches improvement commands and renders human-readable review", async () => {
+    const fakeProposal = {
+      improvement_id: "imp-1",
+      status: "ready_for_review",
+      human_summary: "1 file changed (+5 / -1 lines) in main.py. Validation passed.",
+      scope_classification: "localized",
+      safety_assessment: "Localized change bounded to worktree sandbox.",
+      verdict_artifact_id: "art-v-1",
+      diff_stats: [
+        {
+          path: "main.py",
+          additions: 5,
+          deletions: 1,
+          preview_lines: ["@@ -1,3 +1,4 @@", "+import foo"],
+        },
+      ],
+      next_action: {
+        action: "request_merge",
+        label: "Request merge approval",
+        command: "awf improvement request-merge imp-1",
+      },
+    };
+    const client = makeFakeClient({
+      improvementList: vi.fn().mockResolvedValue([fakeProposal]),
+      improvementGet: vi.fn().mockResolvedValue(fakeProposal),
+      approvalDetail: vi.fn().mockResolvedValue({
+        approval: { approval_id: "ap-1", status: "pending", risk_class: "R2", action_digest: "sha256:123" },
+        preview: {
+          kind: "improvement_merge",
+          human_summary: "1 file changed (+5 / -1 lines) in main.py. Validation passed.",
+          safety_assessment: "Localized change bounded to worktree sandbox.",
+          verdict_artifact_id: "art-v-1",
+          diff_stats: fakeProposal.diff_stats,
+        },
+      }),
+    });
 
-    await dispatchCommand(client, "/improvements", DEFAULT_SETTINGS);
+    const listRes = await dispatchCommand(client, "/improvements", DEFAULT_SETTINGS);
     expect(client.improvementList).toHaveBeenCalled();
+    expect(listRes.kind).toBe("text");
+    if (listRes.kind === "text") {
+      expect(listRes.text).toContain("imp-1 [READY_FOR_REVIEW]");
+      expect(listRes.text).toContain("Next: awf improvement request-merge imp-1");
+    }
 
-    await dispatchCommand(client, "/improvement imp-1", DEFAULT_SETTINGS);
+    const showRes = await dispatchCommand(client, "/improvement imp-1", DEFAULT_SETTINGS);
     expect(client.improvementGet).toHaveBeenCalledWith("imp-1");
+    expect(showRes.kind).toBe("text");
+    if (showRes.kind === "text") {
+      expect(showRes.text).toContain("AWF IMPROVEMENT PROPOSAL REVIEW: imp-1");
+      expect(showRes.text).toContain("1. WHAT CHANGED:\n  1 file changed (+5 / -1 lines) in main.py.");
+      expect(showRes.text).toContain("2. WHERE IT CHANGED:\n  • main.py (+5 / -1 lines)");
+      expect(showRes.text).toContain("3. VALIDATION STATUS:\n  PASSED");
+      expect(showRes.text).toContain("4. WHY IT IS SAFE TO CONSIDER:\n  Localized change bounded to worktree sandbox.");
+      expect(showRes.text).toContain("+import foo");
+      expect(showRes.text).toContain("6. NEXT OPERATOR ACTION:\n  Request merge approval");
+    }
+
+    const apprRes = await dispatchCommand(client, "/approval ap-1", DEFAULT_SETTINGS);
+    expect(client.approvalDetail).toHaveBeenCalledWith("ap-1");
+    expect(apprRes.kind).toBe("text");
+    if (apprRes.kind === "text") {
+      expect(apprRes.text).toContain("AWF APPROVAL REVIEW: ap-1 [PENDING]");
+      expect(apprRes.text).toContain("1. WHAT IS BEING APPROVED:\n  1 file changed (+5 / -1 lines) in main.py.");
+      expect(apprRes.text).toContain("2. WHY IT IS SAFE TO APPROVE:\n  Localized change bounded to worktree sandbox.");
+      expect(apprRes.text).toContain("+import foo");
+      expect(apprRes.text).toContain("Approve: /approve ap-1");
+    }
 
     await dispatchCommand(client, "/improvement-prepare run-1 focused fix", DEFAULT_SETTINGS);
     expect(client.improvementPrepare).toHaveBeenCalledWith("run-1", "focused fix");

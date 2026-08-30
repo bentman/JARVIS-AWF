@@ -298,6 +298,7 @@ def search_events(
     limit: int = 20,
 ) -> list[dict]: ...
 
+
 def run_timeline(conn: sqlite3.Connection, *, run_id: str) -> dict: ...
 ```
 

@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-30 15:30
+  - Host class(es): Windows AMD64 and Linux/WSL2 frontend validation
+  - Summary: Completed ADR-0027 approval workflow UI. Implemented operator-facing Approve/Reject action buttons in ApprovalsView with rejection reason form, state management, processing feedback, and automatic refresh. Wired approval handlers in App.tsx with async event binding to protocol methods. Operators can now complete full proposal review and approval lifecycle without leaving the tool.
+  - Scope: `frontend/gui/src/renderer/ApprovalsView.tsx`, `frontend/gui/src/renderer/App.tsx`, `frontend/shared/src/protocol.generated.ts` (regenerated), `scripts/generate_protocol.py --write`.
+  - Validation: Frontend build passed without TypeScript errors; 7/7 integration proposal lifecycle tests pass (`test_improvement_proposals.py`); approval operations verified working in backend.
+  - Notes: Completes the no-archaeology requirement in ADR-0027 Section 6: operator can now review and approve proposals fully within the GUI without SQL queries or worktree inspection.
+
 - Timestamp: 2026-08-30 07:55
   - Host class(es): Windows AMD64 and Linux/WSL2 cross-platform CLI, Backend, and Frontend validation
   - Summary: Implemented ADR-0027 Operator User Experience for Proposal Review and Run Closeout. Added structured diff preview parsing and human-readable summarization layers (`awf.improvement.summary`), enriched proposal serialization with `diff_stats`, `scope_classification`, `human_summary`, and lifecycle-aware `next_action`, integrated automatic proposal preparation and rich closeout summaries into workflow run outcomes, updated CLI commands (`awf improvement show`, `awf improvement list`) with human-friendly diff formatting and `--full-diff`/`--json` flags, updated frontend CLI (`/improvements`, `/improvement`) with structured proposal presentation, and upgraded GUI proposal cards with file diff stat badges, collapsible syntax previews, and direct action triggers (Request Merge, Approve, Merge, Reject).

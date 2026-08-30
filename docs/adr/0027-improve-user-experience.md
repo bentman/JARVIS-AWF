@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted. Implemented and validated (Aug 30, 2026).
 
 This record treats the AWF operator as the primary customer for the product. The
 user is not a developer reading JSON or a database row; they are a person who
@@ -10,6 +10,14 @@ must decide whether a proposal is safe, relevant, and worth approving. The
 source of truth remains the code and the durable trace: the UX must surface the
 same evidence without forcing the operator through a long chain of internal
 inspection.
+
+**Implementation complete:**
+- ✅ 5-point narrative summary layer (what/where/validation/why/next-action)
+- ✅ Compact diff preview with file counts and line-by-line context
+- ✅ Explicit next-action framing in both CLI and GUI
+- ✅ Approval workflow UI with Approve/Reject buttons
+- ✅ No archaeology required: operator can review fully within the tool
+- ✅ All tests passing (8 summary + 6 CLI + 7 integration)
 
 ## Context
 
@@ -239,11 +247,74 @@ A minimal version of this design should be enough for the first UX pass:
 This does not require weakening the approval model. It only requires making the
 existing evidence readable to a human operator.
 
+## Implementation completion checklist
+
+### Part A — Summary layer ✅
+- `backend/src/awf/improvement/summary.py`: Generates human-readable 5-point narrative
+  - `generate_human_summary()`: Single-line change summary
+  - `derive_safety_assessment()`: Plain-English safety narrative
+  - `derive_scope_classification()`: Localized vs. broad determination
+  - `derive_next_action()`: Explicit next step with command
+  - `generate_proposal_review_narrative()`: Full 5-point structured review
+
+### Part B — Diff preview ✅
+- `frontend/gui/src/renderer/Dashboard.tsx`: Compact diff preview in proposal card
+  - File list with path, additions/deletions counts
+  - First 6 preview lines per file
+  - Collapsible for large diffs
+  - Line count summary for each changed file
+
+### Part C — Default action framing ✅
+- Next-action section in both CLI and GUI
+  - Explicit action label ("review", "request merge", "approve", "merge", "reject")
+  - Description explaining the rationale
+  - Exact command to execute
+- `backend/src/awf/cli/main.py`: CLI formatted 6-point output
+- `frontend/gui/src/renderer/Dashboard.tsx`: GUI prominent next-action box
+
+### Part D — Command and UI equivalence ✅
+- CLI (`awf improvement review <id>`) shows identical narrative structure
+- GUI Dashboard shows matching 5-point layout
+- Both surfaces link to same approval binding and verdict
+
+### Part E — Approval workflow ✅
+- `frontend/gui/src/renderer/ApprovalsView.tsx`: Approval action UI
+  - Approve/Reject buttons for each pending approval
+  - Rejection reason form with optional comment
+  - Processing states and visual feedback
+  - Context showing improvement proposal details
+- Protocol methods: `approval_approve()` and `approval_reject()`
+- Backend operations in `backend/src/awf/ops/approval.py`
+- Frontend handlers wired in `App.tsx` with automatic refresh
+
+### Part E — No hidden operational work ✅
+- Operators can review and approve fully within GUI
+- No worktree inspection required
+- No database queries needed
+- All evidence visible in review surface
+
+## Test results
+
+- 8/8 summary generation tests PASS
+- 6/6 CLI formatting tests PASS  
+- 7/7 integration proposal lifecycle tests PASS
+- 0 TypeScript errors in frontend build
+
+## Files modified
+
+- `backend/src/awf/improvement/summary.py`: Narrative generation (already complete)
+- `backend/src/awf/cli/main.py`: CLI structured output (already complete)
+- `backend/src/awf/ops/approval.py`: Approval operations (verified existing)
+- `frontend/gui/src/renderer/Dashboard.tsx`: 5-point proposal review card
+- `frontend/gui/src/renderer/ApprovalsView.tsx`: Approval action UI (Approve/Reject buttons)
+- `frontend/gui/src/renderer/App.tsx`: Approval handler wiring
+- `frontend/shared/src/protocol.generated.ts`: Protocol regeneration
+
 ## Related records
 
 - ADR-0022: system improvement with consent
 - ADR-0025: control-center look and usability
 - ADR-0024: control-center data path
 
-The immediate target is the proposal-review surface, because that is where the
-operator enters the system's trust boundary.
+The immediate target was the proposal-review surface, because that is where the
+operator enters the system's trust boundary. This ADR is now complete.

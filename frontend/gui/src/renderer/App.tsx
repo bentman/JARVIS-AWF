@@ -289,14 +289,14 @@ export function App({
       setChatSubmitting(false);
     }
   };
-  const handleApprove = (approvalId: string) => {
+  const handleApprove = async (approvalId: string) => {
     onApprove(approvalId);
-    void refresh();
+    await refresh();
   };
 
-  const handleReject = (approvalId: string, reason: string) => {
+  const handleReject = async (approvalId: string, reason: string) => {
     onReject(approvalId, reason);
-    void refresh();
+    await refresh();
   };
 
   // An explicit `pendingApproval` prop wins (a caller with its own source
@@ -458,7 +458,7 @@ export function App({
               onArtifactRead={onArtifactRead}
             />
           )}
-          {activeView === "approvals" && <ApprovalsView approvals={approvals} />}
+          {activeView === "approvals" && <ApprovalsView approvals={approvals} onApprove={handleApprove} onReject={handleReject} />}
           {activeView === "proposals" && (
             <>
               {onProposalGet && onProposalPublish && onProposalReject && (

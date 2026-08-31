@@ -2,7 +2,7 @@
 
 `round-trip` is a standalone entry point for `run_voice_round_trip`, so a
 non-Python caller (the Electron GUI's main process) can invoke it the same
-way it already spawns `awf serve --stdio`: as a subprocess, reading one JSON
+way it already spawns `awf system serve --stdio`: as a subprocess, reading one JSON
 object from stdout. This is push-to-talk-by-file: the caller supplies a
 wake-word audio file and a command audio file rather than a live microphone
 stream.
@@ -122,7 +122,11 @@ def _run_transcribe(args: argparse.Namespace, repo_root: Path) -> int:
         print(json.dumps({"error": f"STT not ready: {readiness.reason}"}))
         return 1
     runtime = stt_runtime(repo_root, readiness.device)
-    result = transcribe(args.audio_path, repo_root=repo_root, runtime=runtime)
+    try:
+        result = transcribe(args.audio_path, repo_root=repo_root, runtime=runtime)
+    except Exception as exc:
+        print(json.dumps({"error": f"STT failed: {exc}"}))
+        return 1
     print(json.dumps({"text": result["text"], "language": result["language"]}))
     return 0
 

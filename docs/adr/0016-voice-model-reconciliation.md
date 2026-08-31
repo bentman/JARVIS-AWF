@@ -16,6 +16,11 @@ alongside `round-trip`, `synthesize`, and `models`. The subcommand resolves
 STT readiness and calls `stt_onnx.transcribe` directly, making the local STT
 adapter the only transcription path for push-to-talk.
 
+Alignment update, 2026-08-30: `awf-speech transcribe` now treats missing local
+STT artifacts as an operator-visible runtime error. It does not trigger hidden
+model downloads during transcription, and it returns structured JSON errors for
+runtime/model failures.
+
 ## Context
 
 ADR-0007 established `awf-speech models sync` as the voice acquisition path,

@@ -38,16 +38,6 @@ export function ApprovalsView({ approvals, onApprove, onReject }: ApprovalsViewP
   return (
     <section aria-label="Pending approvals" className="card">
       <h2>Pending Approvals</h2>
-      <div style={{ marginBottom: "1rem", padding: "0.75rem", background: "var(--bg-info, rgba(88, 166, 255, 0.08))", border: "1px solid var(--accent, #58a6ff)", borderRadius: "6px" }}>
-        <div style={{ fontSize: "0.9em", fontWeight: 500, marginBottom: "0.5rem" }}>
-          📋 What is an Approval?
-        </div>
-        <div style={{ fontSize: "0.85em", color: "var(--text-secondary, #8b949e)", lineHeight: 1.5 }}>
-          An approval is a human authorization gate. AWF has determined that this action is ready and safe, but requires your explicit approval before proceeding.
-          <br />
-          <strong>For improvements:</strong> You've reviewed the proposal, validated it passed all checks, and now must approve the merge into your main branch.
-        </div>
-      </div>
       {approvals.length === 0 ? (
         <p className="empty">No pending approvals.</p>
       ) : (
@@ -76,6 +66,7 @@ export function ApprovalsView({ approvals, onApprove, onReject }: ApprovalsViewP
                       </div>
                     )}
                   </div>
+                  <div className="mono row-reason">Digest: {approval.action_digest}</div>
                   <span className="mono muted" style={{ fontSize: "0.75em", textAlign: "right" }}>
                     {approval.requested_at}
                   </span>

@@ -14,7 +14,8 @@ import wave
 import numpy as np
 import pytest
 
-from awf.speech.stt_onnx import SttRuntimeError, _read_wav_float32
+from awf.speech.models import SttRuntime
+from awf.speech.stt_onnx import OnnxWhisperRuntime, SttRuntimeError, _read_wav_float32
 
 
 def _write_pcm16_wav(path, samples, sample_rate=16000, channels=1, sampwidth=2):
@@ -71,3 +72,18 @@ def test_rejects_a_non_wav_container_written_to_a_wav_filename(tmp_path):
 
     with pytest.raises(wave.Error):
         _read_wav_float32(path)
+
+
+def test_onnx_stt_reports_missing_local_model_before_loading(tmp_path):
+    audio_path = tmp_path / "clip.wav"
+    _write_pcm16_wav(audio_path, [0, 1, 2, 3])
+    runtime = SttRuntime(
+        runtime="onnx_whisper",
+        model="onnx-community/whisper-small",
+        local_path="missing-whisper",
+        device="cpu",
+        compute_type="int8",
+    )
+
+    with pytest.raises(SttRuntimeError, match="ONNX Whisper STT model files are unavailable"):
+        OnnxWhisperRuntime(tmp_path, runtime).transcribe(audio_path)

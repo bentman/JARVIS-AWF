@@ -233,6 +233,13 @@ where the package defines it. STT has no file entries — `sync_models` warms
 `models/stt/` by constructing `WhisperModel(model, download_root=models/stt)`
 once for the resolved class and discarding it.
 
+Alignment update, 2026-08-30: runtime STT no longer performs implicit model
+downloads. `stt_whisper.transcribe` passes `local_files_only=True`, and
+`stt_onnx.OnnxWhisperRuntime` verifies the configured local ONNX Whisper files
+before loading the runtime. Operators acquire model artifacts through
+`awf-speech models sync`; transcription reports a clear local-model error when
+the selected STT artifact is incomplete.
+
 `verify_models` reports `{name, path, status}` with `status` in `OK` and
 `MISSING`, one entry per expected artifact.
 
@@ -308,8 +315,8 @@ models/{stt,tts,vad,wake}/    (unchanged)
   rule. The rule is the same one Section 16.4 states for profiles, so it holds
   for classes the manifest never mentions.
 - `sync_models` warms STT by loading a model once, which downloads on a host
-  that has no copy. That is the same download the first transcription would
-  perform, moved to a command that can be run deliberately.
+  that has no copy. Runtime transcription is local-only, so setup/sync is the
+  deliberate acquisition path instead of first-use download.
 
 ## Scope for implementation
 

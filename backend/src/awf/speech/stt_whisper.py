@@ -28,6 +28,7 @@ def transcribe(
         device=device,
         compute_type=compute_type,
         download_root=str(download_root) if download_root else None,
+        local_files_only=True,
     )
     segments, info = model.transcribe(str(audio_path))
     text = " ".join(segment.text.strip() for segment in segments).strip()

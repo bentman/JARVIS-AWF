@@ -73,7 +73,7 @@ function parseLastJsonLine<T>(stdout: string, stderr: string, code: number | nul
 
 /** Spawns the real Python voice pipeline (`backend/src/awf/speech/cli.py`,
  * via the `awf-speech` console script) as a subprocess - the same pattern
- * already used to spawn `awf serve --stdio` (Section 16.3).
+ * already used to spawn `awf system serve --stdio` (Section 16.3).
  *
  * This is push-to-talk-by-file: the caller supplies a pre-recorded
  * wake-word audio file and a pre-recorded command audio file, rather than a

@@ -231,7 +231,7 @@ def _expected_arguments(spec: dict) -> list[dict]:
         flags = tuple(arg["flags"])
         nargs = _normalize_nargs(arg.get("nargs"))
         positional = all(not flag.startswith("-") for flag in flags)
-        required = positional and nargs != "REMAINDER"
+        required = positional and nargs not in {"REMAINDER", "?"}
         expected.append(
             {
                 "flags": flags,

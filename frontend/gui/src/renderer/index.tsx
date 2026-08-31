@@ -101,6 +101,7 @@ if (container) {
       onApprove: (approvalId: string) => void window.awf.approvalApprove(approvalId),
       onReject: (approvalId: string, reason: string) => void window.awf.approvalReject(approvalId, reason),
       onTextSubmit: (text: string, workflowRef: string) => window.awf.runStart(workflowRef, { objective: text }),
+      onRunStart: (workflowRef: string, input?: Record<string, unknown>) => window.awf.runStart(workflowRef, input ?? {}),
       onVoiceSessionStart: (title?: string, wakeEnabled?: boolean) =>
         window.awf.voiceSessionStart(title, wakeEnabled),
       onVoicePushToTalkStart: (voiceSessionId: string, turnId: string) =>

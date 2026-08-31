@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from awf.speech.models import _stt_cache_name as stt_cache_name
 from awf.speech.models import artifact_paths
 from awf.speech.stt_whisper import transcribe
 from awf.speech.tts_kokoro import synthesize
@@ -38,7 +39,13 @@ def voice_models(repo_root):
         "tts_model": tts_paths["kokoro-v1.0.onnx"],
         "tts_voices": tts_paths["voices-v1.0.bin"],
         "stt_download_root": repo_root / "models" / "stt",
+        "faster_whisper_stt_model": repo_root / "models" / "stt" / stt_cache_name("small"),
     }
+
+
+def _require_local_stt_model(path):
+    if not path.is_dir():
+        pytest.skip(f"local faster-whisper STT model is incomplete at {path} - run Phase 12 setup first")
 
 
 def test_wake_word_fires_on_real_hey_jarvis_audio(fixtures_dir, voice_models):
@@ -105,6 +112,7 @@ def test_vad_detects_speech_segment_in_hello_world_audio(fixtures_dir, voice_mod
 
 
 def test_stt_transcribes_hello_world_correctly(fixtures_dir, voice_models):
+    _require_local_stt_model(voice_models["faster_whisper_stt_model"])
     result = transcribe(
         fixtures_dir / "hello_world.wav", model_size="small", download_root=voice_models["stt_download_root"]
     )

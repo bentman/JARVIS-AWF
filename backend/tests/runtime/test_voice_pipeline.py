@@ -5,7 +5,7 @@ import pytest
 
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
-from awf.speech.models import artifact_paths
+from awf.speech.models import artifact_paths, onnx_whisper_available
 from awf.speech.pipeline import VoicePipelineError, run_voice_round_trip
 
 pytestmark = pytest.mark.live
@@ -43,6 +43,7 @@ def voice_models(repo_root):
         "vad": vad_paths["silero_vad.onnx"],
         "tts_model": tts_paths["kokoro-v1.0.onnx"],
         "tts_voices": tts_paths["voices-v1.0.bin"],
+        "onnx_stt_model": repo_root / "models" / "stt" / "whisper-small-onnx",
     }
 
 
@@ -61,11 +62,17 @@ def _run_voice_round_trip_or_skip_cuda(*args, **kwargs):
         raise
 
 
+def _require_local_stt_model(path):
+    if not onnx_whisper_available(path):
+        pytest.skip(f"local ONNX Whisper STT model is incomplete at {path} - run Phase 12 setup first")
+
+
 def test_full_round_trip_wake_stt_response_tts(tmp_path, repo_root, fixtures_dir, voice_models):
     """Exercises the full chain: the Hardware Profiler, wake-word detection
     on hey_jarvis.wav, VAD + STT on hello_world.wav, a trivial core
     response, and Kokoro synthesis."""
     conn = make_conn(tmp_path)
+    _require_local_stt_model(voice_models["onnx_stt_model"])
 
     def core_fn(command_text: str) -> str:
         return f"Acknowledged: {command_text.strip()}"
@@ -109,6 +116,7 @@ def test_round_trip_with_repo_root_verifies_real_pinned_models_and_logs_it(
     # A round trip against the already-downloaded models on this host,
     # checked against the shipped hardware voice manifest pins.
     conn = make_conn(tmp_path)
+    _require_local_stt_model(voice_models["onnx_stt_model"])
 
     _run_voice_round_trip_or_skip_cuda(
         conn,

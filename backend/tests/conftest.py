@@ -25,7 +25,12 @@ _real_connect = sqlite3.connect
 def _fast_connect(*args, **kwargs):
     conn = _real_connect(*args, **kwargs)
     conn.execute("PRAGMA synchronous=OFF")
-    conn.execute("PRAGMA journal_mode=MEMORY")
+    try:
+        journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        if str(journal_mode).lower() != "wal":
+            conn.execute("PRAGMA journal_mode=MEMORY")
+    except sqlite3.OperationalError:
+        pass
     return conn
 
 

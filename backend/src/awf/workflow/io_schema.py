@@ -26,11 +26,17 @@ class OutputValidationError(ValueError):
     pass
 
 
+def _brief(exc: jsonschema.ValidationError) -> str:
+    """One operator-readable line instead of jsonschema's schema dump."""
+    location = ".".join(str(part) for part in exc.absolute_path)
+    return f"{location}: {exc.message}" if location else exc.message
+
+
 def validate_input(input_data: dict, input_schema: dict) -> None:
     try:
         jsonschema.validate(instance=input_data, schema=input_schema)
     except jsonschema.ValidationError as exc:
-        raise InputValidationError(str(exc)) from exc
+        raise InputValidationError(_brief(exc)) from exc
 
 
 def render_outputs(outputs_spec: dict, engine_context: dict) -> dict:
@@ -45,4 +51,4 @@ def validate_output(rendered: dict, output_schema: dict) -> None:
     try:
         jsonschema.validate(instance=rendered, schema=output_schema)
     except jsonschema.ValidationError as exc:
-        raise OutputValidationError(str(exc)) from exc
+        raise OutputValidationError(_brief(exc)) from exc

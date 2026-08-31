@@ -21,12 +21,18 @@ function makeFakeClient(overrides: Partial<CommandClient> = {}): CommandClient {
     runList: vi.fn().mockResolvedValue([]),
     runResume: vi.fn().mockResolvedValue([]),
     approvalList: vi.fn().mockResolvedValue([]),
-    approvalDetail: vi.fn().mockResolvedValue({ approval: { approval_id: "ap-1" }, preview: null }),
+    approvalDetail: vi.fn().mockImplementation(async (id: string) => {
+      if (!id.startsWith("ap")) throw new Error(`no such approval: ${id}`);
+      return { approval: { approval_id: id }, preview: null };
+    }),
     approvalApprove: vi.fn().mockResolvedValue({ approval_id: "ap-1", status: "approved" }),
     approvalReject: vi.fn().mockResolvedValue({ approval_id: "ap-1", status: "rejected" }),
     artifactList: vi.fn().mockResolvedValue([]),
     improvementList: vi.fn().mockResolvedValue([]),
-    improvementGet: vi.fn().mockResolvedValue({ improvement_id: "imp-1" }),
+    improvementGet: vi.fn().mockImplementation(async (id: string) => {
+      if (!id.startsWith("imp")) throw new Error(`no such improvement: ${id}`);
+      return { improvement_id: id };
+    }),
     improvementPrepare: vi.fn().mockResolvedValue({ improvement_id: "imp-1" }),
     improvementRequestMerge: vi.fn().mockResolvedValue({ approval: { approval_id: "ap-1" } }),
     improvementMerge: vi.fn().mockResolvedValue({ improvement_id: "imp-1", status: "merged" }),
@@ -73,21 +79,33 @@ describe("dispatchCommand", () => {
   });
 
   it("derives autocomplete command names from help text", () => {
-    const helpCommands = HELP_TEXT.split("\n")
-      .map((line) => line.match(/^\/([a-z0-9-]+)/)?.[1])
-      .filter(Boolean);
+    const helpCommands = [
+      ...new Set(
+        HELP_TEXT.split("\n")
+          .map((line) => line.match(/^\s*\/([a-z0-9-]+)/)?.[1])
+          .filter(Boolean),
+      ),
+    ];
 
     expect(COMMAND_NAMES).toEqual(helpCommands);
-    expect(COMMAND_NAMES).toContain("memory-search");
-    expect(COMMAND_NAMES).toContain("proposal-publish");
+    // Grouped commands autocomplete on the group name, not each subcommand.
+    expect(COMMAND_NAMES).toContain("review");
+    expect(COMMAND_NAMES).toContain("memory");
   });
 
-  it("keeps slash commands alphabetized in help text", () => {
-    const helpCommands = HELP_TEXT.split("\n")
-      .map((line) => line.match(/^\/([a-z0-9-]+)/)?.[1])
-      .filter((name): name is string => Boolean(name));
+  it("groups help text by task and alphabetizes within each group after Start here", () => {
+    const sections: string[][] = [];
+    for (const line of HELP_TEXT.split("\n")) {
+      if (/^\S.*:$/.test(line)) sections.push([]);
+      const name = line.match(/^\s+\/([a-z0-9-]+)/)?.[1];
+      if (name && sections.length > 0) sections[sections.length - 1].push(name);
+    }
 
-    expect(helpCommands).toEqual([...helpCommands].sort((left, right) => left.localeCompare(right)));
+    // "Start here" is deliberately ordered as the operator's path, not A-Z.
+    expect(sections.length).toBeGreaterThan(1);
+    for (const names of sections.slice(1)) {
+      expect(names).toEqual([...names].sort((left, right) => left.localeCompare(right)));
+    }
   });
 
   it("/run calls runStart with the workflow ref", async () => {
@@ -129,51 +147,51 @@ describe("dispatchCommand", () => {
   it("/status calls runStatus with the run id", async () => {
     const client = makeFakeClient();
     const result = await dispatchCommand(client, "/status run-1", DEFAULT_SETTINGS);
-    expect(client.runStatus).toHaveBeenCalledWith("run-1");
+    expect(client.controlRunDetail).toHaveBeenCalledWith("run-1");
     expect(result.kind).toBe("text");
   });
 
   it("/runs calls runList", async () => {
     const client = makeFakeClient();
-    const result = await dispatchCommand(client, "/runs", DEFAULT_SETTINGS);
+    const result = await dispatchCommand(client, "/status", DEFAULT_SETTINGS);
     expect(client.runList).toHaveBeenCalled();
     expect(result).toEqual({ kind: "text", text: "No runs." });
   });
 
   it("/resume calls runResume", async () => {
     const client = makeFakeClient();
-    const result = await dispatchCommand(client, "/resume", DEFAULT_SETTINGS);
+    const result = await dispatchCommand(client, "/system resume", DEFAULT_SETTINGS);
     expect(client.runResume).toHaveBeenCalled();
     expect(result).toEqual({ kind: "text", text: "No incomplete runs to resume." });
   });
 
-  it("/approvals calls approvalList", async () => {
+  it("/review list calls approvalList and improvementList", async () => {
     const client = makeFakeClient();
-    await dispatchCommand(client, "/approvals", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/review list", DEFAULT_SETTINGS);
     expect(client.approvalList).toHaveBeenCalled();
   });
 
-  it("/approval calls approvalDetail with the id", async () => {
+  it("/review show calls approvalDetail for an approval id", async () => {
     const client = makeFakeClient();
-    await dispatchCommand(client, "/approval ap-1", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/review show ap-1", DEFAULT_SETTINGS);
     expect(client.approvalDetail).toHaveBeenCalledWith("ap-1");
   });
 
-  it("/approve calls approvalApprove with the id", async () => {
+  it("/review approve calls approvalApprove with the id", async () => {
     const client = makeFakeClient();
-    await dispatchCommand(client, "/approve ap-1", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/review approve ap-1", DEFAULT_SETTINGS);
     expect(client.approvalApprove).toHaveBeenCalledWith("ap-1");
   });
 
-  it("/reject joins remaining args as the reason", async () => {
+  it("/review reject joins remaining args as the reason", async () => {
     const client = makeFakeClient();
-    await dispatchCommand(client, "/reject ap-1 not safe enough", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/review reject ap-1 not safe enough", DEFAULT_SETTINGS);
     expect(client.approvalReject).toHaveBeenCalledWith("ap-1", "not safe enough");
   });
 
-  it("/reject without a reason raises CommandError", async () => {
+  it("/review reject without a reason raises CommandError", async () => {
     const client = makeFakeClient();
-    await expect(dispatchCommand(client, "/reject ap-1", DEFAULT_SETTINGS)).rejects.toBeInstanceOf(CommandError);
+    await expect(dispatchCommand(client, "/review reject ap-1", DEFAULT_SETTINGS)).rejects.toBeInstanceOf(CommandError);
   });
 
   it("/artifacts calls artifactList with the run id", async () => {
@@ -201,33 +219,36 @@ describe("dispatchCommand", () => {
       next_action: {
         action: "request_merge",
         label: "Request merge approval",
-        command: "awf improvement request-merge imp-1",
+        command: "awf review request-merge imp-1",
       },
     };
     const client = makeFakeClient({
       improvementList: vi.fn().mockResolvedValue([fakeProposal]),
       improvementGet: vi.fn().mockResolvedValue(fakeProposal),
-      approvalDetail: vi.fn().mockResolvedValue({
-        approval: { approval_id: "ap-1", status: "pending", risk_class: "R2", action_digest: "sha256:123" },
-        preview: {
-          kind: "improvement_merge",
-          human_summary: "1 file changed (+5 / -1 lines) in main.py. Validation passed.",
-          safety_assessment: "Localized change bounded to worktree sandbox.",
-          verdict_artifact_id: "art-v-1",
-          diff_stats: fakeProposal.diff_stats,
-        },
+      approvalDetail: vi.fn().mockImplementation(async (id: string) => {
+        if (!id.startsWith("ap")) throw new Error(`no such approval: ${id}`);
+        return {
+          approval: { approval_id: id, status: "pending", risk_class: "R2", action_digest: "sha256:123" },
+          preview: {
+            kind: "improvement_merge",
+            human_summary: "1 file changed (+5 / -1 lines) in main.py. Validation passed.",
+            safety_assessment: "Localized change bounded to worktree sandbox.",
+            verdict_artifact_id: "art-v-1",
+            diff_stats: fakeProposal.diff_stats,
+          },
+        };
       }),
     });
 
-    const listRes = await dispatchCommand(client, "/improvements", DEFAULT_SETTINGS);
+    const listRes = await dispatchCommand(client, "/review list", DEFAULT_SETTINGS);
     expect(client.improvementList).toHaveBeenCalled();
     expect(listRes.kind).toBe("text");
     if (listRes.kind === "text") {
       expect(listRes.text).toContain("imp-1 [READY_FOR_REVIEW]");
-      expect(listRes.text).toContain("Next: awf improvement request-merge imp-1");
+      expect(listRes.text).toContain("Next: awf review request-merge imp-1");
     }
 
-    const showRes = await dispatchCommand(client, "/improvement imp-1", DEFAULT_SETTINGS);
+    const showRes = await dispatchCommand(client, "/review show imp-1", DEFAULT_SETTINGS);
     expect(client.improvementGet).toHaveBeenCalledWith("imp-1");
     expect(showRes.kind).toBe("text");
     if (showRes.kind === "text") {
@@ -240,7 +261,7 @@ describe("dispatchCommand", () => {
       expect(showRes.text).toContain("6. NEXT OPERATOR ACTION:\n  Request merge approval");
     }
 
-    const apprRes = await dispatchCommand(client, "/approval ap-1", DEFAULT_SETTINGS);
+    const apprRes = await dispatchCommand(client, "/review show ap-1", DEFAULT_SETTINGS);
     expect(client.approvalDetail).toHaveBeenCalledWith("ap-1");
     expect(apprRes.kind).toBe("text");
     if (apprRes.kind === "text") {
@@ -248,19 +269,19 @@ describe("dispatchCommand", () => {
       expect(apprRes.text).toContain("1. WHAT IS BEING APPROVED:\n  1 file changed (+5 / -1 lines) in main.py.");
       expect(apprRes.text).toContain("2. WHY IT IS SAFE TO APPROVE:\n  Localized change bounded to worktree sandbox.");
       expect(apprRes.text).toContain("+import foo");
-      expect(apprRes.text).toContain("Approve: /approve ap-1");
+      expect(apprRes.text).toContain("Approve: /review approve ap-1");
     }
 
-    await dispatchCommand(client, "/improvement-prepare run-1 focused fix", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/review prepare run-1 focused fix", DEFAULT_SETTINGS);
     expect(client.improvementPrepare).toHaveBeenCalledWith("run-1", "focused fix");
 
-    await dispatchCommand(client, "/improvement-request-merge imp-1", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/review request-merge imp-1", DEFAULT_SETTINGS);
     expect(client.improvementRequestMerge).toHaveBeenCalledWith("imp-1");
 
-    await dispatchCommand(client, "/improvement-merge imp-1 ap-1", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/review merge imp-1 ap-1", DEFAULT_SETTINGS);
     expect(client.improvementMerge).toHaveBeenCalledWith("imp-1", "ap-1");
 
-    await dispatchCommand(client, "/improvement-reject imp-1 not ready", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/review reject imp-1 not ready", DEFAULT_SETTINGS);
     expect(client.improvementReject).toHaveBeenCalledWith("imp-1", "not ready");
   });
 
@@ -280,65 +301,111 @@ describe("dispatchCommand", () => {
 
   it("/secrets calls secretListNames (names only)", async () => {
     const client = makeFakeClient();
-    await dispatchCommand(client, "/secrets", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/system secrets", DEFAULT_SETTINGS);
     expect(client.secretListNames).toHaveBeenCalled();
   });
 
-  it("/author-workflow calls workflowAuthorDraft with the objective text", async () => {
+  it("/review draft calls workflowAuthorDraft with the objective text", async () => {
     const client = makeFakeClient();
-    await dispatchCommand(client, "/author-workflow make a demo workflow", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/review draft make a demo workflow", DEFAULT_SETTINGS);
     expect(client.workflowAuthorDraft).toHaveBeenCalledWith({ objective: "make a demo workflow" });
   });
 
-  it("/proposal calls proposalGet", async () => {
+  it("/review show calls proposalGet", async () => {
     const client = makeFakeClient();
-    await dispatchCommand(client, "/proposal p1", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/review show p1", DEFAULT_SETTINGS);
     expect(client.proposalGet).toHaveBeenCalledWith("p1");
   });
 
-  it("/proposal-publish calls proposalPublish", async () => {
+  it("/review publish calls proposalPublish", async () => {
     const client = makeFakeClient();
-    await dispatchCommand(client, "/proposal-publish p1 abc", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/review publish p1 abc", DEFAULT_SETTINGS);
     expect(client.proposalPublish).toHaveBeenCalledWith("p1", "abc");
   });
 
-  it("/proposal-reject joins remaining args as reason", async () => {
+  it("/review routes subcommands to their handlers", async () => {
     const client = makeFakeClient();
-    await dispatchCommand(client, "/proposal-reject p1 not useful", DEFAULT_SETTINGS);
+
+    await dispatchCommand(client, "/review list", DEFAULT_SETTINGS);
+    expect(client.improvementList).toHaveBeenCalled();
+
+    await dispatchCommand(client, "/review merge imp-1 ap-1", DEFAULT_SETTINGS);
+    expect(client.improvementMerge).toHaveBeenCalledWith("imp-1", "ap-1");
+
+    await dispatchCommand(client, "/review draft ship the thing", DEFAULT_SETTINGS);
+    expect(client.workflowAuthorDraft).toHaveBeenCalledWith({ objective: "ship the thing" });
+  });
+
+  it("/review show falls back across id kinds", async () => {
+    // The fake resolves each id only in its own namespace, so the command has
+    // to walk approval -> change -> draft the way the real surface does.
+    const approvalClient = makeFakeClient();
+    await dispatchCommand(approvalClient, "/review show ap-1", DEFAULT_SETTINGS);
+    expect(approvalClient.approvalDetail).toHaveBeenCalledWith("ap-1");
+    expect(approvalClient.improvementGet).not.toHaveBeenCalled();
+
+    const changeClient = makeFakeClient();
+    await dispatchCommand(changeClient, "/review show imp-1", DEFAULT_SETTINGS);
+    expect(changeClient.improvementGet).toHaveBeenCalledWith("imp-1");
+    expect(changeClient.proposalGet).not.toHaveBeenCalled();
+
+    const draftClient = makeFakeClient();
+    await dispatchCommand(draftClient, "/review show p1", DEFAULT_SETTINGS);
+    expect(draftClient.proposalGet).toHaveBeenCalledWith("p1");
+  });
+
+  it("/memory keeps the legacy direct-ref spelling working alongside subcommands", async () => {
+    const grouped = makeFakeClient();
+    await dispatchCommand(grouped, "/memory get pref@1.0.0", DEFAULT_SETTINGS);
+    expect(grouped.memoryGet).toHaveBeenCalledWith("pref@1.0.0");
+
+    const legacy = makeFakeClient();
+    await dispatchCommand(legacy, "/memory pref@1.0.0", DEFAULT_SETTINGS);
+    expect(legacy.memoryGet).toHaveBeenCalledWith("pref@1.0.0");
+  });
+
+  it("/review names its subcommands when given none", async () => {
+    const client = makeFakeClient();
+    await expect(dispatchCommand(client, "/review", DEFAULT_SETTINGS)).rejects.toThrow(/usage: \/review </);
+  });
+
+  it("/review reject joins remaining args as reason", async () => {
+    const client = makeFakeClient();
+    await dispatchCommand(client, "/review reject p1 not useful", DEFAULT_SETTINGS);
     expect(client.proposalReject).toHaveBeenCalledWith("p1", "not useful");
   });
 
   it("dispatches memory, session, and episodic commands", async () => {
     const client = makeFakeClient();
 
-    await dispatchCommand(client, "/memory-search targeted tests", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/memory search targeted tests", DEFAULT_SETTINGS);
     expect(client.memorySearch).toHaveBeenCalledWith("targeted tests");
 
     await dispatchCommand(client, "/memory pref@1.0.0", DEFAULT_SETTINGS);
     expect(client.memoryGet).toHaveBeenCalledWith("pref@1.0.0");
 
-    await dispatchCommand(client, "/memory-propose /tmp/memory.yaml", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/memory propose /tmp/memory.yaml", DEFAULT_SETTINGS);
     expect(client.memoryPropose).toHaveBeenCalledWith("/tmp/memory.yaml");
 
-    await dispatchCommand(client, "/memory-publish p1 abc", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/memory publish p1 abc", DEFAULT_SETTINGS);
     expect(client.memoryPublish).toHaveBeenCalledWith("p1", "abc");
 
-    await dispatchCommand(client, "/memory-reject p1 not useful", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/memory reject p1 not useful", DEFAULT_SETTINGS);
     expect(client.memoryReject).toHaveBeenCalledWith("p1", "not useful");
 
-    await dispatchCommand(client, "/memory-block pref@1.0.0", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/memory block pref@1.0.0", DEFAULT_SETTINGS);
     expect(client.memoryBlock).toHaveBeenCalledWith("pref@1.0.0");
 
-    await dispatchCommand(client, "/session-start demo session", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/memory session-start demo session", DEFAULT_SETTINGS);
     expect(client.sessionStart).toHaveBeenCalledWith("demo session");
 
-    await dispatchCommand(client, "/session-show s1", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/memory session-show s1", DEFAULT_SETTINGS);
     expect(client.sessionShow).toHaveBeenCalledWith("s1");
 
-    await dispatchCommand(client, "/episodic-search targeted", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/memory events targeted", DEFAULT_SETTINGS);
     expect(client.episodicSearch).toHaveBeenCalledWith("targeted");
 
-    await dispatchCommand(client, "/episodic run-1", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/memory timeline run-1", DEFAULT_SETTINGS);
     expect(client.episodicTimeline).toHaveBeenCalledWith("run-1");
   });
 
@@ -348,13 +415,13 @@ describe("dispatchCommand", () => {
     await dispatchCommand(client, "/control", DEFAULT_SETTINGS);
     expect(client.controlSummary).toHaveBeenCalled();
 
-    await dispatchCommand(client, "/readiness", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/system readiness", DEFAULT_SETTINGS);
     expect(client.systemReadiness).toHaveBeenCalled();
 
     await dispatchCommand(client, "/doctor", DEFAULT_SETTINGS);
     expect(client.systemDoctor).toHaveBeenCalled();
 
-    await dispatchCommand(client, "/llm", DEFAULT_SETTINGS);
+    await dispatchCommand(client, "/system llm", DEFAULT_SETTINGS);
     expect(client.llmServers).toHaveBeenCalled();
     expect(client.llmModels).toHaveBeenCalled();
     expect(client.llmServeStatus).toHaveBeenCalled();

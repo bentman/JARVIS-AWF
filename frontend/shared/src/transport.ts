@@ -12,13 +12,13 @@ export interface Transport {
 export interface SpawnCoreOptions {
   /** Path to the `awf` executable. Defaults to "awf" (resolved via PATH). */
   command?: string;
-  /** Extra args before "serve --stdio" - normally none. */
+  /** Extra args before "system serve --stdio" - normally none. */
   args?: string[];
   cwd?: string;
   stderrLimit?: number;
 }
 
-/** Spawns `awf serve --stdio` (Section 16.3) as a child process and speaks
+/** Spawns `awf system serve --stdio` (Section 16.3, ADR-0029) as a child process and speaks
  * newline-delimited JSON-RPC over its stdin/stdout. */
 export class ChildProcessTransport implements Transport {
   private child: ChildProcessWithoutNullStreams;
@@ -30,7 +30,7 @@ export class ChildProcessTransport implements Transport {
 
   constructor(options: SpawnCoreOptions = {}) {
     const command = options.command ?? "awf";
-    const args = [...(options.args ?? []), "serve", "--stdio"];
+    const args = [...(options.args ?? []), "system", "serve", "--stdio"];
     this.stderrLimit = options.stderrLimit ?? 8192;
     this.child = spawn(command, args, {
       cwd: options.cwd,

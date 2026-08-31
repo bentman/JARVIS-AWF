@@ -1,4 +1,4 @@
-"""`awf serve --stdio` (Section 16.3): JSON-RPC 2.0 over stdio.
+"""`awf system serve --stdio` (Section 16.3, ADR-0029): JSON-RPC 2.0 over stdio.
 
 Plain JSON-RPC 2.0 request/response framing, one JSON object per line.
 Method names and dispatch are generated from `awf.protocol.methods`; this

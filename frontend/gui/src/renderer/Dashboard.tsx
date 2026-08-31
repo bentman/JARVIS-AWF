@@ -1,5 +1,6 @@
 import React from "react";
 import { ApprovalsView } from "./ApprovalsView.js";
+import { OperatorWorkQueue } from "./OperatorWorkQueue.js";
 import { Overview } from "./Overview.js";
 import { RunsView } from "./RunsView.js";
 
@@ -86,6 +87,96 @@ export interface ArtifactSummary {
   created_at: string;
 }
 
+export interface OperatorWorkItem {
+  item_id: string;
+  kind: string;
+  title: string;
+  status: string;
+  priority: number;
+  description: string;
+  command: string;
+  source: string;
+  run_id?: string | null;
+  step_id?: string | null;
+  approval_id?: string | null;
+  improvement_id?: string | null;
+  artifact_id?: string | null;
+  created_at?: string | null;
+  primary_action?: OperatorAction;
+  secondary_actions?: OperatorAction[];
+}
+
+export interface OperatorAction {
+  kind: string;
+  label: string;
+  command: string;
+  description?: string | null;
+  run_id?: string | null;
+  approval_id?: string | null;
+  improvement_id?: string | null;
+  artifact_id?: string | null;
+  workflow_ref?: string | null;
+  registry_kind?: string | null;
+  registry_name?: string | null;
+  registry_version?: string | null;
+}
+
+export interface OperatorInputField {
+  name: string;
+  type: string;
+  required: boolean;
+  enum?: unknown[] | null;
+  description?: string | null;
+  default?: unknown;
+}
+
+export interface OperatorInputSchemaSummary {
+  type: string;
+  required: string[];
+  fields: OperatorInputField[];
+}
+
+export interface OperatorStartOption {
+  workflow_ref: string;
+  name: string;
+  version: string;
+  source?: string | null;
+  trust_status?: string | null;
+  digest?: string | null;
+  status: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+  input_schema_summary: OperatorInputSchemaSummary;
+  primary_action: OperatorAction;
+}
+
+export interface OperatorNextAction {
+  label: string;
+  command: string;
+  description: string;
+  kind: string;
+  run_id?: string | null;
+  approval_id?: string | null;
+  improvement_id?: string | null;
+  primary_action?: OperatorAction;
+}
+
+export interface OperatorTimelineItem {
+  kind: string;
+  status: string;
+  title: string;
+  description: string;
+  occurred_at: string | null;
+  step_id?: string | null;
+  event_id?: string;
+  approval_id?: string;
+  artifact_id?: string;
+  node_id?: string;
+  failure_class?: string | null;
+  action_digest?: string;
+  payload?: Record<string, unknown>;
+}
+
 export interface RunOutcome {
   run_id: string;
   workflow_ref: string;
@@ -143,6 +234,9 @@ export interface ControlSummary {
     next_actions: string[];
     first_run_command: string;
   };
+  operator_work_items?: OperatorWorkItem[];
+  operator_next_actions?: OperatorNextAction[];
+  operator_start_options?: OperatorStartOption[];
 }
 
 export interface LlmModelsReport {
@@ -162,6 +256,9 @@ export interface ControlRunDetail {
   outcome?: RunOutcome;
   artifacts: ArtifactSummary[];
   timeline: Record<string, unknown>;
+  operator_timeline?: OperatorTimelineItem[];
+  operator_work_items?: OperatorWorkItem[];
+  operator_next_actions?: OperatorNextAction[];
   improvements: ImprovementSummary[];
   verdicts: ArtifactSummary[];
 }
@@ -176,6 +273,11 @@ export interface DashboardProps {
   onRunDetail?: (runId: string) => void;
   onArtifactRead?: (artifactId: string) => Promise<ArtifactSummary & { content: string }>;
   onLlmModels?: () => Promise<LlmModelsReport>;
+  onApprove?: (approvalId: string) => Promise<void>;
+  onReject?: (approvalId: string, reason: string) => Promise<void>;
+  onImprovementRequestMerge?: (improvementId: string) => Promise<unknown>;
+  onImprovementMerge?: (improvementId: string, approvalId: string) => Promise<unknown>;
+  onImprovementReject?: (improvementId: string, reason?: string) => Promise<unknown>;
   refreshing: boolean;
 }
 
@@ -421,6 +523,11 @@ export function Dashboard({
   onRunDetail,
   onArtifactRead,
   onLlmModels,
+  onApprove,
+  onReject,
+  onImprovementRequestMerge,
+  onImprovementMerge,
+  onImprovementReject,
   refreshing,
 }: DashboardProps): React.JSX.Element {
   return (
@@ -429,15 +536,30 @@ export function Dashboard({
       <button className="btn btn-secondary" onClick={onRefresh} disabled={refreshing}>
         {refreshing ? "Refreshing..." : "Refresh"}
       </button>
+      <OperatorWorkQueue
+        items={controlSummary?.operator_work_items ?? []}
+        onRunDetail={onRunDetail}
+      />
       <Overview controlSummary={controlSummary} onLlmModels={onLlmModels} />
       <RunsView
         runs={runs}
         selectedRunDetail={selectedRunDetail}
         onRunDetail={onRunDetail}
         onArtifactRead={onArtifactRead}
+        onApprove={onApprove}
+        onReject={onReject}
+        onImprovementRequestMerge={onImprovementRequestMerge}
+        onImprovementMerge={onImprovementMerge}
+        onImprovementReject={onImprovementReject}
       />
-      <ApprovalsView approvals={approvals} />
-      <ImprovementProposals improvements={improvements} onArtifactRead={onArtifactRead} />
+      <ApprovalsView approvals={approvals} onApprove={onApprove} onReject={onReject} />
+      <ImprovementProposals
+        improvements={improvements}
+        onArtifactRead={onArtifactRead}
+        onRequestMerge={onImprovementRequestMerge}
+        onMerge={onImprovementMerge}
+        onReject={onImprovementReject}
+      />
     </div>
   );
 }

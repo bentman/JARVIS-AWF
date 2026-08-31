@@ -159,21 +159,21 @@ def derive_next_action(proposal: dict[str, Any]) -> dict[str, str]:
             return {
                 "action": "approve_merge",
                 "label": "Approve merge",
-                "command": f"awf approve {appr_id}",
+                "command": f"awf review approve {appr_id}",
                 "description": f"Approve the R2 merge gate for proposal {imp_id}.",
             }
         if appr_status == "approved":
             return {
                 "action": "merge",
                 "label": "Merge improvement",
-                "command": f"awf improvement merge {imp_id} {appr_id}",
+                "command": f"awf review merge {imp_id} {appr_id}",
                 "description": "Execute merge into target branch and close candidate worktree.",
             }
         if appr_status == "rejected":
             return {
                 "action": "reject",
                 "label": "Reject proposal",
-                "command": f"awf improvement reject {imp_id}",
+                "command": f"awf review reject {imp_id}",
                 "description": "Merge approval was rejected. Close proposal and discard worktree.",
             }
 
@@ -181,7 +181,7 @@ def derive_next_action(proposal: dict[str, Any]) -> dict[str, str]:
         return {
             "action": "request_merge",
             "label": "Request merge approval",
-            "command": f"awf improvement request-merge {imp_id}",
+            "command": f"awf review request-merge {imp_id}",
             "description": "Request human merge approval for this proposal.",
         }
 
@@ -190,7 +190,7 @@ def derive_next_action(proposal: dict[str, Any]) -> dict[str, str]:
         return {
             "action": "mark_ready",
             "label": "Mark proposal ready for review",
-            "command": f"awf improvement mark-ready {imp_id} {verdict_id}",
+            "command": f"awf review mark-ready {imp_id} {verdict_id}",
             "description": "Verify validation verdict and advance proposal to ready_for_review.",
         }
 
@@ -213,6 +213,6 @@ def derive_next_action(proposal: dict[str, Any]) -> dict[str, str]:
     return {
         "action": "review",
         "label": "Review proposal",
-        "command": f"awf improvement show {imp_id}",
+        "command": f"awf review show {imp_id}",
         "description": "Inspect proposal diff and validation details.",
     }

@@ -11,13 +11,17 @@ import {
   type LlmModelsReport,
   type RunSummary,
 } from "./Dashboard.js";
+import { EvidencePanel } from "./EvidencePanel.js";
 import { MemoryPanel, type MemorySearchResult } from "./MemoryPanel.js";
+import { OperatorWorkQueue } from "./OperatorWorkQueue.js";
 import { Overview } from "./Overview.js";
 import { ProposalReview, type ProposalSummary } from "./ProposalReview.js";
 import { RegistryActions, type RegistryEntry } from "./RegistryActions.js";
+import { RunTimeline } from "./RunTimeline.js";
 import { RunsView } from "./RunsView.js";
+import { StartWorkPanel } from "./StartWorkPanel.js";
 import { stateClass } from "./state.js";
-import { ArchiveIcon, ChatIcon, DatabaseIcon, PlayIcon, ShieldIcon, SparkleIcon, ZapIcon, type IconProps } from "./icons.js";
+import { ChatIcon, DatabaseIcon, SparkleIcon, type IconProps } from "./icons.js";
 import { Transcript, type TranscriptEntry } from "./Transcript.js";
 import { VoiceActivation, type VoiceActivationHandle, type VoiceSessionResult, type VoiceSubmitTextResult } from "./VoiceActivation.js";
 import type { RiskClass } from "../voiceApproval.js";
@@ -67,6 +71,7 @@ export interface AppProps extends VoiceSessionFns {
   onApprove: (approvalId: string) => void;
   onReject: (approvalId: string, reason: string) => void;
   onTextSubmit?: (text: string, workflowRef: string) => Promise<TextSubmitResult>;
+  onRunStart?: (workflowRef: string, input?: Record<string, unknown>) => Promise<TextSubmitResult>;
   onRunList?: () => Promise<RunSummary[]>;
   onApprovalList?: () => Promise<ApprovalSummary[]>;
   onApprovalDetail?: (approvalId: string) => Promise<{ approval: ApprovalSummary; preview?: PendingApproval["preview"] }>;
@@ -94,7 +99,10 @@ export interface AppProps extends VoiceSessionFns {
   onMemoryReject?: (proposalId: string, reason?: string) => Promise<unknown>;
 }
 
-type ViewName = "chat" | "status" | "runs" | "approvals" | "proposals" | "memory" | "registry";
+// Three destinations, matching the CLI: do the work, talk to it, curate what
+// it knows. Runs, approvals, and proposals are sections of Operate because
+// they are the same queue an operator is already working through.
+type ViewName = "operate" | "chat" | "library";
 
 export const DEFAULT_CHAT_WORKFLOW_REF = "assistant-default@1.0.0";
 
@@ -118,6 +126,7 @@ export function App({
   onApprove,
   onReject,
   onTextSubmit,
+  onRunStart,
   onVoiceSessionStart,
   onVoicePushToTalkStart,
   onVoicePushToTalkStop,
@@ -205,6 +214,36 @@ export function App({
     setSelectedRunDetail(await onControlRunDetail(runId));
   };
 
+  const handleStartWorkflow = async (workflowRef: string, input: Record<string, unknown>) => {
+    if (!onRunStart && !onTextSubmit) throw new Error("workflow start is not available");
+    const result = onRunStart
+      ? await onRunStart(workflowRef, input)
+      : await onTextSubmit!(typeof input.objective === "string" ? input.objective : "", workflowRef);
+    await refresh();
+    if (result.run_id) void handleRunDetail(result.run_id).catch(() => undefined);
+    return { run_id: result.run_id, status: result.status };
+  };
+
+  const focusStartWorkflow = (workflowRef?: string | null) => {
+    if (workflowRef) setChatWorkflowRef(workflowRef);
+  };
+
+  const focusApproval = (_approvalId: string, runId?: string | null) => {
+    if (runId) {
+      void handleRunDetail(runId).catch(() => undefined);
+    } else {
+      setView("operate");
+    }
+  };
+
+  const focusImprovement = (_improvementId: string, runId?: string | null) => {
+    if (runId) {
+      void handleRunDetail(runId).catch(() => undefined);
+    } else {
+      setView("operate");
+    }
+  };
+
   useEffect(() => {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -271,13 +310,15 @@ export function App({
         result.reason ??
         result.error ??
         `Workflow ${chatWorkflowRef.trim()} finished with status ${result.status}.`;
+      const outcome = result.outcome as { next_action?: string } | undefined;
+      const nextAction = outcome?.next_action ? ` Next: ${outcome.next_action}` : "";
       setEntries((prev) => [
         ...prev,
         { id: nextId.current++, speaker: "Operator", text },
         {
           id: nextId.current++,
           speaker: "AWF",
-          text: `${responseText} (run ${result.run_id})`,
+          text: `${responseText} (run ${result.run_id}).${nextAction}`,
         },
       ]);
       void refresh();
@@ -332,28 +373,16 @@ export function App({
     onVoiceSubmitText
   );
 
+  const operateBadge =
+    (controlSummary?.operator_work_items?.length ?? 0) || approvals.length + improvements.length || undefined;
   const views: { name: ViewName; label: string; badge?: number; icon: React.FC<IconProps> }[] = [
-    // The first page is always the chat + voice surface (ADR-0025): a
-    // scrollable conversation window that voice and typed chat share.
-    // Status/diagnostics live behind their own nav button, never below it.
+    ...(statusAvailable
+      ? [{ name: "operate" as const, label: "Operate", icon: SparkleIcon, badge: operateBadge }]
+      : []),
     { name: "chat" as const, label: "Chat", icon: ChatIcon },
-    ...(statusAvailable ? [{ name: "status" as const, label: "Status", icon: SparkleIcon }] : []),
-    ...(runsAvailable ? [{ name: "runs" as const, label: "Runs", icon: PlayIcon }] : []),
-    ...(approvalsAvailable
-      ? [{ name: "approvals" as const, label: "Approvals", icon: ShieldIcon, badge: approvals.length || undefined }]
+    ...(registryAvailable || memoryAvailable
+      ? [{ name: "library" as const, label: "Library", icon: DatabaseIcon }]
       : []),
-    ...(proposalsAvailable
-      ? [
-          {
-            name: "proposals" as const,
-            label: "Proposals",
-            icon: ZapIcon,
-            badge: improvements.length || undefined,
-          },
-        ]
-      : []),
-    ...(memoryAvailable ? [{ name: "memory" as const, label: "Memory", icon: ArchiveIcon }] : []),
-    ...(registryAvailable ? [{ name: "registry" as const, label: "Registry", icon: DatabaseIcon }] : []),
   ];
   const activeView = view && views.some((v) => v.name === view) ? view : views[0]?.name;
 
@@ -436,7 +465,7 @@ export function App({
               </div>
             </div>
           )}
-          {activeView === "status" && statusAvailable && (
+          {activeView === "operate" && statusAvailable && (
             <>
               <div className="view-header">
                 <div>
@@ -444,63 +473,111 @@ export function App({
                     <SparkleIcon size={12} />
                     Resident Mind
                   </div>
-                  <h1 className="view-title">Control center</h1>
+                  <h1 className="view-title">Operate</h1>
                 </div>
               </div>
+              <OperatorWorkQueue
+                items={controlSummary?.operator_work_items ?? []}
+                onRunDetail={onControlRunDetail ? (runId: string) => void handleRunDetail(runId) : undefined}
+                onApprovalReview={focusApproval}
+                onImprovementReview={focusImprovement}
+                onDoctor={() => void refresh()}
+                onLlmModels={onLlmModels ? () => void onLlmModels() : undefined}
+                onStartWorkflow={focusStartWorkflow}
+              />
+              <StartWorkPanel
+                options={controlSummary?.operator_start_options ?? []}
+                workflowOptions={workflowOptions}
+                selectedWorkflowRef={controlSummary?.operator_start_options?.[0]?.workflow_ref ?? chatWorkflowRef}
+                onWorkflowRefChange={setChatWorkflowRef}
+                onStart={onRunStart || onTextSubmit ? handleStartWorkflow : undefined}
+              />
+              {selectedRunDetail && (
+                <>
+                  <RunTimeline
+                    detail={selectedRunDetail}
+                    onApprove={handleApprove}
+                    onReject={handleReject}
+                    onImprovementRequestMerge={onImprovementRequestMerge}
+                    onImprovementMerge={onImprovementMerge}
+                    onImprovementReject={onImprovementReject}
+                  />
+                  <EvidencePanel
+                    artifacts={selectedRunDetail.artifacts}
+                    verdicts={selectedRunDetail.verdicts}
+                    onArtifactRead={onArtifactRead}
+                  />
+                </>
+              )}
+              {approvalsAvailable && (
+                <ApprovalsView approvals={approvals} onApprove={handleApprove} onReject={handleReject} />
+              )}
+              {proposalsAvailable && (
+                <>
+                  {onProposalGet && onProposalPublish && onProposalReject && (
+                    <ProposalReview
+                      onProposalGet={onProposalGet}
+                      onProposalPublish={onProposalPublish}
+                      onProposalReject={onProposalReject}
+                    />
+                  )}
+                  <ImprovementProposals
+                    improvements={improvements}
+                    onArtifactRead={onArtifactRead}
+                    onRequestMerge={onImprovementRequestMerge}
+                    onMerge={onImprovementMerge}
+                    onReject={onImprovementReject}
+                  />
+                </>
+              )}
+              {runsAvailable && (
+                <RunsView
+                  runs={runs}
+                  selectedRunDetail={null}
+                  onRunDetail={onControlRunDetail ? (runId: string) => void handleRunDetail(runId) : undefined}
+                  onArtifactRead={onArtifactRead}
+                  onApprove={handleApprove}
+                  onReject={handleReject}
+                  onImprovementRequestMerge={onImprovementRequestMerge}
+                  onImprovementMerge={onImprovementMerge}
+                  onImprovementReject={onImprovementReject}
+                />
+              )}
               <Overview controlSummary={controlSummary} onLlmModels={onLlmModels} />
             </>
           )}
-          {activeView === "runs" && (
-            <RunsView
-              runs={runs}
-              selectedRunDetail={selectedRunDetail}
-              onRunDetail={onControlRunDetail ? (runId: string) => void handleRunDetail(runId) : undefined}
-              onArtifactRead={onArtifactRead}
-            />
-          )}
-          {activeView === "approvals" && <ApprovalsView approvals={approvals} onApprove={handleApprove} onReject={handleReject} />}
-          {activeView === "proposals" && (
+          {activeView === "library" && (
             <>
-              {onProposalGet && onProposalPublish && onProposalReject && (
-                <ProposalReview
-                  onProposalGet={onProposalGet}
-                  onProposalPublish={onProposalPublish}
-                  onProposalReject={onProposalReject}
+              {registryAvailable &&
+                onRegistryValidate &&
+                onRegistryPublish &&
+                onRegistryReindex &&
+                onRegistryRetire &&
+                onRegistryTrust && (
+                  <RegistryActions
+                    onRegistryValidate={onRegistryValidate}
+                    onRegistryPublish={onRegistryPublish}
+                    onRegistryReindex={onRegistryReindex}
+                    onRegistryRetire={onRegistryRetire}
+                    onRegistryTrust={onRegistryTrust}
+                    onRegistryList={onRegistryList}
+                    onRegistryGet={onRegistryGet}
+                    onWorkflowRun={(workflowRef) => {
+                      setChatWorkflowRef(workflowRef);
+                      setView("operate");
+                    }}
+                  />
+                )}
+              {memoryAvailable && onMemorySearch && onMemoryBlock && onMemoryPublish && onMemoryReject && (
+                <MemoryPanel
+                  onMemorySearch={onMemorySearch}
+                  onMemoryBlock={onMemoryBlock}
+                  onMemoryPublish={onMemoryPublish}
+                  onMemoryReject={onMemoryReject}
                 />
               )}
-              <ImprovementProposals
-                improvements={improvements}
-                onArtifactRead={onArtifactRead}
-                onRequestMerge={onImprovementRequestMerge}
-                onMerge={onImprovementMerge}
-                onReject={onImprovementReject}
-              />
             </>
           )}
-          {activeView === "memory" && onMemorySearch && onMemoryBlock && onMemoryPublish && onMemoryReject && (
-            <MemoryPanel
-              onMemorySearch={onMemorySearch}
-              onMemoryBlock={onMemoryBlock}
-              onMemoryPublish={onMemoryPublish}
-              onMemoryReject={onMemoryReject}
-            />
-          )}
-          {activeView === "registry" &&
-            onRegistryValidate &&
-            onRegistryPublish &&
-            onRegistryReindex &&
-            onRegistryRetire &&
-            onRegistryTrust && (
-              <RegistryActions
-                onRegistryValidate={onRegistryValidate}
-                onRegistryPublish={onRegistryPublish}
-                onRegistryReindex={onRegistryReindex}
-                onRegistryRetire={onRegistryRetire}
-                onRegistryTrust={onRegistryTrust}
-                onRegistryList={onRegistryList}
-                onRegistryGet={onRegistryGet}
-              />
-            )}
 
       </main>
       {effectivePendingApproval && (

@@ -39,15 +39,30 @@ commands, or change `PATH`.
 ## First Check
 
 ```powershell
+awf control
 awf doctor
-awf readiness
+awf system readiness
 ```
+
+`awf --help` lists every command with a one-line description, and
+`awf <command> --help` explains its arguments.
+
+`awf control` is the primary operating view in the CLI. It shows the same
+backend-derived operator queue that the GUI opens on: blocked approvals, active
+or failed runs, ready proposals, readiness/LLM configuration, and the next
+operator action.
 
 Start the GUI:
 
 ```powershell
 awf-gui
 ```
+
+The GUI opens to Operate, the control-center home view (Operate, Chat, and
+Library are the three destinations). Chat remains available
+for starting work. Use Operate's Start work panel to choose a trusted workflow,
+fill the schema-derived inputs, start the run, and then resolve any Needs action
+cards from the same view.
 
 Start the terminal UI:
 
@@ -64,15 +79,15 @@ To have AWF manage a local `llama-server`, acquire the runtime and provide a
 `.gguf` model under `models\llm\<model-name>\`:
 
 ```powershell
-awf llm acquire
-awf llm select llama-server
-awf llm serve start
+awf system llm acquire
+awf system llm select llama-server
+awf system llm serve start
 ```
 
 For an existing operator-run OpenAI-compatible server (e.g. Ollama, LM Studio, or vLLM):
 
 ```powershell
-awf llm select openai-compatible --model "<server-model-name>"
+awf system llm select openai-compatible --model "<server-model-name>"
 ```
 
 Run the assistant workflow once an LLM server is active:
@@ -81,13 +96,21 @@ Run the assistant workflow once an LLM server is active:
 awf run assistant-default@1.0.0 --objective "check the system"
 ```
 
+The same workflow is available in the GUI from Operate > Start work. Registry
+workflow rows also have a Run handoff that returns to the same start form.
+
 ## Useful Checks
 
 ```powershell
-awf llm servers
-awf llm serve status
+awf system llm servers
+awf system llm serve status
+awf-speech models sync
 awf-speech models verify
 ```
+
+Speech models are operator-managed local artifacts under `models\`. Runtime STT
+uses local files only; if the selected STT artifact is incomplete, transcription
+returns a clear local-model error instead of downloading implicitly.
 
 Use `docs\OperatorsGuide.md` after setup for normal operation,
 troubleshooting, and validation commands.

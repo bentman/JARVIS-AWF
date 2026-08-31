@@ -464,13 +464,14 @@ code, pre, .mono {
 a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
+select:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 /* inputs */
-input, textarea {
+input, textarea, select {
   background: var(--surface-raised);
   border: none;
   box-shadow: 0 0 0 1px var(--border);
@@ -480,7 +481,7 @@ input, textarea {
   font-family: var(--font-sans);
 }
 
-input:focus, textarea:focus {
+input:focus, textarea:focus, select:focus {
   box-shadow: 0 0 0 1px var(--accent);
   outline: none;
 }
@@ -498,6 +499,188 @@ input.mono, textarea.mono {
   padding: var(--space-3);
   border-radius: var(--radius);
   box-shadow: 0 0 0 1px var(--border), inset 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.detail-stack {
+  margin-bottom: var(--space-5);
+}
+
+.operate-band {
+  background: rgba(23, 32, 51, 0.54);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.section-heading h2 {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+
+.section-heading p {
+  margin: var(--space-1) 0 0;
+}
+
+.start-work-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.start-work-panel label,
+.decision-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.start-work-panel input,
+.start-work-panel select,
+.start-work-panel textarea,
+.decision-form textarea {
+  width: 100%;
+}
+
+.start-work-panel textarea,
+.decision-form textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.workflow-summary,
+.queue-actions,
+.run-now {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.run-now {
+  align-items: stretch;
+  margin-top: var(--space-3);
+}
+
+.run-now > div {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.run-now strong {
+  display: block;
+  margin-top: var(--space-1);
+}
+
+.queue-group {
+  margin-top: var(--space-4);
+}
+
+.queue-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.55fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.queue-item-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.queue-actions code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-dim);
+}
+
+.run-status-lane,
+.evidence-summary,
+.inline-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.run-outcome,
+.next-action-box {
+  margin: var(--space-4) 0;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.next-action-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.timeline-list {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.timeline-list > li {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.timeline-entry {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.timeline-entry-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.registry-summary {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+@media (max-width: 760px) {
+  .queue-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* approval card */

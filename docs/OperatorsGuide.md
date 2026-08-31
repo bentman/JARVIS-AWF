@@ -47,45 +47,74 @@ environment variables before launch.
 
 ## GUI Map
 
+Operate:
+
+- is the default control-center home view;
+- shows a Start work panel backed by trusted workflow registry entries;
+- renders workflow inputs from the workflow input schema, with advanced JSON
+  input available for unsupported shapes;
+- groups backend-derived work items into Start work, Needs action, Running, and
+  Review / close out lanes;
+- is fed by `awf/control.summary`; the GUI does not derive a separate
+  frontend-only operating state;
+- opens actionable run detail, approval review, proposal review, or readiness
+  actions from the relevant card;
+- keeps raw event data behind an advanced disclosure.
+
 Chat:
 
 - sends text into the default workflow, usually `assistant-default@1.0.0`;
 - uses the resident model profile, so it needs a reachable local LLM endpoint;
-- shows conversation turns and pending errors.
+- shows conversation turns, started run IDs, pending errors, and the next action
+  returned by the run outcome.
 
-Status:
+Operate diagnostics:
 
 - shows operator readiness, system readiness, LLM status, recent runs,
   approvals, and registry counts;
 - use Refresh when local runtime state changed outside the GUI.
 
-Runs:
+Operate also carries, in urgency order below the queue:
 
-- lists active and recent durable workflow runs;
-- opens run detail, step outputs, current node state, artifacts, and terminal
-  outcome.
+- pending approvals, with the exact action digest and preview when available;
+  an approval applies only to that exact action;
+- drafted registry proposals and proposed code changes, with their review
+  actions;
+- run history, which opens run detail with status, steps, approvals, artifacts,
+  verdicts, failures, proposal follow-ups, and next actions in one operational
+  timeline, fed by `awf/control.runDetail`;
+- system readiness, LLM status, and registry counts.
 
-Approvals:
-
-- shows pending approval records;
-- displays the exact action digest and preview when available;
-- approval applies only to that exact action.
-
-Proposals:
-
-- shows drafted registry proposals;
-- use it for authored workflows, memories, and other proposal-backed objects.
-
-Memory:
-
-- searches durable memory and session-adjacent context;
-- publishing semantic memory remains explicit.
-
-Registry:
+Library:
 
 - browses repo defaults under `config/app_registry/` and operator objects under
   `data/registry/`;
-- data-root objects shadow config-root defaults by normal registry precedence.
+- shows source and trust badges plus a selected-object summary;
+- surfaces workflow input schemas and a Run handoff that opens the Operate
+  start flow for that workflow;
+- data-root objects shadow config-root defaults by normal registry precedence;
+- searches durable memory and session-adjacent context; publishing semantic
+  memory remains explicit.
+
+## Operating Loop
+
+Normal operation starts at Operate:
+
+```bash
+awf control
+```
+
+1. Start work from the Operate Start work panel, Chat, the Library Run handoff,
+   or `awf run <workflow>@<version>`.
+2. Watch the linked run in Operate or `awf status <run-id>`.
+3. Resolve the highest-priority Needs action card: approval, failed run,
+   readiness check, LLM configuration item, or doctor item.
+4. Review evidence, verdict artifacts, failed steps, and proposal context from
+   the selected run detail.
+5. Approve, reject with a reason, request merge approval, merge, or reject a
+   proposal from the same context where the evidence appears.
+6. Close out when Review / close out is empty or every remaining item has been
+   inspected.
 
 ## Chat And LLM
 
@@ -99,21 +128,21 @@ There are two different local LLM shapes:
 Check status:
 
 ```bash
-awf llm servers
-awf llm models
-awf llm serve status
+awf system llm servers
+awf system llm models
+awf system llm serve status
 ```
 
 Acquire a managed llama.cpp runtime:
 
 ```bash
-awf llm acquire
+awf system llm acquire
 ```
 
 Select an operator-run OpenAI-compatible server instead:
 
 ```bash
-awf llm select openai-compatible --model "Qwen/Qwen3-8B-GGUF:Q5_K_M"
+awf system llm select openai-compatible --model "Qwen/Qwen3-8B-GGUF:Q5_K_M"
 ```
 
 Managed `llama-server` also needs a local `.gguf` under `models/llm/<name>/`
@@ -127,25 +156,40 @@ Start the terminal UI after the frontend has been built:
 awf-cli
 ```
 
-Use `/help` inside the TUI for the current slash-command list. Plain text starts
-the default assistant workflow, so it has the same LLM requirement as GUI chat.
+Use `/help` inside the TUI for the current slash-command list, grouped by task
+with a Start here section. `/review` and `/memory` take the same subcommands as
+`awf review` and `awf memory`. Plain text starts the default assistant workflow,
+so it has the same LLM requirement as GUI chat.
 
 ## Core CLI
 
 Common commands:
 
 ```bash
+awf control
 awf doctor
-awf readiness
+awf system readiness
 awf run assistant-default@1.0.0 --objective "check the system"
-awf runs
+awf status
 awf status <run-id>
-awf artifacts <run-id>
-awf approvals
+awf status <run-id> --artifacts
+awf review list
 ```
 
+`awf --help` lists every command with a one-line description, and
+`awf <command> --help` explains its arguments. There are eight commands:
+`run`, `status`, `control`, `doctor`, `review` (decisions), `registry`
+(published objects), `memory` (what the system remembers), and `system`
+(readiness, resume, llm, secret, serve).
+
+ADR-0029 replaced the older spellings rather than aliasing them, so
+`awf approvals`, `awf runs`, `awf artifacts`, `awf improvement ...`,
+`awf proposal ...`, `awf session ...`, and the rest are now errors. The table in
+that ADR names the replacement for each.
+
 Most commands print readable summaries. Use `--json` where the command exposes
-it and you need raw payloads for automation.
+it and you need raw payloads for automation - `awf system readiness --json`
+carries the raw capability probe tokens behind the per-function summary.
 
 ## Runs
 
@@ -156,10 +200,10 @@ Useful flow:
 
 ```bash
 awf run <workflow>@<version> --objective "describe the work"
-awf runs
+awf status
 awf status <run-id>
-awf artifacts <run-id>
-awf resume
+awf status <run-id> --artifacts
+awf system resume
 ```
 
 ## Approvals
@@ -170,13 +214,18 @@ run until an approval is resolved.
 Approval flow:
 
 ```bash
-awf approvals
-awf approve <approval-id>
-awf reject <approval-id> --reason "explain why"
+awf review list
+awf review show <id>
+awf review approve <id>
+awf review reject <id> --reason "explain why"
 ```
 
-Inspect approval detail and action preview in the GUI Approvals view or the TUI
-approval slash command.
+`awf review` takes any id an operator can act on - a pending approval, a
+proposed code change, or a drafted registry object - and resolves which one it
+names. `awf review list` shows everything waiting at once.
+
+Inspect approval detail and action preview in the GUI Operate view or with
+`/review show <id>` in the TUI.
 
 An approval is bound to an action digest. If the action changes, the old
 approval no longer applies. Voice alone cannot approve risky actions.
@@ -190,8 +239,17 @@ Debug file-based voice from the CLI:
 
 ```bash
 awf-speech round-trip <wake.wav> <command.wav> --response-audio-out <out.wav>
+awf-speech transcribe <command.wav>
+awf-speech models sync
 awf-speech models verify
 ```
+
+Speech models are local operator artifacts under `models/`. Use
+`awf-speech models sync` to acquire them and `awf-speech models verify` to check
+presence. Runtime STT uses local files only; a missing or incomplete STT model
+returns a structured local-model error instead of downloading during
+transcription. CPU TTS pins the CPU ONNX Runtime provider, so a broken
+accelerator provider does not prevent CPU synthesis.
 
 ## Memory
 
@@ -201,8 +259,8 @@ proposal-backed.
 Useful commands:
 
 ```bash
-awf session start --title "today"
-awf session show <session-id>
+awf memory session-start --title "today"
+awf memory session-show <session-id>
 awf memory search <query>
 awf memory get <name>@<version>
 awf memory propose --file <path>
@@ -264,25 +322,35 @@ awf doctor
 Hardware or runtime state unclear:
 
 ```bash
-awf readiness
-awf llm servers
-awf llm serve status
+awf system readiness
+awf system llm servers
+awf system llm serve status
+awf-speech models sync
 awf-speech models verify
 ```
 
-GUI opens but Status is empty or stale:
+GUI opens but Operate is empty or stale:
 
 - restart the GUI so it starts a fresh AWF backend;
 - confirm your terminal is at the repo root;
 - reload the session helper for your platform.
 
-Chat fails while Status loads:
+Chat fails while Operate loads:
 
 - confirm the resident model profile points at the intended server;
-- use `awf llm select openai-compatible --model <name>` for an operator-run
+- use `awf system llm select openai-compatible --model <name>` for an operator-run
   OpenAI-compatible endpoint;
-- use `awf llm acquire`, local GGUF placement, `awf llm select llama-server`,
-  then `awf llm serve start` for a managed sidecar.
+- use `awf system llm acquire`, local GGUF placement, `awf system llm select llama-server`,
+  then `awf system llm serve start` for a managed sidecar.
+
+A command failed with a message you want to trace:
+
+```bash
+AWF_DEBUG=1 awf <command>
+```
+
+The CLI reports failures as `error: <message>` and exits non-zero. `AWF_DEBUG=1`
+raises the underlying traceback instead.
 
 Setup, dependency repair, and first-install validation belong in the QuickStart
 docs, not this guide.

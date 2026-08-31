@@ -40,14 +40,14 @@ METHODS: tuple[MethodSpec, ...] = (
         "awf.ops.run.op_run_list",
         "conn",
         'runList(): Promise<RunSummary[]> {\n    return this.call("awf/run.list", {});\n  }',
-        ("runs",),
+        ("status",),
     ),
     MethodSpec(
         "awf/run.resume",
         "awf.ops.run.op_run_resume",
         "repo_root, conn",
         'runResume(): Promise<RunStartResult[]> {\n    return this.call("awf/run.resume", {}, this.runCallTimeoutMs);\n  }',
-        ("resume",),
+        ("system", "resume"),
         True,
     ),
     MethodSpec(
@@ -55,7 +55,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "awf.ops.approval.op_approval_list",
         "conn",
         'approvalList(): Promise<Approval[]> {\n    return this.call("awf/approval.list", {});\n  }',
-        ("approvals",),
+        ("review", "list"),
     ),
     MethodSpec(
         "awf/approval.detail",
@@ -72,7 +72,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "approvalApprove(approvalId: string, options: ApprovalApproveOptions = {}): Promise<Approval> {\n"
         '    return this.call("awf/approval.approve", { approvalId, channel: options.channel, riskClass: options.riskClass });\n'
         "  }",
-        ("approve",),
+        ("review", "approve"),
     ),
     MethodSpec(
         "awf/approval.reject",
@@ -81,7 +81,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "approvalReject(approvalId: string, reason: string): Promise<Approval> {\n"
         '    return this.call("awf/approval.reject", { approvalId, reason });\n'
         "  }",
-        ("reject",),
+        ("review", "reject"),
     ),
     MethodSpec(
         "awf/machine.actionPreview",
@@ -98,7 +98,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "improvementList(status?: string): Promise<ImprovementProposal[]> {\n"
         '    return this.call("awf/improvement.list", { status });\n'
         "  }",
-        ("improvement", "list"),
+        ("review", "list"),
     ),
     MethodSpec(
         "awf/improvement.get",
@@ -107,7 +107,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "improvementGet(improvementId: string): Promise<ImprovementProposal> {\n"
         '    return this.call("awf/improvement.get", { improvementId });\n'
         "  }",
-        ("improvement", "show"),
+        ("review", "show"),
     ),
     MethodSpec(
         "awf/improvement.prepare",
@@ -116,7 +116,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "improvementPrepare(runId: string, summary?: string): Promise<ImprovementProposal> {\n"
         '    return this.call("awf/improvement.prepare", { runId, summary });\n'
         "  }",
-        ("improvement", "prepare"),
+        ("review", "prepare"),
     ),
     MethodSpec(
         "awf/improvement.markReady",
@@ -129,7 +129,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "  ): Promise<ImprovementProposal> {\n"
         '    return this.call("awf/improvement.markReady", { improvementId, verdictArtifactId, validationArtifactIds });\n'
         "  }",
-        ("improvement", "mark-ready"),
+        ("review", "mark-ready"),
     ),
     MethodSpec(
         "awf/improvement.requestMerge",
@@ -138,7 +138,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "improvementRequestMerge(improvementId: string): Promise<Record<string, unknown>> {\n"
         '    return this.call("awf/improvement.requestMerge", { improvementId });\n'
         "  }",
-        ("improvement", "request-merge"),
+        ("review", "request-merge"),
     ),
     MethodSpec(
         "awf/improvement.merge",
@@ -147,7 +147,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "improvementMerge(improvementId: string, approvalId: string): Promise<ImprovementProposal> {\n"
         '    return this.call("awf/improvement.merge", { improvementId, approvalId });\n'
         "  }",
-        ("improvement", "merge"),
+        ("review", "merge"),
     ),
     MethodSpec(
         "awf/improvement.reject",
@@ -156,14 +156,14 @@ METHODS: tuple[MethodSpec, ...] = (
         "improvementReject(improvementId: string, reason?: string): Promise<ImprovementProposal> {\n"
         '    return this.call("awf/improvement.reject", { improvementId, reason });\n'
         "  }",
-        ("improvement", "reject"),
+        ("review", "reject"),
     ),
     MethodSpec(
         "awf/artifact.list",
         "awf.ops.artifact.op_artifact_list",
         'conn, run_id=params["runId"]',
         'artifactList(runId: string): Promise<Artifact[]> {\n    return this.call("awf/artifact.list", { runId });\n  }',
-        ("artifacts",),
+        ("status",),
     ),
     MethodSpec(
         "awf/artifact.read",
@@ -250,14 +250,14 @@ METHODS: tuple[MethodSpec, ...] = (
         "  }): Promise<Proposal> {\n"
         '    return this.call("awf/workflow.authorDraft", options);\n'
         "  }",
-        ("author", "workflow"),
+        ("review", "draft"),
     ),
     MethodSpec(
         "awf/proposal.get",
         "awf.ops.authoring.op_proposal_get",
         'repo_root, conn, proposal_id=params["proposalId"]',
         'proposalGet(proposalId: string): Promise<Proposal> {\n    return this.call("awf/proposal.get", { proposalId });\n  }',
-        ("proposal", "show"),
+        ("review", "show"),
     ),
     MethodSpec(
         "awf/proposal.update",
@@ -266,7 +266,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "proposalUpdate(proposalId: string, content: string, summary?: string): Promise<Proposal> {\n"
         '    return this.call("awf/proposal.update", { proposalId, content, summary });\n'
         "  }",
-        ("proposal", "update"),
+        ("review", "update"),
     ),
     MethodSpec(
         "awf/proposal.publish",
@@ -275,7 +275,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "proposalPublish(proposalId: string, digest: string): Promise<Record<string, unknown>> {\n"
         '    return this.call("awf/proposal.publish", { proposalId, digest });\n'
         "  }",
-        ("proposal", "publish"),
+        ("review", "publish"),
     ),
     MethodSpec(
         "awf/proposal.reject",
@@ -284,7 +284,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "proposalReject(proposalId: string, reason?: string): Promise<Proposal> {\n"
         '    return this.call("awf/proposal.reject", { proposalId, reason });\n'
         "  }",
-        ("proposal", "reject"),
+        ("review", "reject"),
     ),
     MethodSpec(
         "awf/memory.search",
@@ -343,7 +343,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "sessionStart(title?: string, expiresAt?: string): Promise<Record<string, unknown>> {\n"
         '    return this.call("awf/session.start", { title, expiresAt });\n'
         "  }",
-        ("session", "start"),
+        ("memory", "session-start"),
     ),
     MethodSpec(
         "awf/session.append",
@@ -357,7 +357,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "  ): Promise<Record<string, unknown>> {\n"
         '    return this.call("awf/session.append", { sessionId, role, content, summary });\n'
         "  }",
-        ("session", "append"),
+        ("memory", "session-append"),
     ),
     MethodSpec(
         "awf/session.show",
@@ -366,7 +366,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "sessionShow(sessionId: string): Promise<Record<string, unknown>> {\n"
         '    return this.call("awf/session.show", { sessionId });\n'
         "  }",
-        ("session", "show"),
+        ("memory", "session-show"),
     ),
     MethodSpec(
         "awf/session.summarize",
@@ -375,7 +375,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "sessionSummarize(sessionId: string, summary?: string): Promise<Record<string, unknown>> {\n"
         '    return this.call("awf/session.summarize", { sessionId, summary });\n'
         "  }",
-        ("session", "summarize"),
+        ("memory", "session-summarize"),
     ),
     MethodSpec(
         "awf/voice.sessionStart",
@@ -427,7 +427,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "episodicSearch(query: string, runId?: string): Promise<Record<string, unknown>[]> {\n"
         '    return this.call("awf/episodic.search", { query, runId });\n'
         "  }",
-        ("episodic", "search"),
+        ("memory", "events"),
     ),
     MethodSpec(
         "awf/episodic.timeline",
@@ -436,7 +436,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "episodicTimeline(runId: string): Promise<Record<string, unknown>> {\n"
         '    return this.call("awf/episodic.timeline", { runId });\n'
         "  }",
-        ("episodic", "timeline"),
+        ("memory", "timeline"),
     ),
     MethodSpec(
         "awf/secret.set",
@@ -445,14 +445,14 @@ METHODS: tuple[MethodSpec, ...] = (
         "secretSet(name: string, value: string): Promise<Record<string, unknown>> {\n"
         '    return this.call("awf/secret.set", { name, value });\n'
         "  }",
-        ("secret",),
+        ("system", "secret"),
     ),
     MethodSpec(
         "awf/secret.listNames",
         "awf.ops.system.op_secret_list_names",
         "conn",
         'secretListNames(): Promise<string[]> {\n    return this.call("awf/secret.listNames", {});\n  }',
-        ("secret",),
+        ("system", "secret"),
     ),
     MethodSpec(
         "awf/control.summary",
@@ -473,7 +473,7 @@ METHODS: tuple[MethodSpec, ...] = (
         "awf.ops.system.op_system_readiness",
         "repo_root",
         'systemReadiness(): Promise<SystemReadiness> {\n    return this.call("awf/system.readiness", {});\n  }',
-        ("readiness",),
+        ("system", "readiness"),
     ),
     MethodSpec(
         "awf/system.doctor",
@@ -487,21 +487,21 @@ METHODS: tuple[MethodSpec, ...] = (
         "awf.ops.llm.op_llm_servers",
         "repo_root",
         'llmServers(): Promise<LlmServersReport> {\n    return this.call("awf/llm.servers", {});\n  }',
-        ("llm", "servers"),
+        ("system", "llm", "servers"),
     ),
     MethodSpec(
         "awf/llm.models",
         "awf.ops.llm.op_llm_models",
         "repo_root",
         'llmModels(): Promise<LlmModelsReport> {\n    return this.call("awf/llm.models", {});\n  }',
-        ("llm", "models"),
+        ("system", "llm", "models"),
     ),
     MethodSpec(
         "awf/llm.serveStatus",
         "awf.ops.llm.op_llm_serve",
         'repo_root, conn, action="status"',
         'llmServeStatus(): Promise<LlmServeStatus> {\n    return this.call("awf/llm.serveStatus", {});\n  }',
-        ("llm", "serve"),
+        ("system", "llm", "serve"),
     ),
     MethodSpec(
         "awf/events.subscribe",

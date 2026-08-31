@@ -1,4 +1,7 @@
+import argparse
 import json
+
+import pytest
 
 from awf.cli import main as cli_main
 from awf.db.bootstrap import init_db
@@ -155,8 +158,13 @@ def test_approve_command_dispatches_to_ops(tmp_path, monkeypatch):
         return {"approval_id": approval_id, "status": "approved"}
 
     monkeypatch.setattr(cli_main.ops, "op_approval_approve", fake_approve)
+    monkeypatch.setattr(
+        cli_main.ops,
+        "op_approval_detail",
+        lambda conn, *, approval_id: {"approval": {"approval_id": approval_id}, "preview": None},
+    )
 
-    exit_code = cli_main.run(["approve", "ap-1"], repo_root)
+    exit_code = cli_main.run(["review", "approve", "ap-1"], repo_root)
 
     assert exit_code == 0
     assert captured["approval_id"] == "ap-1"
@@ -165,7 +173,7 @@ def test_approve_command_dispatches_to_ops(tmp_path, monkeypatch):
 def test_reject_command_requires_reason(tmp_path):
     repo_root = make_repo(tmp_path)
     try:
-        cli_main.run(["reject", "ap-1"], repo_root)
+        cli_main.run(["review", "reject", "ap-1"], repo_root)
         raised = False
     except SystemExit:
         raised = True
@@ -182,7 +190,7 @@ def test_secret_subcommand_delegates_to_secrets_cli(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli_main.secrets_cli, "run", fake_run)
 
-    exit_code = cli_main.run(["secret", "list"], repo_root)
+    exit_code = cli_main.run(["system", "secret", "list"], repo_root)
 
     assert exit_code == 0
     assert captured["argv"] == ["list"]
@@ -210,7 +218,7 @@ def test_author_workflow_command_dispatches_to_ops(tmp_path, monkeypatch):
     monkeypatch.setattr(cli_main.ops, "op_workflow_author_draft", fake_author)
 
     exit_code = cli_main.run(
-        ["author", "workflow", "--objective", "make demo", "--name", "demo", "--version", "0.1.0"],
+        ["review", "draft", "--objective", "make demo", "--name", "demo", "--version", "0.1.0"],
         repo_root,
     )
 
@@ -233,7 +241,7 @@ def test_proposal_publish_command_dispatches_to_ops(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli_main.ops, "op_proposal_publish", fake_publish)
 
-    exit_code = cli_main.run(["proposal", "publish", "p1", "--digest", "abc"], repo_root)
+    exit_code = cli_main.run(["review", "publish", "p1", "--digest", "abc"], repo_root)
 
     assert exit_code == 0
     assert captured == {"proposal_id": "p1", "digest": "abc"}
@@ -243,8 +251,12 @@ def test_improvement_commands_dispatch_to_ops(tmp_path, monkeypatch):
     repo_root = make_repo(tmp_path)
     captured = {}
 
-    monkeypatch.setattr(cli_main.ops, "op_improvement_list", lambda conn, *, status=None: [{"status": status}])
-    exit_code = cli_main.run(["improvement", "list", "--status", "ready_for_review"], repo_root)
+    monkeypatch.setattr(
+        cli_main.ops,
+        "op_improvement_list",
+        lambda conn, *, status=None: [{"improvement_id": "imp-1", "status": status, "summary": "s"}],
+    )
+    exit_code = cli_main.run(["review", "list", "--status", "ready_for_review"], repo_root)
     assert exit_code == 0
 
     def fake_prepare(repo_root, conn, *, run_id, summary):
@@ -252,7 +264,7 @@ def test_improvement_commands_dispatch_to_ops(tmp_path, monkeypatch):
         return {"improvement_id": "imp-1"}
 
     monkeypatch.setattr(cli_main.ops, "op_improvement_prepare", fake_prepare)
-    exit_code = cli_main.run(["improvement", "prepare", "run-1", "--summary", "focused"], repo_root)
+    exit_code = cli_main.run(["review", "prepare", "run-1", "--summary", "focused"], repo_root)
     assert exit_code == 0
     assert captured["prepare"] == {"run_id": "run-1", "summary": "focused"}
 
@@ -267,7 +279,7 @@ def test_improvement_commands_dispatch_to_ops(tmp_path, monkeypatch):
     monkeypatch.setattr(cli_main.ops, "op_improvement_mark_ready", fake_ready)
     exit_code = cli_main.run(
         [
-            "improvement",
+            "review",
             "mark-ready",
             "imp-1",
             "--verdict-artifact-id",
@@ -289,7 +301,7 @@ def test_improvement_commands_dispatch_to_ops(tmp_path, monkeypatch):
         "op_improvement_request_merge",
         lambda repo_root, conn, *, improvement_id: captured.setdefault("request", improvement_id) or {},
     )
-    exit_code = cli_main.run(["improvement", "request-merge", "imp-1"], repo_root)
+    exit_code = cli_main.run(["review", "request-merge", "imp-1"], repo_root)
     assert exit_code == 0
     assert captured["request"] == "imp-1"
 
@@ -298,7 +310,7 @@ def test_improvement_commands_dispatch_to_ops(tmp_path, monkeypatch):
         return {"status": "merged"}
 
     monkeypatch.setattr(cli_main.ops, "op_improvement_merge", fake_merge)
-    exit_code = cli_main.run(["improvement", "merge", "imp-1", "ap-1"], repo_root)
+    exit_code = cli_main.run(["review", "merge", "imp-1", "ap-1"], repo_root)
     assert exit_code == 0
     assert captured["merge"] == {"improvement_id": "imp-1", "approval_id": "ap-1"}
 
@@ -342,7 +354,7 @@ def test_readiness_command_json_flag(tmp_path, capsys, monkeypatch):
         lambda repo_root: {"profile_id": "linux-x64-cpu", "tokens": [], "readiness": {}},
     )
 
-    exit_code = cli_main.run(["readiness", "--json"], repo_root)
+    exit_code = cli_main.run(["system", "readiness", "--json"], repo_root)
 
     assert exit_code == 0
     out = json.loads(capsys.readouterr().out)
@@ -421,7 +433,103 @@ def test_session_start_command_dispatches_to_ops(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli_main.ops, "op_session_start", fake_start)
 
-    exit_code = cli_main.run(["session", "start", "--title", "demo"], repo_root)
+    exit_code = cli_main.run(["memory", "session-start", "--title", "demo"], repo_root)
 
     assert exit_code == 0
     assert captured == {"title": "demo", "expires_at": None}
+
+
+def test_every_command_can_render_its_help(tmp_path):
+    # `awf run --help` crashed with "empty group" because each argument in a
+    # mutually exclusive group created a fresh group, leaving an empty one
+    # behind for argparse to format. Walk every parser so the whole class of
+    # help-rendering failures is covered, not just the one command that hit it.
+    def walk(parser, path):
+        parser.format_help()
+        for action in parser._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                for name, subparser in action.choices.items():
+                    walk(subparser, (*path, name))
+
+    walk(cli_main.build_parser(), ())
+
+
+def test_every_command_has_help_text():
+    # An operator reading `awf --help` sees only what CLI_HELP provides.
+    missing = [" ".join(spec["path"]) for spec in cli_main.CLI_COMMAND_SPECS if not cli_main.CLI_HELP.get(spec["path"])]
+    assert missing == []
+
+
+def test_run_command_names_available_workflows_when_the_ref_is_unknown(tmp_path, capsys):
+    repo_root = make_repo(tmp_path)
+    workflow_dir = repo_root / "config" / "app_registry" / "workflows" / "demo"
+    workflow_dir.mkdir(parents=True)
+    (workflow_dir / "1.0.0.yaml").write_text(
+        "apiVersion: awf/v1\nkind: Workflow\n"
+        "metadata: {name: demo, version: 1.0.0, digest: 'sha256:demo'}\n"
+        "spec:\n  inputSchema: {}\n  outputSchema: {}\n  budgets: {}\n"
+        "  nodes: [{id: check, type: gate, checkCommand: 'true', next: null}]\n"
+        "  outputs: {}\n"
+    )
+
+    exit_code = cli_main.run(["run", "nope@1.0.0"], repo_root)
+
+    err = capsys.readouterr().err
+    assert exit_code == 1
+    assert "unknown workflow 'nope@1.0.0'" in err
+    assert "demo@1.0.0" in err
+
+
+def test_spec_16_1_commands_moved_to_their_consolidated_paths():
+    # ADR-0029 replaces Section 16.1's spellings rather than aliasing them.
+    # Phase 10 acceptance now runs the right-hand column.
+    parser = cli_main.build_parser()
+    moved = {
+        ("approvals",): ["review", "list"],
+        ("approve",): ["review", "approve", "ap-1"],
+        ("reject",): ["review", "reject", "ap-1", "--reason", "no"],
+        ("artifacts",): ["status", "run-1", "--artifacts"],
+        ("resume",): ["system", "resume"],
+        ("secret",): ["system", "secret", "list"],
+        ("serve",): ["system", "serve", "--stdio"],
+    }
+    for retired, replacement in moved.items():
+        with pytest.raises(SystemExit):
+            parser.parse_args(list(retired))
+        parsed = parser.parse_args(replacement)
+        assert getattr(parsed, "func", None) is not None or getattr(parsed, "is_secret", False), replacement
+
+    # The commands ADR-0029 keeps unchanged still resolve to a handler.
+    for argv in (
+        ["run", "demo@1.0.0"],
+        ["status", "run-1"],
+        ["status"],
+        ["doctor"],
+        ["registry", "validate", "def.yaml"],
+        ["registry", "publish", "def.yaml", "--kind", "workflows"],
+    ):
+        assert parser.parse_args(argv).func is not None, argv
+
+
+def test_review_resolves_an_id_to_whichever_kind_owns_it(tmp_path, monkeypatch, capsys):
+    repo_root = make_repo(tmp_path)
+
+    def only_improvement(conn, *, improvement_id):
+        if improvement_id != "imp-1":
+            raise cli_main.CoreOpError(f"no such improvement: {improvement_id}")
+        return {"improvement_id": "imp-1", "status": "draft", "summary": "s"}
+
+    monkeypatch.setattr(cli_main.ops, "op_improvement_get", only_improvement)
+    monkeypatch.setattr(
+        cli_main.ops,
+        "op_improvement_reject",
+        lambda repo_root, conn, *, improvement_id, reason: {"improvement_id": improvement_id, "reason": reason},
+    )
+
+    assert cli_main.run(["review", "show", "imp-1"], repo_root) == 0
+    assert cli_main.run(["review", "reject", "imp-1", "--reason", "not now"], repo_root) == 0
+    assert '"reason": "not now"' in capsys.readouterr().out
+
+    # An id that names nothing points the operator at the queue.
+    assert cli_main.run(["review", "show", "nope"], repo_root) == 1
+    assert "no approval, change, or draft with id 'nope'" in capsys.readouterr().err

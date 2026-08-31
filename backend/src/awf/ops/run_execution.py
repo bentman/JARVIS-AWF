@@ -25,7 +25,7 @@ from awf.pyexec import repo_python_executable
 from awf.registry.capability_record import load_capability_record
 from awf.registry.index import latest_version
 from awf.registry.model_profile import load_model_profile
-from awf.registry.resolve import resolve_registry_object
+from awf.registry.resolve import RegistryObjectNotFoundError, resolve_registry_object
 from awf.workflow.approval import make_approval_node_executor
 from awf.workflow.definition import load_workflow
 from awf.workflow.engine import make_activity_node_executor, make_agent_node_executor, run_workflow_definition
@@ -242,7 +242,7 @@ def _make_run_map_item(artifacts_root: Path, repo_root: Path):
             close_item_conn = item_conn_override is None
             if item_conn_override is None:
                 try:
-                    item_conn = get_connection(db_path, enable_wal=False)
+                    item_conn = get_connection(db_path)
                 except sqlite3.OperationalError as exc:
                     raise RuntimeError(f"map item {index}: database connection failed: {exc}") from exc
             else:
@@ -335,10 +335,24 @@ def _build_node_executors(
 
 def _resolve_workflow(repo_root: Path, workflow_ref: str, conn: sqlite3.Connection | None = None):
     name, _, version = workflow_ref.partition("@")
-    if not version:
-        version = latest_version(repo_root, "workflows", name)
-    path, _source = resolve_registry_object(repo_root, "workflows", name, version, conn=conn)
+    try:
+        if not version:
+            version = latest_version(repo_root, "workflows", name)
+        path, _source = resolve_registry_object(repo_root, "workflows", name, version, conn=conn)
+    except RegistryObjectNotFoundError:
+        raise CoreOpError(f"unknown workflow {workflow_ref!r}. {_available_workflows_hint(repo_root, conn)}") from None
     return load_workflow(path)
+
+
+def _available_workflows_hint(repo_root: Path, conn: sqlite3.Connection | None) -> str:
+    from awf.ops.registry import op_registry_list
+
+    refs = sorted(
+        {f"{row['name']}@{row['version']}" for row in op_registry_list(repo_root, kind="workflows", conn=conn)}
+    )
+    if not refs:
+        return "No workflows are registered - publish one with `awf registry publish`."
+    return "Available workflows: " + ", ".join(refs)
 
 
 def _retain_worktree_for_improvement(workflow_ref: str, input_data: dict) -> bool:

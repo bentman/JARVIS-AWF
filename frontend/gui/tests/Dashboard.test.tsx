@@ -183,7 +183,8 @@ describe("Dashboard", () => {
     );
 
     expect(screen.getByText("Timeline")).toBeTruthy();
-    expect(screen.getByText(/"step": "s1"/)).toBeTruthy();
+    expect(screen.getByText("Advanced/raw event data")).toBeTruthy();
+    expect(screen.getByText(/"step": "s1"/)).not.toBeVisible();
 
     fireEvent.click(screen.getByText("View"));
     await waitFor(() => expect(onArtifactRead).toHaveBeenCalledWith("artifact-1"));

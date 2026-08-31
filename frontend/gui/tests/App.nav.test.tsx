@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../src/renderer/App.js";
@@ -29,14 +29,14 @@ describe("App top navigation (ADR-0025 control-center shell)", () => {
     );
 
     await waitFor(() => expect(onControlSummary).toHaveBeenCalled());
-    // The launch page is chat + voice; diagnostics hide behind the Status button.
-    expect(screen.queryByText("System readiness")).toBeNull();
+    expect(screen.getByRole("button", { name: "Operate" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("System readiness")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Status" }));
+    fireEvent.click(screen.getByRole("button", { name: "Operate" }));
     expect(await screen.findByText("System readiness")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Registry actions" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Registry" }));
+    fireEvent.click(screen.getByRole("button", { name: "Library" }));
 
     expect(await screen.findByRole("region", { name: "Registry actions" })).toBeTruthy();
     expect(screen.queryByText("System readiness")).toBeNull();
@@ -69,12 +69,12 @@ describe("App top navigation (ADR-0025 control-center shell)", () => {
     await waitFor(() => expect(onControlSummary).toHaveBeenCalled());
     expect(screen.getByRole("status", { name: "Status" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Registry" }));
+    fireEvent.click(screen.getByRole("button", { name: "Library" }));
 
     expect(screen.getByRole("status", { name: "Status" })).toBeTruthy();
   });
 
-  it("raises a count badge on the Approvals nav item when approvals are pending", async () => {
+  it("raises a count badge on the Operate nav item when approvals are pending", async () => {
     const onControlSummary = vi.fn().mockResolvedValue({
       runs: [],
       approvals: [
@@ -100,8 +100,10 @@ describe("App top navigation (ADR-0025 control-center shell)", () => {
     render(<App onApprove={vi.fn()} onReject={vi.fn()} onControlSummary={onControlSummary} />);
 
     await waitFor(() => expect(onControlSummary).toHaveBeenCalled());
-    const approvalsButton = await screen.findByText("Approvals");
-    expect(approvalsButton.closest("button")).toHaveTextContent("1");
+    // Approvals are a section of Operate, so the pending count rides its nav item.
+    const nav = screen.getByRole("navigation", { name: "Views" });
+    const operateButton = within(nav).getByRole("button", { name: /Operate/ });
+    expect(operateButton).toHaveTextContent("1");
   });
 
   it("does not list a view whose callbacks are absent", async () => {
@@ -118,9 +120,9 @@ describe("App top navigation (ADR-0025 control-center shell)", () => {
     render(<App onApprove={vi.fn()} onReject={vi.fn()} onControlSummary={onControlSummary} />);
 
     await waitFor(() => expect(onControlSummary).toHaveBeenCalled());
-    // The chat page is always listed first, even when most views are absent.
     expect(screen.getByRole("button", { name: "Chat" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Registry" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Operate" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Library" })).toBeNull();
   });
 });
 
@@ -187,7 +189,7 @@ describe("App first page (chat + voice, ADR-0025)", () => {
     expect(screen.queryByText(/orb/i)).toBeNull();
   });
 
-  it("keeps diagnostics off the first page even when status data is available", async () => {
+  it("keeps chat available while Operate is the first page when status data is available", async () => {
     const onControlSummary = vi.fn().mockResolvedValue({
       runs: [],
       approvals: [],
@@ -203,11 +205,12 @@ describe("App first page (chat + voice, ADR-0025)", () => {
     );
 
     await waitFor(() => expect(onControlSummary).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "Operate" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("System readiness")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Chat" }));
     expect(screen.getByRole("log", { name: "Chat log" })).toBeTruthy();
     expect(screen.queryByText("System readiness")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Status" }));
-    expect(await screen.findByText("System readiness")).toBeTruthy();
   });
 
   it("renders voice (STT/TTS) and typed chat in the same governed conversation stream", async () => {

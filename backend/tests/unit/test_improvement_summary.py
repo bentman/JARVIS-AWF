@@ -63,13 +63,13 @@ def test_derive_next_action_lifecycle():
     draft_prop = {"improvement_id": "imp-1", "status": "draft", "verdict_artifact_id": "ver-1"}
     action = derive_next_action(draft_prop)
     assert action["action"] == "mark_ready"
-    assert "awf improvement mark-ready imp-1 ver-1" in action["command"]
+    assert "awf review mark-ready imp-1 ver-1" in action["command"]
 
     # Ready for review
     ready_prop = {"improvement_id": "imp-1", "status": "ready_for_review"}
     action = derive_next_action(ready_prop)
     assert action["action"] == "request_merge"
-    assert action["command"] == "awf improvement request-merge imp-1"
+    assert action["command"] == "awf review request-merge imp-1"
 
     # Pending approval
     pending_prop = {
@@ -79,7 +79,7 @@ def test_derive_next_action_lifecycle():
     }
     action = derive_next_action(pending_prop)
     assert action["action"] == "approve_merge"
-    assert action["command"] == "awf approve appr-1"
+    assert action["command"] == "awf review approve appr-1"
 
     # Approved
     approved_prop = {
@@ -89,7 +89,7 @@ def test_derive_next_action_lifecycle():
     }
     action = derive_next_action(approved_prop)
     assert action["action"] == "merge"
-    assert action["command"] == "awf improvement merge imp-1 appr-1"
+    assert action["command"] == "awf review merge imp-1 appr-1"
 
     # Merged
     merged_prop = {"improvement_id": "imp-1", "status": "merged"}
@@ -152,4 +152,4 @@ def test_generate_proposal_review_narrative():
     assert review["validation_passed"] is True
     assert review["validation_status"] == "PASSED"
     assert "Localized change" in review["why_safe"]
-    assert review["next_action"]["command"] == "awf improvement request-merge imp-123"
+    assert review["next_action"]["command"] == "awf review request-merge imp-123"

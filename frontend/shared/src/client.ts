@@ -7,7 +7,7 @@ import {
 
 /** The single TypeScript protocol client (Section 16.3) - both frontends
  * (AWF-CLI, AWF-GUI) consume this; neither may implement its own protocol
- * layer. Every method maps 1:1 onto an `awf serve --stdio` JSON-RPC method;
+ * layer. Every method maps 1:1 onto an `awf system serve --stdio` JSON-RPC method;
  * the protocol adds no authority beyond what the core operation itself
  * grants. */
 export class ProtocolClient extends ProtocolGeneratedClient {

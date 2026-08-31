@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { RegistryObjectSummary } from "./RegistryObjectSummary.js";
 import { stateClass } from "./state.js";
 
 export interface RegistryEntry {
@@ -18,6 +19,7 @@ export interface RegistryActionsProps {
   onRegistryTrust: (kind: string, name: string, version: string, status: string) => Promise<unknown>;
   onRegistryList?: (kind: string) => Promise<RegistryEntry[]>;
   onRegistryGet?: (kind: string, name: string, version: string) => Promise<Record<string, unknown>>;
+  onWorkflowRun?: (workflowRef: string) => void;
 }
 
 function asText(value: unknown): string {
@@ -32,6 +34,7 @@ export function RegistryActions({
   onRegistryTrust,
   onRegistryList,
   onRegistryGet,
+  onWorkflowRun,
 }: RegistryActionsProps): React.JSX.Element {
   const [path, setPath] = useState("");
   const [kind, setKind] = useState("workflows");
@@ -80,10 +83,14 @@ export function RegistryActions({
     setVersion(entry.version);
   };
 
+  React.useEffect(() => {
+    if (onRegistryList) void listEntries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, onRegistryList]);
+
   return (
     <section aria-label="Registry actions" className="card">
       <h2>Registry actions</h2>
-      <p>Validate, publish, reindex, retire, or set trust through the AWF core registry operations.</p>
       <label>
         Draft path
         <input
@@ -96,7 +103,16 @@ export function RegistryActions({
       </label>
       <label>
         Kind
-        <input aria-label="Registry kind" value={kind} onChange={(event) => setKind(event.currentTarget.value)} />
+        <select aria-label="Registry kind" value={kind} onChange={(event) => setKind(event.currentTarget.value)}>
+          <option value="workflows">workflows</option>
+          <option value="capabilities">capabilities</option>
+          <option value="agents">agents</option>
+          <option value="skills">skills</option>
+          <option value="mcp">mcp</option>
+          <option value="model-profiles">model-profiles</option>
+          <option value="voice-profiles">voice-profiles</option>
+          <option value="semantic-memories">semantic-memories</option>
+        </select>
       </label>
       {onRegistryList && (
         <div aria-label="Registry browser">
@@ -111,9 +127,11 @@ export function RegistryActions({
                   <span className="mono">
                     {entry.kind}/{entry.name}@{entry.version}
                   </span>
+                  <span className={`chip ${stateClass(entry.source)}`}>{entry.source}</span>
                   {entry.trust_status && (
                     <span className={`chip ${stateClass(entry.trust_status)}`}>{entry.trust_status}</span>
                   )}
+                  {entry.digest && <span className="mono row-reason">{entry.digest.slice(0, 18)}</span>}
                   {onRegistryGet && (
                     <button type="button" className="btn btn-secondary" onClick={() => void viewEntry(entry)}>
                       View
@@ -122,15 +140,16 @@ export function RegistryActions({
                   <button type="button" className="btn btn-secondary" onClick={() => useEntry(entry)}>
                     Use
                   </button>
+                  {entry.kind === "workflows" && onWorkflowRun && (
+                    <button type="button" className="btn btn-primary" onClick={() => onWorkflowRun(`${entry.name}@${entry.version}`)}>
+                      Run
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
           )}
-          {selectedDetail && (
-            <pre aria-label="Registry entry detail" className="pre-scroll">
-              {asText(selectedDetail)}
-            </pre>
-          )}
+          {selectedDetail && <RegistryObjectSummary detail={selectedDetail} onWorkflowRun={onWorkflowRun} />}
         </div>
       )}
       <label>

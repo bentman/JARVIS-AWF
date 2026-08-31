@@ -152,7 +152,7 @@ def qnn_whisper_available(repo_root: Path, runtime: SttRuntime | None = None) ->
     return all((target / relative).is_file() for relative in _qnn_whisper_required_files())
 
 
-def _onnx_whisper_available(target: Path) -> bool:
+def onnx_whisper_available(target: Path) -> bool:
     return (
         all((target / filename).is_file() for filename in _onnx_whisper_required_files())
         and any(target.glob("**/encoder_model.onnx"))
@@ -204,7 +204,7 @@ def _sync_onnx_whisper(repo_root: Path, runtime: SttRuntime) -> dict:
 
     target = stt_model_path(repo_root, runtime)
     target.mkdir(parents=True, exist_ok=True)
-    if not _onnx_whisper_available(target):
+    if not onnx_whisper_available(target):
         snapshot_download(
             runtime.model,
             local_dir=target,
@@ -224,7 +224,7 @@ def _sync_onnx_whisper(repo_root: Path, runtime: SttRuntime) -> dict:
             ],
         )
     onnx_asr.load_model(runtime.model, path=target, providers=["CPUExecutionProvider"])
-    status = "PRESENT" if _onnx_whisper_available(target) else "SYNCED"
+    status = "PRESENT" if onnx_whisper_available(target) else "SYNCED"
     return {"function": "stt", "name": runtime.model, "path": str(target), "runtime": runtime.runtime, "status": status}
 
 

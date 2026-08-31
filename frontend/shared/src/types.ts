@@ -247,6 +247,96 @@ export interface EventsSnapshot {
   streaming: false;
 }
 
+export interface OperatorAction {
+  kind: string;
+  label: string;
+  command: string;
+  description?: string | null;
+  run_id?: string | null;
+  approval_id?: string | null;
+  improvement_id?: string | null;
+  artifact_id?: string | null;
+  workflow_ref?: string | null;
+  registry_kind?: string | null;
+  registry_name?: string | null;
+  registry_version?: string | null;
+}
+
+export interface OperatorInputField {
+  name: string;
+  type: string;
+  required: boolean;
+  enum?: unknown[] | null;
+  description?: string | null;
+  default?: unknown;
+}
+
+export interface OperatorInputSchemaSummary {
+  type: string;
+  required: string[];
+  fields: OperatorInputField[];
+}
+
+export interface OperatorStartOption {
+  workflow_ref: string;
+  name: string;
+  version: string;
+  source?: string | null;
+  trust_status?: string | null;
+  digest?: string | null;
+  status: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+  input_schema_summary: OperatorInputSchemaSummary;
+  primary_action: OperatorAction;
+}
+
+export interface OperatorWorkItem {
+  item_id: string;
+  kind: string;
+  title: string;
+  status: string;
+  priority: number;
+  description: string;
+  command: string;
+  source: string;
+  run_id?: string | null;
+  step_id?: string | null;
+  approval_id?: string | null;
+  improvement_id?: string | null;
+  artifact_id?: string | null;
+  created_at?: string | null;
+  primary_action?: OperatorAction;
+  secondary_actions?: OperatorAction[];
+}
+
+export interface OperatorNextAction {
+  label: string;
+  command: string;
+  description: string;
+  kind: string;
+  run_id?: string | null;
+  approval_id?: string | null;
+  improvement_id?: string | null;
+  primary_action?: OperatorAction;
+}
+
+export interface OperatorTimelineItem {
+  kind: string;
+  status: string;
+  title: string;
+  description: string;
+  occurred_at: string | null;
+  step_id?: string | null;
+  event_id?: string;
+  approval_id?: string;
+  artifact_id?: string;
+  node_id?: string;
+  failure_class?: string | null;
+  action_digest?: string;
+  payload?: Record<string, unknown>;
+}
+
 export interface ControlSummary {
   runs: RunSummary[];
   approvals: Approval[];
@@ -259,6 +349,9 @@ export interface ControlSummary {
   };
   readiness: SystemReadiness;
   doctor?: SystemDoctor;
+  operator_work_items: OperatorWorkItem[];
+  operator_next_actions: OperatorNextAction[];
+  operator_start_options: OperatorStartOption[];
 }
 
 export interface ControlRunDetail {
@@ -266,6 +359,9 @@ export interface ControlRunDetail {
   outcome?: RunOutcome;
   artifacts: Artifact[];
   timeline: Record<string, unknown>;
+  operator_timeline: OperatorTimelineItem[];
+  operator_work_items: OperatorWorkItem[];
+  operator_next_actions: OperatorNextAction[];
   improvements: ImprovementProposal[];
   verdicts: Artifact[];
 }

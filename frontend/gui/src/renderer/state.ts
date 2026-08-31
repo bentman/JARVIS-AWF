@@ -1,5 +1,5 @@
-const OK = new Set(["SUCCEEDED", "ready", "running", "adopted", "approved", "trusted"]);
-const WARN = new Set(["WAITING_APPROVAL", "WAITING_INPUT", "pending", "draft", "degraded", "quarantined"]);
+const OK = new Set(["SUCCEEDED", "ready", "running", "adopted", "approved", "trusted", "complete", "config"]);
+const WARN = new Set(["WAITING_APPROVAL", "WAITING_INPUT", "pending", "draft", "ready_for_review", "review", "degraded", "quarantined", "data"]);
 const DANGER = new Set(["FAILED", "CANCELED", "not ready", "denied", "blocked", "rejected", "R3"]);
 
 /** Maps a status string to one of the four semantic state classes (ADR-0025

@@ -176,6 +176,8 @@ def _distribution_name(requirement: str) -> str:
 
 
 def _selected_requirement_specs(repo_root: Path, extras: list[str]) -> list[str]:
+    if not (repo_root / "pyproject.toml").is_file():
+        return []
     data = _read_pyproject(repo_root)
     project = data.get("project", {})
     optional = project.get("optional-dependencies", {})

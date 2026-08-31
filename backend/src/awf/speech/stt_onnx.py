@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 
 from awf.hardware.preflight import activate_qnn_execution_provider, resolve_qnn_backend_path
-from awf.speech.models import SttRuntime, qnn_whisper_available, stt_model_path, stt_runtime
+from awf.speech.models import SttRuntime, onnx_whisper_available, qnn_whisper_available, stt_model_path, stt_runtime
 from awf.speech.stt_whisper import transcribe as transcribe_faster_whisper
 
 SAMPLE_RATE = 16000
@@ -97,6 +97,8 @@ class OnnxWhisperRuntime:
 
     def _load_model(self):
         if self._model is None:
+            if not onnx_whisper_available(self.model_path):
+                raise SttRuntimeError(f"ONNX Whisper STT model files are unavailable at {self.model_path}")
             import onnx_asr
 
             self._model = onnx_asr.load_model(

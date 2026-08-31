@@ -27,13 +27,13 @@ def synthesize(
     speed: float = 1.0,
 ) -> tuple[np.ndarray, int]:
     """Returns (samples: float32 ndarray, sample_rate: int)."""
+    import onnxruntime as ort
     from kokoro_onnx import Kokoro
 
     if device == "cpu":
-        kokoro = Kokoro(str(model_path), str(voices_path))
+        session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
+        kokoro = Kokoro.from_session(session, str(voices_path))
     else:
-        import onnxruntime as ort
-
         provider = _DEVICE_TO_PROVIDER[device]
         session = ort.InferenceSession(str(model_path), providers=[provider, "CPUExecutionProvider"])
         kokoro = Kokoro.from_session(session, str(voices_path))

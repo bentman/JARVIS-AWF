@@ -2,7 +2,9 @@
 
 ## Status
 
-Implemented.
+Implemented. Navigation superseded in part by ADR-0029, which reduces the view
+set to Operate, Chat, and Library; the visual system in this record still
+governs.
 
 This record began as an AWF-GUI look-and-feel record and still treats
 `frontend/gui/src/renderer/` as the source of truth for visual layout. Later
@@ -10,6 +12,12 @@ operator-usability work extended the same decision boundary into the shared
 assistant path: backend response text, default workflow selection, and the
 AWF-CLI plain-text assistant entry point. Where this record and the referenced
 source files disagree, the code is correct.
+
+Alignment update, 2026-08-30: ADR-0028 supersedes this record's earlier
+"conversation first" navigation rule. The GUI now opens to Operate, a task-flow
+control-center home view backed by `awf/control.summary`. Chat remains a normal
+navigation entry and still uses the same transcript/composer behavior after the
+operator chooses it.
 
 ## Context
 
@@ -26,7 +34,7 @@ rendered every panel in one scrolling column.
 Two later revisions of this record proposed layouts — a left navigation rail
 with one active view, then a three-column console — that the implementation
 did not adopt. What shipped is a top navigation bar over a single content
-area, with conversation as the first page.
+area. ADR-0028 later moved the default page from Chat to Operate.
 
 Constraints that held throughout: every panel carries `role` and `aria-label`,
 the GUI tests query by accessible role and label, `frontend/gui/package.json`
@@ -40,8 +48,10 @@ has no CSS tooling and no UI library, and `esbuild` bundles
 Refresh sit in a sticky `.topbar`. Below it, `.main` renders exactly one view.
 There is no left rail and no multi-column console.
 
-**Conversation is the first page.** The `chat` view is always present and
-always first. Status and diagnostics live behind their own navigation button.
+**Operate is the first page.** The `operate` view is the default home when
+control-summary data is available. The `chat` view is always present as an
+entry point for starting work. Status and diagnostics are shown inside Operate
+and run detail instead of as the primary page.
 
 **A navy palette on named tokens.** Canonical colours are declared once as
 `--color-*` and the working shorthands derive from them, so every selector
@@ -179,14 +189,15 @@ vocabulary: `speaking` is ok; `listening`, `transcribing`, `submitting`, and
 ### Part D — views
 
 `App.tsx` holds `view` state over
-`chat | status | runs | approvals | proposals | memory | registry`. `chat` is
-unconditional and first; every other view is included only when its callbacks
-are present. `activeView` falls back to the first available view.
+`operate | chat | runs | approvals | proposals | memory | registry`. `operate`
+is first when control-summary callbacks are present; `chat` remains
+unconditional. Every other view is included only when its callbacks are present.
+`activeView` falls back to the first available view.
 
 | View | Renders |
 |---|---|
+| Operate | `OperatorWorkQueue`, selected `RunTimeline`/`EvidencePanel`, and `Overview` |
 | Chat | `Transcript` and, when voice callbacks exist, `VoiceActivation` |
-| Status | a `.view-header` with kicker `Resident Mind` and title `Control center`, then `Overview` |
 | Runs | `RunsView` |
 | Approvals | `ApprovalsView` |
 | Proposals | `ProposalReview` and `ImprovementProposals` |
@@ -305,6 +316,10 @@ frontend/gui/src/renderer/
   icons.tsx               (makeIcon and the icon set)
   App.tsx                 (shell, top bar, nav, status bar, view switch)
   Overview.tsx            (readiness stat grid, LLM status, registry, verdicts)
+  OperatorWorkQueue.tsx   (backend-derived operating queue)
+  RunTimeline.tsx         (run detail timeline)
+  EvidencePanel.tsx       (artifact/evidence links and readouts)
+  RegistryObjectSummary.tsx
   RunsView.tsx
   ApprovalsView.tsx
   Dashboard.tsx           (shared types and ImprovementProposals)
@@ -338,13 +353,14 @@ frontend/gui/src/renderer/
   `dist/renderer/index.html`.
 - The window renders dark navy with the sans stack; no default serif, no
   native bullets, no unstyled buttons.
-- The chat view is the landing page and is present regardless of which
-  callbacks are supplied.
+- Operate is the landing page when control-summary callbacks are supplied; Chat
+  remains present regardless of callbacks.
 - Every colour outside the `:root` block is a `var(--…)` reference.
 - Readiness dots, run status, approval risk class, and LLM state all derive
   their class from `stateClass`, and each also renders its state as text.
 - The active navigation item carries `aria-current="page"`.
-- A pending approval raises a `.rail-badge` count on the Approvals nav item.
+- A pending approval raises a `.rail-badge` count on the nav item that carries
+  the approval queue (ADR-0029 moved that from Approvals to Operate).
 - Every interactive element shows a visible accent focus ring on keyboard
   traversal.
 - The chat log scrolls to its newest entry when entries change.

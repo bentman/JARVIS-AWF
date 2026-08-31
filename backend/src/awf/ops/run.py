@@ -121,7 +121,7 @@ def _run_outcome_from_parts(
         label = proposal.get("next_action", {}).get("label") or "Review proposal"
         next_action = f"{label}: {cmd}" if cmd else label
     elif pending_approvals:
-        next_action = f"Review {len(pending_approvals)} pending approval(s) with `awf approvals`."
+        next_action = f"Review {len(pending_approvals)} pending approval(s) with `awf review list`."
     elif status == "FAILED":
         next_action = "Inspect the failed step and artifacts, then rerun or prepare a repair."
     elif status in {"WAITING_INPUT", "WAITING_APPROVAL"}:

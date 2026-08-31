@@ -1,4 +1,4 @@
-"""`awf secret set|list|rotate-key` (Section 16.1).
+"""`awf system secret set|list|rotate-key` (Section 16.1, ADR-0029).
 
 A standalone entrypoint for Phase 2. `run()` is what Phase 10 wires into the
 unified `awf` command's subparser tree — the handler logic does not move.

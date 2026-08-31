@@ -32,7 +32,7 @@ def test_format_improvement_proposal_basic():
         "next_action": {
             "action": "request_merge",
             "label": "Request merge approval",
-            "command": "awf improvement request-merge imp-001",
+            "command": "awf review request-merge imp-001",
             "description": "Request human merge approval for this proposal.",
         },
     }
@@ -47,7 +47,7 @@ def test_format_improvement_proposal_basic():
     assert "backend/src/awf/ops/run.py (+10 / -2 lines)" in formatted
     assert "+# new line" in formatted
     assert "6. NEXT OPERATOR ACTION:\n  Request merge approval" in formatted
-    assert "Command:   awf improvement request-merge imp-001" in formatted
+    assert "Command:   awf review request-merge imp-001" in formatted
 
 
 def test_format_improvement_proposal_full_diff():
@@ -70,13 +70,13 @@ def test_format_improvement_list():
             "improvement_id": "imp-1",
             "status": "ready_for_review",
             "human_summary": "1 file changed in foo.py.",
-            "next_action": {"command": "awf improvement request-merge imp-1"},
+            "next_action": {"command": "awf review request-merge imp-1"},
         }
     ]
     formatted = _format_improvement_list(proposals)
     assert "Improvement Proposals:" in formatted
     assert "- imp-1 [READY_FOR_REVIEW] 1 file changed in foo.py." in formatted
-    assert "Next: awf improvement request-merge imp-1" in formatted
+    assert "Next: awf review request-merge imp-1" in formatted
 
 
 def test_format_outcome_includes_proposal():
@@ -101,7 +101,7 @@ def test_format_outcome_includes_proposal():
             ],
             "next_action": {
                 "label": "Request merge approval",
-                "command": "awf improvement request-merge imp-999",
+                "command": "awf review request-merge imp-999",
             },
         },
     }
@@ -161,7 +161,7 @@ def test_format_approval_detail_improvement():
     assert "3. VALIDATION STATUS:\n  PASSED" in formatted
     assert "main.py (+3 / -1 lines)" in formatted
     assert "+added" in formatted
-    assert "Approve: awf approve appr-001" in formatted
+    assert "Approve: awf review approve appr-001" in formatted
 
 
 def test_format_approvals_list():
@@ -178,4 +178,4 @@ def test_format_approvals_list():
     formatted = _format_approvals(approvals)
     assert "Pending Approvals:" in formatted
     assert "- appr-001 [R2] 1 file changed in main.py." in formatted
-    assert "Next: awf approval appr-001  (or: awf approve appr-001)" in formatted
+    assert "Next: awf review show appr-001  (or: awf review approve appr-001)" in formatted

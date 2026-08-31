@@ -1,6 +1,6 @@
 """Startup recovery scan (Section 13.2).
 
-Triggered by `awf resume` (Phase 10), not a background process: scan `runs`
+Triggered by `awf system resume` (Phase 10, ADR-0029), not a background process: scan `runs`
 for any row not in a terminal state so the caller can resume each one.
 """
 

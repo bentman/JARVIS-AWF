@@ -7,9 +7,13 @@ Use this after setup. The setup source of truth is:
 
 AWF has three operator surfaces over the same backend and database:
 
-- GUI: desktop control center, chat, voice, approvals, runs, memory, registry.
+- GUI: desktop control center with three destinations - Operate, Chat, Library.
 - TUI: terminal chat and slash-command operator console.
-- Core CLI: direct commands for scripts, diagnostics, and precise actions.
+- Core CLI: eight commands for scripts, diagnostics, and precise actions.
+
+All three are organized around the same concepts, so a command learned in one
+place reads the same in the others: `awf review list` is `/review list` is the
+decision queue at the top of Operate.
 
 ## Start A Shell Session
 
@@ -47,45 +51,38 @@ environment variables before launch.
 
 ## GUI Map
 
-Operate:
+**Operate** is the default view and holds everything an operator acts on, in
+urgency order:
 
-- is the default control-center home view;
-- shows a Start work panel backed by trusted workflow registry entries;
-- renders workflow inputs from the workflow input schema, with advanced JSON
-  input available for unsupported shapes;
-- groups backend-derived work items into Start work, Needs action, Running, and
-  Review / close out lanes;
-- is fed by `awf/control.summary`; the GUI does not derive a separate
-  frontend-only operating state;
-- opens actionable run detail, approval review, proposal review, or readiness
-  actions from the relevant card;
-- keeps raw event data behind an advanced disclosure.
+1. the work queue, grouping backend-derived work items into Start work, Needs
+   action, Running, and Review / close out lanes;
+2. Start work, backed by trusted workflow registry entries, rendering inputs
+   from the workflow input schema with advanced JSON input for shapes the form
+   cannot express;
+3. the selected run's detail and evidence - status, steps, approvals,
+   artifacts, verdicts, failures, proposal follow-ups, and next actions in one
+   operational timeline;
+4. pending approvals, each with the exact action digest and preview when
+   available;
+5. drafted registry proposals and proposed code changes, with their review
+   actions;
+6. run history;
+7. system overview - operator readiness, system readiness, LLM status, and
+   registry counts.
 
-Chat:
+Operate is fed by `awf/control.summary` and `awf/control.runDetail`; the GUI
+derives no separate frontend-only operating state, and raw event data stays
+behind an advanced disclosure. Use Refresh when local runtime state changed
+outside the GUI.
+
+**Chat**:
 
 - sends text into the default workflow, usually `assistant-default@1.0.0`;
 - uses the resident model profile, so it needs a reachable local LLM endpoint;
 - shows conversation turns, started run IDs, pending errors, and the next action
   returned by the run outcome.
 
-Operate diagnostics:
-
-- shows operator readiness, system readiness, LLM status, recent runs,
-  approvals, and registry counts;
-- use Refresh when local runtime state changed outside the GUI.
-
-Operate also carries, in urgency order below the queue:
-
-- pending approvals, with the exact action digest and preview when available;
-  an approval applies only to that exact action;
-- drafted registry proposals and proposed code changes, with their review
-  actions;
-- run history, which opens run detail with status, steps, approvals, artifacts,
-  verdicts, failures, proposal follow-ups, and next actions in one operational
-  timeline, fed by `awf/control.runDetail`;
-- system readiness, LLM status, and registry counts.
-
-Library:
+**Library** is where configuration lives:
 
 - browses repo defaults under `config/app_registry/` and operator objects under
   `data/registry/`;
@@ -112,9 +109,13 @@ awf control
 4. Review evidence, verdict artifacts, failed steps, and proposal context from
    the selected run detail.
 5. Approve, reject with a reason, request merge approval, merge, or reject a
-   proposal from the same context where the evidence appears.
+   proposal from the same context where the evidence appears, or with
+   `awf review <verb> <id>`.
 6. Close out when Review / close out is empty or every remaining item has been
    inspected.
+
+Every card in the queue names the exact command that resolves it, so the CLI
+and GUI paths never diverge - what `awf control` prints is what you can paste.
 
 ## Chat And LLM
 
@@ -157,9 +158,14 @@ awf-cli
 ```
 
 Use `/help` inside the TUI for the current slash-command list, grouped by task
-with a Start here section. `/review` and `/memory` take the same subcommands as
-`awf review` and `awf memory`. Plain text starts the default assistant workflow,
-so it has the same LLM requirement as GUI chat.
+with a Start here section. `/review`, `/memory`, and `/system` take the same
+subcommands as `awf review`, `awf memory`, and `awf system`, and `/status` with
+no argument lists runs. What `/help` lists is the whole surface: a command it
+does not list is not dispatchable.
+
+Plain text starts the default assistant workflow, so it has the same LLM
+requirement as GUI chat. Invoke a published registry Skill with
+`/skill-run <name>@<version> <input>`.
 
 ## Core CLI
 
@@ -177,19 +183,67 @@ awf review list
 ```
 
 `awf --help` lists every command with a one-line description, and
-`awf <command> --help` explains its arguments. There are eight commands:
-`run`, `status`, `control`, `doctor`, `review` (decisions), `registry`
-(published objects), `memory` (what the system remembers), and `system`
-(readiness, resume, llm, secret, serve).
+`awf <command> --help` explains its arguments. There are eight:
 
-ADR-0029 replaced the older spellings rather than aliasing them, so
-`awf approvals`, `awf runs`, `awf artifacts`, `awf improvement ...`,
-`awf proposal ...`, `awf session ...`, and the rest are now errors. The table in
-that ADR names the replacement for each.
+| Command | Covers |
+|---|---|
+| `awf run` | start a workflow |
+| `awf status` | the run list, one run's detail, and `--artifacts` |
+| `awf control` | what needs action, and the command for each |
+| `awf doctor` | install health |
+| `awf review` | approvals, proposed code changes, drafted registry objects |
+| `awf registry` | published object lifecycle |
+| `awf memory` | semantic memory, sessions, episodic events |
+| `awf system` | readiness, resume, llm, secret, serve |
 
 Most commands print readable summaries. Use `--json` where the command exposes
 it and you need raw payloads for automation - `awf system readiness --json`
 carries the raw capability probe tokens behind the per-function summary.
+
+### Commands That Moved
+
+ADR-0029 replaced the older spellings rather than aliasing them, so each of the
+left-hand entries below is now an argparse error. There is no compatibility
+path; update scripts, shell history, and scheduler entries to the right-hand
+column.
+
+| Was | Now |
+|---|---|
+| `awf approvals` | `awf review list` |
+| `awf approval <id>` | `awf review show <id>` |
+| `awf approve <id>` | `awf review approve <id>` |
+| `awf reject <id> --reason` | `awf review reject <id> --reason` |
+| `awf improvement list` | `awf review list` |
+| `awf improvement show <id>` | `awf review show <id>` |
+| `awf improvement prepare` | `awf review prepare` |
+| `awf improvement mark-ready` | `awf review mark-ready` |
+| `awf improvement request-merge` | `awf review request-merge` |
+| `awf improvement merge` | `awf review merge` |
+| `awf improvement reject <id>` | `awf review reject <id>` |
+| `awf author workflow` | `awf review draft` |
+| `awf proposal show <id>` | `awf review show <id>` |
+| `awf proposal update` | `awf review update` |
+| `awf proposal publish` | `awf review publish` |
+| `awf proposal reject <id>` | `awf review reject <id>` |
+| `awf runs` | `awf status` |
+| `awf artifacts <run-id>` | `awf status <run-id> --artifacts` |
+| `awf resume` | `awf system resume` |
+| `awf readiness` | `awf system readiness` |
+| `awf llm ...` | `awf system llm ...` |
+| `awf secret ...` | `awf system secret ...` |
+| `awf serve --stdio` | `awf system serve --stdio` |
+| `awf session start` | `awf memory session-start` |
+| `awf session append` | `awf memory session-append` |
+| `awf session show` | `awf memory session-show` |
+| `awf session summarize` | `awf memory session-summarize` |
+| `awf episodic search` | `awf memory events` |
+| `awf episodic timeline` | `awf memory timeline` |
+
+The TUI moved the same way: `/approvals`, `/approve`, `/reject`,
+`/improvements`, `/improvement*`, `/author-workflow`, `/proposal*` became
+`/review <subcommand>`; `/memory-*`, `/session-*`, and `/episodic*` became
+`/memory <subcommand>`; `/readiness`, `/resume`, `/llm`, and `/secrets` became
+`/system <subcommand>`; and `/runs` became `/status` with no argument.
 
 ## Runs
 
@@ -200,29 +254,55 @@ Useful flow:
 
 ```bash
 awf run <workflow>@<version> --objective "describe the work"
-awf status
-awf status <run-id>
-awf status <run-id> --artifacts
-awf system resume
+awf status                       # list recent runs
+awf status <run-id>              # steps, failures, evidence, next action
+awf status <run-id> --artifacts  # just the artifact list
+awf system resume                # pick up runs a restart interrupted
 ```
 
-## Approvals
+`awf status <run-id>` is the one to reach for: it already folds in steps,
+approvals, artifacts, and the operator timeline, so it usually answers the
+question without a second command.
 
-AWF proposes, you approve. Higher-risk activity nodes and agent nodes park the
-run until an approval is resolved.
+## Decisions
 
-Approval flow:
+Three different things wait on an operator decision:
+
+- **approvals** - higher-risk activity nodes and agent nodes park the run until
+  one is resolved;
+- **proposed code changes** - improvement proposals a run produced;
+- **drafts** - registry objects authored but not yet published.
+
+`awf review` covers all three. Give it an id and it resolves which kind that id
+names, so you never have to know which subsystem issued it:
 
 ```bash
-awf review list
-awf review show <id>
+awf review list                              # everything waiting, one queue
+awf review show <id>                         # approval, change, or draft
 awf review approve <id>
 awf review reject <id> --reason "explain why"
 ```
 
-`awf review` takes any id an operator can act on - a pending approval, a
-proposed code change, or a drafted registry object - and resolves which one it
-names. `awf review list` shows everything waiting at once.
+Asking for the wrong verb names the right one - `awf review approve` on a
+proposed change tells you to use `awf review merge` instead.
+
+Proposed changes have their own lifecycle:
+
+```bash
+awf review prepare <run-id> --summary "what this fixes"
+awf review mark-ready <id> --verdict-artifact-id <artifact-id>
+awf review request-merge <id>
+awf review merge <id> <approval-id>
+awf review show <id> --full-diff
+```
+
+Drafts are authored and published:
+
+```bash
+awf review draft --objective "describe the workflow"
+awf review update <proposal-id> --file <path>
+awf review publish <proposal-id> --digest <digest>
+```
 
 Inspect approval detail and action preview in the GUI Operate view or with
 `/review show <id>` in the TUI.
@@ -259,16 +339,30 @@ proposal-backed.
 Useful commands:
 
 ```bash
-awf memory session-start --title "today"
-awf memory session-show <session-id>
 awf memory search <query>
 awf memory get <name>@<version>
 awf memory propose --file <path>
 awf memory publish <proposal-id> --digest <digest>
 awf memory reject <proposal-id> --reason "not true"
+awf memory block <name>@<version>
 ```
 
 Models may propose memory; operators publish it.
+
+Sessions and the event history live in the same group, because they answer the
+same question - what does the system already know about this work:
+
+```bash
+awf memory session-start --title "today"
+awf memory session-append <session-id> --role operator --json <path>
+awf memory session-show <session-id>
+awf memory session-summarize <session-id>
+awf memory events <query> --run-id <run-id>
+awf memory timeline <run-id>
+```
+
+`awf memory timeline` is the raw event stream. For normal inspection use
+`awf status <run-id>`, which renders the same run as an operator timeline.
 
 ## Registry
 
@@ -277,7 +371,9 @@ Registry roots:
 - `config/app_registry/`: repo-tracked defaults.
 - `data/registry/`: operator-owned objects and overrides.
 
-Browse through the GUI Registry tab or the TUI slash commands. Core actions:
+Browse through the GUI Library view or the TUI registry slash commands
+(`/workflows`, `/agents`, `/skills`, `/capabilities`, `/mcp`, `/model`,
+`/voices`). Core actions:
 
 ```bash
 awf registry validate <file> --kind <kind>
@@ -342,6 +438,12 @@ Chat fails while Operate loads:
   OpenAI-compatible endpoint;
 - use `awf system llm acquire`, local GGUF placement, `awf system llm select llama-server`,
   then `awf system llm serve start` for a managed sidecar.
+
+A command you used before now says `invalid choice`:
+
+The command moved. See Commands That Moved above, or run `awf --help` - the
+eight top-level commands are the whole surface, and `awf <command> --help`
+lists each one's subcommands.
 
 A command failed with a message you want to trace:
 

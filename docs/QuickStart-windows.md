@@ -44,13 +44,16 @@ awf doctor
 awf system readiness
 ```
 
-`awf --help` lists every command with a one-line description, and
-`awf <command> --help` explains its arguments.
-
 `awf control` is the primary operating view in the CLI. It shows the same
 backend-derived operator queue that the GUI opens on: blocked approvals, active
 or failed runs, ready proposals, readiness/LLM configuration, and the next
-operator action.
+operator action. Every item names the exact command that resolves it.
+
+There are eight top-level commands - `run`, `status`, `control`, `doctor`,
+`review`, `registry`, `memory`, and `system`. `awf --help` lists them with a
+one-line description each, and `awf <command> --help` explains its arguments and
+subcommands. If a command you know from an older build reports `invalid choice`,
+it moved: see Commands That Moved in `docs\OperatorsGuide.md`.
 
 Start the GUI:
 
@@ -58,17 +61,25 @@ Start the GUI:
 awf-gui
 ```
 
-The GUI opens to Operate, the control-center home view (Operate, Chat, and
-Library are the three destinations). Chat remains available
-for starting work. Use Operate's Start work panel to choose a trusted workflow,
-fill the schema-derived inputs, start the run, and then resolve any Needs action
-cards from the same view.
+The GUI has three destinations and opens on the first:
+
+- **Operate** - the work queue, Start work, run detail and evidence, approvals,
+  proposed changes, run history, and system overview;
+- **Chat** - typed conversation with the default assistant workflow;
+- **Library** - registry browsing and memory curation.
+
+Use Operate's Start work panel to choose a trusted workflow, fill the
+schema-derived inputs, start the run, then resolve any Needs action cards from
+the same view.
 
 Start the terminal UI:
 
 ```powershell
 awf-cli
 ```
+
+Type `/help` inside it for the slash-command list, grouped by task. `/review`,
+`/memory`, and `/system` take the same subcommands as their `awf` counterparts.
 
 ## LLM Runtime
 
@@ -96,8 +107,8 @@ Run the assistant workflow once an LLM server is active:
 awf run assistant-default@1.0.0 --objective "check the system"
 ```
 
-The same workflow is available in the GUI from Operate > Start work. Registry
-workflow rows also have a Run handoff that returns to the same start form.
+The same workflow is available in the GUI from Operate > Start work. Workflow
+rows in Library also have a Run handoff that returns to the same start form.
 
 ## Useful Checks
 

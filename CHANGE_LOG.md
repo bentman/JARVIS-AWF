@@ -19,6 +19,13 @@
 
 ## Change Entries
 
+- Timestamp: 2026-08-31 05:15
+  - Host class(es): Linux/WSL2 documentation validation
+  - Summary: Brought the operator documentation onto the ADR-0029 surface: the Operator's Guide now carries the eight-command table, a Commands That Moved mapping for every retired spelling, a unified Decisions section covering approvals, proposed changes, and drafts, and a rewritten GUI map for Operate/Chat/Library; both QuickStarts describe the three GUI destinations and point at the mapping when an older command reports `invalid choice`.
+  - Scope: `docs/{OperatorsGuide.md,QuickStart-linux.md,QuickStart-windows.md}`, `CHANGE_LOG.md`.
+  - Validation: Every `awf ...` reference outside the Commands That Moved table was resolved against `CLI_COMMAND_SPECS` and all resolve; all 25 replacement commands in that table's Now column resolve; every slash command referenced outside the retired-spelling paragraph is listed in the TUI `HELP_TEXT`; the guide's behavioral claims were run directly (`awf review approve` on a proposed change naming `awf review merge`, `awf status <run-id> --artifacts`, `awf memory timeline`); markdown fences balanced and tables non-ragged in all three files; `git diff --check` passed.
+  - Notes: Corrected a claim this pass introduced - the guide briefly said a published registry Skill surfaces as `/<skill-name>`. The TUI has never implemented that; it only exposes `/skill-run <name>@<version> <input>`, so the guide now says that instead. Spec Section 16.2 still requires the `/<skill-name>` form, which remains unimplemented and out of scope here.
+
 - Timestamp: 2026-08-30 19:20
   - Host class(es): Linux/WSL2 backend and frontend validation
   - Summary: Replaced the spec Section 16.1/16.2 command spellings outright rather than aliasing them, taking the CLI to eight top-level commands and the TUI to twenty-three listed commands. `awf status` absorbed the run list and artifact list, `awf system` absorbed readiness, resume, llm, secret, and serve, and the compatibility layer added in the previous entry was removed.

@@ -609,7 +609,7 @@ backend/src/awf/
   hardware/readiness.py                             (derive_llm_readiness)
   hardware/profiler.py                              (fifth readiness entry)
   workflow/activities.py                            (llm_server_ensure)
-  cli/{main,core_ops}.py                            (awf llm ...)
+  awf/ops/llm.py and cli/main.py                     (awf system llm ...)
 .gitignore                                          (/models/llm/*, !/models/llm/.gitkeep, /runtimes/*, !/runtimes/.gitkeep)
 ```
 

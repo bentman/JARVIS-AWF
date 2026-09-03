@@ -169,20 +169,6 @@ def _format_improvement_proposal(proposal: dict, full_diff: bool = False, raw_pa
     return "\n".join(lines)
 
 
-def _format_improvement_list(proposals: list[dict]) -> str:
-    if not proposals:
-        return "No improvement proposals."
-    lines = ["Improvement Proposals:"]
-    for p in proposals:
-        summary = p.get("human_summary") or p.get("summary") or "No summary"
-        status = p.get("status", "draft")
-        next_cmd = p.get("next_action", {}).get("command") or ""
-        lines.append(f"  - {p.get('improvement_id')} [{status.upper()}] {summary}")
-        if next_cmd:
-            lines.append(f"    Next: {next_cmd}")
-    return "\n".join(lines)
-
-
 def _outcome_from_result(result: dict) -> dict:
     outcome = result.get("outcome")
     if isinstance(outcome, dict):
@@ -242,23 +228,6 @@ def _format_review_list(result: dict) -> str:
             lines.append(f"  {change.get('improvement_id')}  [{change.get('status')}]  {summary}")
     lines.append("")
     lines.append("Detail: awf review show <id>   Decide: awf review approve|reject <id>")
-    return "\n".join(lines)
-
-
-def _format_approvals(approvals: list[dict]) -> str:
-    if not approvals:
-        return "No pending approvals."
-    lines = ["Pending Approvals:"]
-    for approval in approvals:
-        risk = approval.get("risk_class") or "R2"
-        appr_id = approval.get("approval_id")
-        preview = approval.get("preview") or {}
-        human = preview.get("human_summary")
-        if human:
-            lines.append(f"  - {appr_id} [{risk}] {human}")
-        else:
-            lines.append(f"  - {appr_id} [{risk}] run={approval.get('run_id')} digest={approval.get('action_digest')}")
-        lines.append(f"    Next: awf review show {appr_id}  (or: awf review approve {appr_id})")
     return "\n".join(lines)
 
 
@@ -512,34 +481,6 @@ def cmd_runs(args: argparse.Namespace, repo_root: Path, conn) -> int:
     return 0
 
 
-def cmd_approvals(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    result = ops.op_approval_list(conn)
-    _print_or_json(args, result, _format_approvals(result))
-    return 0
-
-
-def cmd_approval(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    result = ops.op_approval_detail(conn, approval_id=args.approval_id)
-    _print_or_json(args, result, _format_approval_detail(result))
-    return 0
-
-
-def cmd_approve(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    _print(ops.op_approval_approve(conn, approval_id=args.approval_id))
-    return 0
-
-
-def cmd_reject(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    _print(ops.op_approval_reject(conn, approval_id=args.approval_id, reason=args.reason))
-    return 0
-
-
-def cmd_artifacts(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    result = ops.op_artifact_list(conn, run_id=args.run_id)
-    _print_or_json(args, result, _format_artifacts(result))
-    return 0
-
-
 def cmd_readiness(args: argparse.Namespace, repo_root: Path, conn) -> int:
     result = ops.op_system_readiness(repo_root)
     _print_or_json(args, result, _format_readiness(result))
@@ -550,16 +491,6 @@ def cmd_doctor(args: argparse.Namespace, repo_root: Path, conn) -> int:
     result = ops.op_system_doctor(repo_root)
     _print_or_json(args, result, _format_doctor(result))
     return 0 if result.get("status") != "error" else 1
-
-
-def cmd_improvement_list(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    result = ops.op_improvement_list(conn, status=args.status)
-    _print_or_json(args, result, _format_improvement_list(result))
-    return 0
-
-
-def cmd_improvement_show(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    return _render_improvement(args, repo_root, conn, ops.op_improvement_get(conn, improvement_id=args.improvement_id))
 
 
 def _render_improvement(args: argparse.Namespace, repo_root: Path, conn, result: dict) -> int:
@@ -609,11 +540,6 @@ def cmd_improvement_request_merge(args: argparse.Namespace, repo_root: Path, con
 
 def cmd_improvement_merge(args: argparse.Namespace, repo_root: Path, conn) -> int:
     _print(ops.op_improvement_merge(repo_root, conn, improvement_id=args.improvement_id, approval_id=args.approval_id))
-    return 0
-
-
-def cmd_improvement_reject(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    _print(ops.op_improvement_reject(repo_root, conn, improvement_id=args.improvement_id, reason=args.reason))
     return 0
 
 
@@ -716,11 +642,6 @@ def cmd_author_workflow(args: argparse.Namespace, repo_root: Path, conn) -> int:
     return 0
 
 
-def cmd_proposal_show(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    _print(ops.op_proposal_get(repo_root, conn, proposal_id=args.proposal_id))
-    return 0
-
-
 def cmd_proposal_update(args: argparse.Namespace, repo_root: Path, conn) -> int:
     _print(
         ops.op_proposal_update(
@@ -736,11 +657,6 @@ def cmd_proposal_update(args: argparse.Namespace, repo_root: Path, conn) -> int:
 
 def cmd_proposal_publish(args: argparse.Namespace, repo_root: Path, conn) -> int:
     _print(ops.op_proposal_publish(repo_root, conn, proposal_id=args.proposal_id, digest=args.digest))
-    return 0
-
-
-def cmd_proposal_reject(args: argparse.Namespace, repo_root: Path, conn) -> int:
-    _print(ops.op_proposal_reject(repo_root, conn, proposal_id=args.proposal_id, reason=args.reason))
     return 0
 
 

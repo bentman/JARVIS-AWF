@@ -159,6 +159,9 @@ describe("registerIpcHandlers", () => {
     await handlers.get(CHANNELS.memoryGet)?.({}, "pref@1.0.0");
     expect(client.memoryGet).toHaveBeenCalledWith("pref@1.0.0");
 
+    await handlers.get(CHANNELS.memoryPropose)?.({}, "/tmp/pref.yaml", "new pref");
+    expect(client.memoryPropose).toHaveBeenCalledWith("/tmp/pref.yaml", "new pref");
+
     await handlers.get(CHANNELS.memoryPublish)?.({}, "p1", "abc");
     expect(client.memoryPublish).toHaveBeenCalledWith("p1", "abc");
 

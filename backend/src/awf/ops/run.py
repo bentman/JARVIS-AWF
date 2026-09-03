@@ -5,9 +5,10 @@ import sqlite3
 from pathlib import Path
 
 from awf.clock import utc_now_rfc3339
-from awf.engine.recovery import scan_incomplete_runs
+from awf.engine.recovery import reset_interrupted_node_steps, scan_incomplete_runs
 from awf.engine.run import create_run
 from awf.ids import uuid7
+from awf.improvement.proposals import get as get_proposal
 from awf.isolation.scratch import create_scratch_dir, scratch_path
 from awf.isolation.worktree import create_worktree, worktree_path
 from awf.ops.run_execution import (
@@ -110,8 +111,6 @@ def _run_outcome_from_parts(
                 "SELECT improvement_id FROM improvement_proposals WHERE run_id = ?", (run["run_id"],)
             ).fetchone()
             if prop_row is not None:
-                from awf.improvement.proposals import get as get_proposal
-
                 proposal = get_proposal(conn, improvement_id=prop_row["improvement_id"])
         except Exception:
             proposal = None
@@ -205,8 +204,6 @@ def op_run_outcome(conn: sqlite3.Connection, *, run_id: str) -> dict:
 
 
 def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str, input_data: dict) -> dict:
-    import json
-
     workflow = _resolve_workflow(repo_root, workflow_ref, conn=conn)
     input_data = _adapt_objective_input(input_data, workflow.input_schema)
     try:
@@ -269,24 +266,52 @@ def op_run_status(conn: sqlite3.Connection, *, run_id: str) -> dict:
     run_row = conn.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
     if run_row is None:
         raise CoreOpError(f"no such run: {run_id}")
-    steps = conn.execute("SELECT * FROM steps WHERE run_id = ? ORDER BY started_at", (run_id,)).fetchall()
-    return {**dict(run_row), "steps": [dict(row) for row in steps], "outcome": op_run_outcome(conn, run_id=run_id)}
+    run = dict(run_row)
+    steps = [dict(row) for row in conn.execute("SELECT * FROM steps WHERE run_id = ? ORDER BY started_at", (run_id,))]
+    artifacts = [
+        dict(row) for row in conn.execute("SELECT * FROM artifacts WHERE run_id = ? ORDER BY created_at", (run_id,))
+    ]
+    approvals = [
+        dict(row) for row in conn.execute("SELECT * FROM approvals WHERE run_id = ? ORDER BY requested_at", (run_id,))
+    ]
+    outcome = _run_outcome_from_parts(run, steps, artifacts, approvals, conn=conn)
+    return {**run, "steps": steps, "outcome": outcome}
 
 
 def op_run_list(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute(
-        "SELECT run_id, workflow_ref, status, created_at, updated_at FROM runs ORDER BY created_at"
-    ).fetchall()
-    return [{**dict(row), "outcome": op_run_outcome(conn, run_id=row["run_id"])} for row in rows]
+    rows = conn.execute("SELECT * FROM runs ORDER BY created_at").fetchall()
+    result = []
+    for row in rows:
+        run = dict(row)
+        run_id = run["run_id"]
+        steps = [dict(r) for r in conn.execute("SELECT * FROM steps WHERE run_id = ? ORDER BY started_at", (run_id,))]
+        artifacts = [
+            dict(r) for r in conn.execute("SELECT * FROM artifacts WHERE run_id = ? ORDER BY created_at", (run_id,))
+        ]
+        approvals = [
+            dict(r) for r in conn.execute("SELECT * FROM approvals WHERE run_id = ? ORDER BY requested_at", (run_id,))
+        ]
+        outcome = _run_outcome_from_parts(run, steps, artifacts, approvals, conn=conn)
+        result.append(
+            {
+                "run_id": run["run_id"],
+                "workflow_ref": run["workflow_ref"],
+                "status": run["status"],
+                "created_at": run["created_at"],
+                "updated_at": run["updated_at"],
+                "outcome": outcome,
+            }
+        )
+    return result
 
 
 def op_run_resume(repo_root: Path, conn: sqlite3.Connection) -> list[dict]:
     results = []
     for run_id in scan_incomplete_runs(conn):
-        run_row = conn.execute("SELECT workflow_ref FROM runs WHERE run_id = ?", (run_id,)).fetchone()
-        input_row = conn.execute("SELECT input_json FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+        reset_interrupted_node_steps(conn, run_id)
+        run_row = conn.execute("SELECT workflow_ref, input_json FROM runs WHERE run_id = ?", (run_id,)).fetchone()
         try:
-            input_data = json.loads(input_row["input_json"]) if input_row is not None else {}
+            input_data = json.loads(run_row["input_json"]) if run_row is not None and run_row["input_json"] else {}
         except json.JSONDecodeError:
             input_data = {}
         workflow = _resolve_workflow(repo_root, run_row["workflow_ref"], conn=conn)

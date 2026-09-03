@@ -5,6 +5,7 @@ Never shared concurrently between Runs. Lives under `cache/worktrees/<run_id>/`
 other `cache/` scratch state rather than under `data/`.
 """
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -94,6 +95,8 @@ def remove_worktree(repo_root: Path, run_id: str) -> None:
         capture_output=True,
         text=True,
     )
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
     subprocess.run(
         ["git", "branch", "-D", branch_name(run_id)],
         cwd=repo_root,

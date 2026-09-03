@@ -11,7 +11,7 @@ returned exit 0; a repo-wide grep confirms no module under
 `backend/src/awf/` assembles `config/app_registry`, `data/registry`,
 `config/voice`, `cache/sandbox`, `cache/temp`, or `.env` from path segments
 except `awf/paths.py` (this closed two `.env`-assembly sites in
-`cli/core_ops.py` and `secrets/cli.py` that this ADR's own file list didn't
+`awf.ops` (formerly `cli/core_ops.py`) and `secrets/cli.py` that this ADR's own file list didn't
 name but its acceptance criterion covers); `bf_isabella` appears only in
 `config/app_registry/voice-profiles/narrator/1.0.0.yaml` (plus test files
 asserting the real shipped value, and the renderer's own
@@ -29,7 +29,7 @@ POLICY_DENIED`; `frontend/gui` - 29 tests passed, `tsc --strict` clean.
 One inconsistency between this ADR's text and the codebase was resolved
 before implementation: the `provider` field on `claude_code_invoke`'s
 Mechanism example originally read `claude_code` (underscore), but the real
-registered adapter/actor key in `core_ops.ADAPTER_REGISTRY` and
+registered adapter/actor key in `awf.ops.run_execution.ADAPTER_REGISTRY` (formerly `core_ops.ADAPTER_REGISTRY`) and
 `mcp/render.RENDERERS` is `"claude-code"` (hyphen). Confirmed with the
 operator; both the example below and the shipped record use `provider:
 claude-code`, matching the real actor string per this ADR's own stated rule

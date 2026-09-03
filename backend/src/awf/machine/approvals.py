@@ -90,8 +90,12 @@ def _ensure_pending_approval(conn: sqlite3.Connection, action: MachineAction, *,
     return {"waiting_input": True, "approval_id": approval_id}
 
 
-def _machine_event(
-    conn: sqlite3.Connection, action: MachineAction, reason_code: str, actor: str, approval_id: str | None = None
+def write_machine_action_event(
+    conn: sqlite3.Connection,
+    action: MachineAction,
+    reason_code: str,
+    actor: str,
+    approval_id: str | None = None,
 ) -> None:
     payload = {"machine_action": action.to_dict(), "machine_action_digest": action.digest}
     if approval_id is not None:
@@ -105,6 +109,9 @@ def _machine_event(
         reason_code=reason_code,
         payload_json=json.dumps(payload, sort_keys=True),
     )
+
+
+_machine_event = write_machine_action_event
 
 
 def record_executed(conn: sqlite3.Connection, action: MachineAction, *, actor: str = "awf", output: dict) -> None:

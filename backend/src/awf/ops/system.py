@@ -93,9 +93,15 @@ def _doctor_python(repo_root: Path) -> dict:
     )
 
 
-def _doctor_node(repo_root: Path) -> dict:
-    node_present, node_version = _command_version("node", "--version")
-    npm_present, npm_version = _command_version("npm", "--version")
+def _doctor_node(repo_root: Path, *, with_versions: bool = True) -> dict:
+    if with_versions:
+        node_present, node_version = _command_version("node", "--version")
+        npm_present, npm_version = _command_version("npm", "--version")
+    else:
+        node_present = shutil.which("node") is not None
+        npm_present = shutil.which("npm") is not None
+        node_version = None
+        npm_version = None
     node_modules = repo_root / "frontend" / "node_modules"
     detail = {"node": node_version, "npm": npm_version, "node_modules": str(node_modules)}
     frontend_node_requirement = "Node.js 24 LTS >=24.15.0"
@@ -315,7 +321,7 @@ def op_system_doctor(repo_root: Path, *, readiness: dict | None = None, quick: b
         _doctor_database(repo_root),
         _doctor_paths(repo_root),
         _doctor_registry(repo_root),
-        _doctor_node(repo_root),
+        _doctor_node(repo_root, with_versions=not quick),
         _doctor_agent_clis(with_versions=not quick),
         _doctor_speech(readiness),
     ]

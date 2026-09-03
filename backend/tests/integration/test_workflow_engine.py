@@ -1,16 +1,13 @@
 import pytest
+from backend.tests.support import make_db
 
-from awf.db.bootstrap import init_db
-from awf.db.connection import get_connection
 from awf.engine.run import create_run
 from awf.workflow.definition import parse_workflow
 from awf.workflow.engine import WorkflowEngineError, run_workflow_definition
 
 
 def make_conn(tmp_path):
-    db_path = tmp_path / "awf.db"
-    init_db(db_path)
-    conn = get_connection(db_path)
+    conn = make_db(tmp_path)
     create_run(conn, run_id="run-1", workflow_ref="demo@1.0.0")
     return conn
 

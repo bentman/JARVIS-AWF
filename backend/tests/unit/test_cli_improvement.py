@@ -2,8 +2,6 @@
 
 from awf.cli.main import (
     _format_approval_detail,
-    _format_approvals,
-    _format_improvement_list,
     _format_improvement_proposal,
     _format_outcome,
 )
@@ -62,21 +60,6 @@ def test_format_improvement_proposal_full_diff():
     formatted = _format_improvement_proposal(proposal, full_diff=True, raw_patch=raw)
     assert "FULL PATCH:" in formatted
     assert "diff --git a/a.py b/a.py" in formatted
-
-
-def test_format_improvement_list():
-    proposals = [
-        {
-            "improvement_id": "imp-1",
-            "status": "ready_for_review",
-            "human_summary": "1 file changed in foo.py.",
-            "next_action": {"command": "awf review request-merge imp-1"},
-        }
-    ]
-    formatted = _format_improvement_list(proposals)
-    assert "Improvement Proposals:" in formatted
-    assert "- imp-1 [READY_FOR_REVIEW] 1 file changed in foo.py." in formatted
-    assert "Next: awf review request-merge imp-1" in formatted
 
 
 def test_format_outcome_includes_proposal():
@@ -162,20 +145,3 @@ def test_format_approval_detail_improvement():
     assert "main.py (+3 / -1 lines)" in formatted
     assert "+added" in formatted
     assert "Approve: awf review approve appr-001" in formatted
-
-
-def test_format_approvals_list():
-    approvals = [
-        {
-            "approval_id": "appr-001",
-            "risk_class": "R2",
-            "action_digest": "sha256:123",
-            "preview": {
-                "human_summary": "1 file changed in main.py.",
-            },
-        }
-    ]
-    formatted = _format_approvals(approvals)
-    assert "Pending Approvals:" in formatted
-    assert "- appr-001 [R2] 1 file changed in main.py." in formatted
-    assert "Next: awf review show appr-001  (or: awf review approve appr-001)" in formatted

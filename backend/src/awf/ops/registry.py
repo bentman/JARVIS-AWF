@@ -150,6 +150,14 @@ def op_registry_list(repo_root: Path, *, kind: str, conn: sqlite3.Connection | N
         # be listed as if it were one.
         roots = roots[:1]
     results = []
+    index_map: dict[tuple[str, str], dict] = {}
+    if conn is not None:
+        for r in conn.execute(
+            "SELECT name, version, trust_status, digest FROM registry_index WHERE kind = ?",
+            (kind,),
+        ).fetchall():
+            index_map[(r["name"], r["version"])] = dict(r)
+
     for source_name, root in roots:
         kind_dir = root / kind
         if not kind_dir.is_dir():
@@ -158,7 +166,7 @@ def op_registry_list(repo_root: Path, *, kind: str, conn: sqlite3.Connection | N
             for version in version_names(name_dir, registry_kind):
                 row = {"source": source_name, "kind": kind, "name": name_dir.name, "version": version}
                 if conn is not None:
-                    indexed = registry_index.index_row(conn, kind, name_dir.name, version)
+                    indexed = index_map.get((name_dir.name, version))
                     row["trust_status"] = indexed["trust_status"] if indexed else None
                     row["digest"] = indexed["digest"] if indexed else None
                 results.append(row)

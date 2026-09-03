@@ -1,7 +1,7 @@
-import subprocess
 from pathlib import Path
 
 import pytest
+from backend.tests.support import run_git
 
 from awf.isolation.scratch import create_scratch_dir, remove_scratch_dir, scratch_path
 from awf.isolation.worktree import (
@@ -13,12 +13,6 @@ from awf.isolation.worktree import (
     remove_worktree,
     worktree_path,
 )
-
-
-def run_git(args, cwd):
-    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
-    return result
 
 
 @pytest.fixture

@@ -61,6 +61,7 @@ DDL_STATEMENTS = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_events_run_id ON events (run_id)",
     "CREATE INDEX IF NOT EXISTS idx_events_run_occurred ON events (run_id, occurred_at)",
+    "CREATE INDEX IF NOT EXISTS idx_events_step_id ON events (step_id, occurred_at)",
     """
     CREATE TABLE IF NOT EXISTS artifacts (
         artifact_id TEXT PRIMARY KEY,
@@ -77,6 +78,7 @@ DDL_STATEMENTS = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_artifacts_run_id ON artifacts (run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_artifacts_type_created ON artifacts (artifact_type, created_at)",
     """
     CREATE TABLE IF NOT EXISTS approvals (
         approval_id TEXT PRIMARY KEY,

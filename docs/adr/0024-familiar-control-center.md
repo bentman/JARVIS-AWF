@@ -23,8 +23,7 @@ Alignment update, 2026-08-14: the JSON-RPC surface is now declared in
 methods. `frontend/shared/src/types.ts` keeps hand-written result interfaces
 and re-exports `MethodName`; `frontend/shared/src/client.ts` keeps transport
 and error handling while composing the generated wrappers. Backend operation
-handlers live in `awf.ops.*`; `awf.cli.core_ops` is a compatibility re-export
-surface only.
+handlers are centralized in `awf.ops.*`.
 
 ## Context
 

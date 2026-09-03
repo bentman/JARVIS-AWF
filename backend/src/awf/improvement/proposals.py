@@ -230,13 +230,19 @@ def get(conn: sqlite3.Connection, *, improvement_id: str) -> dict:
     return _serialize(_proposal_row(conn, improvement_id), conn)
 
 
-def list_(conn: sqlite3.Connection, *, status: str | None = None) -> list[dict]:
-    if status is None:
-        rows = conn.execute("SELECT * FROM improvement_proposals ORDER BY created_at, improvement_id").fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT * FROM improvement_proposals WHERE status = ? ORDER BY created_at, improvement_id", (status,)
-        ).fetchall()
+def list_(conn: sqlite3.Connection, *, status: str | None = None, run_id: str | None = None) -> list[dict]:
+    clauses = []
+    params: list[object] = []
+    if status is not None:
+        clauses.append("status = ?")
+        params.append(status)
+    if run_id is not None:
+        clauses.append("run_id = ?")
+        params.append(run_id)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = conn.execute(
+        f"SELECT * FROM improvement_proposals {where} ORDER BY created_at, improvement_id", params
+    ).fetchall()
     return [_serialize(row, conn) for row in rows]
 
 

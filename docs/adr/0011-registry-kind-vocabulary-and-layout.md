@@ -30,17 +30,15 @@ Alignment update, 2026-08-14: the one-kind-vocabulary decision now covers
 twelve registry kinds, including `hardware-voice-manifests` and `llm-servers`.
 All kind-specific validation uses JSON Schema modules under
 `awf.registry.schemas` plus one shared loader path for identity, path, and
-version checks. Registry operations moved from `awf.cli.core_ops` into
-`awf.ops.registry`; `awf.cli.core_ops` remains only a compatibility re-export
-surface.
+version checks. Registry operations live in `awf.ops.registry`; all operations are centralized in `awf.ops`.
 
 ## Context
 
 **Kind-to-layout knowledge is written three times.** `resolve._object_path`
 maps `skills` to `<version>/SKILL.md`, `agents` to `<version>.md`, and every
-other kind to `<version>.yaml`. `core_ops.op_registry_list` re-derives the
+other kind to `<version>.yaml`. `op_registry_list` re-derives the
 same mapping through `is_skill` / `is_agent` branches and three different
-globs. `core_ops.op_registry_publish` re-derives it a third time as an
+globs. `op_registry_publish` re-derives it a third time as an
 `extension` variable. Adding a kind means finding all three.
 
 **Kind names are bare strings.** `"workflows"`, `"agents"`, `"capabilities"`,
@@ -71,8 +69,8 @@ defines a seventh `_require`.
 `RegistryValidationError` — the most general name in the package, on the
 most specific kind.
 
-**Two path literals survived ADR-0009.** `core_ops._artifacts_root` builds
-`repo_root / "data" / "artifacts"`, and `core_ops._make_run_map_item` builds
+**Two path literals survived ADR-0009.** `paths.artifacts_dir` (formerly `core_ops._artifacts_root`) builds
+`repo_root / "data" / "artifacts"`, and `_make_run_map_item` builds
 `repo_root / "data" / "awf_db" / "awf.db"` instead of calling
 `paths.db_path`. `paths.py` has no `artifacts_dir`.
 
@@ -151,10 +149,10 @@ kind: str, name, version)` — and resolves the string through `by_key` on
 entry, so no caller changes. `_object_path` and `DATA_ONLY_KINDS` are
 removed; `data_only` on the kind replaces the tuple.
 
-`core_ops.op_registry_list` replaces its `is_skill` / `is_agent` branches and
+`op_registry_list` replaces its `is_skill` / `is_agent` branches and
 three globs with `version_names`.
 
-`core_ops.op_registry_publish` and `op_registry_validate` take an explicit
+`op_registry_publish` and `op_registry_validate` take an explicit
 kind rather than inferring one:
 
 - `op_registry_validate(path, *, kind: str | None = None)` — when `kind` is
@@ -191,7 +189,7 @@ def artifacts_dir(repo_root: Path) -> Path:
     return repo_root / "data" / "artifacts"
 ```
 
-`core_ops._artifacts_root` is replaced by it. `core_ops._make_run_map_item`
+`paths.artifacts_dir` (formerly `core_ops._artifacts_root`) is replaced by it. `_make_run_map_item`
 calls `paths.db_path(repo_root)` instead of assembling the same path.
 
 ## Layout delta
@@ -210,7 +208,7 @@ backend/src/awf/
     skill.py                    (shared helpers)
     voice_profile.py            (shared helpers)
   cli/
-    core_ops.py                 (kinds.py for layout; explicit kind on validate/publish)
+    awf.ops (formerly core_ops)  (kinds.py for layout; explicit kind on validate/publish)
     main.py                     (`registry publish --kind`)
 ```
 
@@ -242,7 +240,7 @@ backend/src/awf/
 6. Give `op_registry_validate` an optional `kind` and path-derived fallback;
    give `op_registry_publish` a required `kind`; remove both content-shape
    dispatch chains. Add `--kind` to `awf registry publish`.
-7. Add `paths.artifacts_dir`; replace `core_ops._artifacts_root` and the
+7. Add `paths.artifacts_dir`; replace `paths.artifacts_dir` (formerly `core_ops._artifacts_root`) and the
    inline database path in `_make_run_map_item`.
 8. Tests: `by_key` raises on an unknown kind; `object_path` returns the
    documented path for all three layouts; `version_names` round-trips against

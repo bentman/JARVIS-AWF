@@ -16,10 +16,9 @@ parses the draft, checks proposal identity against Workflow metadata, resolves
 activity Capability Records, writes a `verified` proposal event on success,
 and blocks publication on verifier failure.
 
-Alignment update, 2026-08-14: authoring and proposal operations now live in
+Alignment update: authoring and proposal operations live in
 `awf.ops.authoring`, registry operations in `awf.ops.registry`, and run
-operations in `awf.ops.run`. `awf.cli.core_ops` remains a compatibility
-re-export surface for external imports, not the internal implementation owner.
+operations in `awf.ops.run`. All operations are centralized in `awf.ops`.
 
 ## Context
 
@@ -325,7 +324,7 @@ schema, fail the candidate and follow the Model Profile fallback policy.
 
 ### Task D — Core operations, CLI, and JSON-RPC
 
-Add core operations in `awf.cli.core_ops` that delegate to
+Add core operations in `awf.ops.authoring` that delegate to
 `awf.authoring.workflow`:
 
 ```python

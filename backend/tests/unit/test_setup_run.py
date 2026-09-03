@@ -34,18 +34,16 @@ def test_run_invokes_every_requested_flag(fake_repo, monkeypatch):
     assert called == ["provision", "verify"]
 
 
-def test_run_returns_max_exit_code_verify_fails(fake_repo, monkeypatch):
-    monkeypatch.setattr(awf_setup, "cmd_provision", lambda repo_root: 0)
-    monkeypatch.setattr(awf_setup, "cmd_verify", lambda repo_root: 1)
-
-    exit_code = awf_setup.run(["--provision", "--verify"], fake_repo)
-
-    assert exit_code == 1
-
-
-def test_run_returns_max_exit_code_provision_fails(fake_repo, monkeypatch):
-    monkeypatch.setattr(awf_setup, "cmd_provision", lambda repo_root: 1)
-    monkeypatch.setattr(awf_setup, "cmd_verify", lambda repo_root: 0)
+@pytest.mark.parametrize(
+    ("provision_exit", "verify_exit"),
+    [
+        (0, 1),
+        (1, 0),
+    ],
+)
+def test_run_returns_max_exit_code_when_subcommand_fails(fake_repo, monkeypatch, provision_exit, verify_exit):
+    monkeypatch.setattr(awf_setup, "cmd_provision", lambda repo_root: provision_exit)
+    monkeypatch.setattr(awf_setup, "cmd_verify", lambda repo_root: verify_exit)
 
     exit_code = awf_setup.run(["--provision", "--verify"], fake_repo)
 

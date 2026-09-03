@@ -47,7 +47,7 @@ Four observations define the decision boundary.
 the floor. Downstream nodes cannot consume what the agent produced, and
 `awf status` after a successful run shows nothing the agent said.
 Meanwhile the frontends have no progress surface at all: `op_run_start`
-(`cli/core_ops.py:584-618`) executes the whole workflow inside one request,
+(`awf.ops.run`) executes the whole workflow inside one request,
 and although `awf/events.subscribe` is implemented end-to-end
 (`server/stdio.py:281-282`, `shared/src/client.ts:335-337`), it has zero
 callers in either frontend. During an agent step the operator sees a disabled
@@ -62,7 +62,7 @@ failure — propagates `FileNotFoundError` from a bare `subprocess.run`
 (`adapters/claude_code.py:47` and its four siblings) and is recorded as
 failure class `INTERNAL` with message `[Errno 2] No such file or directory`.
 No `shutil.which` preflight exists at invocation time, even though
-`op_system_doctor` already probes all five CLIs (`core_ops.py:1836-1856`).
+`op_system_doctor` already probes all five CLIs (now in `awf.ops.system`).
 On the frontend, `transport.ts:26-41` registers no `child.on("error")`
 handler and never reads the child's stderr, so a missing backend kills the
 CLI/GUI with a raw ENOENT stack trace; `ProtocolClient.call`
@@ -76,7 +76,7 @@ agent's tools with no event saying so.
 assistant reply from exactly two segments: application instruction plus raw
 user text. It never calls `retrieve_memory_context`, never compiles a
 persona, and never reads `active_session_entries` — even though
-`op_voice_submit_text` (`core_ops.py:1529-1536`) dutifully records every
+`op_voice_submit_text` (now in `awf.ops.voice`) dutifully records every
 utterance and response into the session store. The assistant cannot remember
 the previous turn of its own conversation. ADR-0020's session tier is written
 and never read; `summarize_session` (`memory/sessions.py:58-71`) computes a
@@ -187,7 +187,7 @@ the decision touches; folding them in avoids re-visiting the files.
   `TimeoutExpired` escape as `INTERNAL`; adapters map the same condition to
   `LIMIT_EXCEEDED`. Catch and classify as `TIMEOUT`.
 - **Gate check hangs.** The gate `checkCommand` subprocess in
-  `cli/core_ops.py` (`_make_check_fn`) runs with no timeout — a hanging test
+  `awf.ops.run_execution` (`_make_check_fn`) runs with no timeout — a hanging test
   command wedges the run with the step stuck RUNNING.
 - **Inert symlink knob.** `machine/policy.py:65-67` checks `is_symlink()` on
   an already-resolved path, which is never true; `followSymlinks: false` is

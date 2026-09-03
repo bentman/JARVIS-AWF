@@ -154,7 +154,7 @@ or invoking the adapter.
    alongside `capabilities`.
 4. `registry/mcp_server.py` - parser/dataclass module for the schema
    above, mirroring `capability_record.py`.
-5. `cli/core_ops.py` - `op_registry_publish`/`op_registry_validate` gain
+5. `awf.ops.registry` (formerly `cli/core_ops.py`) - `op_registry_publish`/`op_registry_validate` gain
    an `mcp` branch (`op_registry_list` already works generically for this
    kind).
 6. Ship the `context7` default definition.

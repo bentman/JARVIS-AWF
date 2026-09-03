@@ -2,13 +2,6 @@ import type { MethodName } from "./protocol.generated.js";
 
 export type { MethodName };
 
-export interface JsonRpcRequest {
-  jsonrpc: "2.0";
-  id: number;
-  method: MethodName;
-  params?: Record<string, unknown>;
-}
-
 export interface JsonRpcError {
   code: number;
   message: string;
@@ -469,15 +462,6 @@ export interface MemorySearchResult {
   context: Record<string, unknown>;
 }
 
-export interface ActiveSession {
-  session_id: string;
-  title: string | null;
-  status: "active" | "summarized" | "expired";
-  created_at: string;
-  updated_at: string;
-  expires_at: string | null;
-  entries?: Record<string, unknown>[];
-}
 
 export class ProtocolError extends Error {
   code: number;

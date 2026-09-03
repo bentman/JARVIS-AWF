@@ -91,7 +91,7 @@ node with no `agentRef` — this is additive, not a breaking change to
    defaults (the node's own fields still win if present), prepending the
    manifest's `instructions` body ahead of the node's `objective`, and
    passing its `capabilities` as the real Guard allowlist.
-5. `cli/core_ops.py` — `op_registry_publish`/`op_registry_validate` branch
+5. `awf.ops.registry` (formerly `cli/core_ops.py`) — `op_registry_publish`/`op_registry_validate` branch
    on `path.suffix == ".md"` for Agent Manifests, ahead of the YAML-based
    kinds; `op_registry_list` globs `*.md` for kind `agents`, same shape as
    every non-Skill kind otherwise.

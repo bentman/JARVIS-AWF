@@ -5,6 +5,7 @@ import sqlite3
 
 from awf.approval_policy import decide_voice_acknowledgement
 from awf.clock import utc_now_rfc3339
+from awf.improvement.proposals import get as get_proposal
 from awf.ops.shared import CoreOpError
 
 
@@ -27,8 +28,6 @@ def _machine_action_preview_for_step(conn: sqlite3.Connection, *, step_id: str) 
             return {"machine_action": action, "machine_action_digest": payload.get("machine_action_digest")}
         if payload.get("improvement_id"):
             imp_id = payload["improvement_id"]
-            from awf.improvement.proposals import get as get_proposal
-
             try:
                 proposal = get_proposal(conn, improvement_id=imp_id)
                 return {
@@ -62,8 +61,14 @@ def _decide_approval(conn: sqlite3.Connection, *, approval_id: str, status: str,
     return {"approval_id": approval_id, "status": status, "reason": reason}
 
 
-def op_approval_list(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute("SELECT * FROM approvals WHERE status = 'pending' ORDER BY requested_at").fetchall()
+def op_approval_list(conn: sqlite3.Connection, *, run_id: str | None = None) -> list[dict]:
+    if run_id:
+        rows = conn.execute(
+            "SELECT * FROM approvals WHERE status = 'pending' AND run_id = ? ORDER BY requested_at",
+            (run_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM approvals WHERE status = 'pending' ORDER BY requested_at").fetchall()
     result = []
     for row in rows:
         item = dict(row)

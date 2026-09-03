@@ -1,4 +1,5 @@
 import pytest
+from backend.tests.support import make_db
 from cryptography.fernet import Fernet, InvalidToken
 
 from awf.db.bootstrap import init_db
@@ -11,12 +12,6 @@ from awf.secrets.store import (
     rotate_key,
     set_secret,
 )
-
-
-def make_db(tmp_path):
-    db_path = tmp_path / "awf.db"
-    init_db(db_path)
-    return get_connection(db_path)
 
 
 def test_set_get_round_trip(tmp_path):

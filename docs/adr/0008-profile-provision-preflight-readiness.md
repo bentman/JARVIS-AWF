@@ -24,7 +24,7 @@ A later validation pass found four residual gaps against the "single source
 of truth" and test-coverage claims below, all fixed:
 `backend/src/awf/adapters/codex_cli.py` still derived the repo root by
 counting path parents, uncounted by this ADR's own baseline — repointed at
-`awf.paths.REPO_ROOT`; `server/stdio.py` and `cli/core_ops.py` each
+`awf.paths.REPO_ROOT`; `server/stdio.py` and `awf.ops` (formerly `cli/core_ops.py`) each
 hardcoded `data/awf_db/awf.db` instead of calling `awf.paths.db_path()` —
 repointed at it; `HardwareInventory`'s docstring still described the
 pre-ADR design where the profile ID came from execution-provider
@@ -292,7 +292,7 @@ derive_vad_readiness(inventory, tokens, artifact_path) -> Readiness
 derive_wake_readiness(inventory, tokens, artifact_paths) -> Readiness
 ```
 
-**STT** — `cuda` when `gpu_vendor == "nvidia"` and `cuda_available` and
+**STT** — `qnn` when `npu_vendor == "qualcomm"` (or Linux ARM64 with QNN runtime tokens) and `ep:QNNExecutionProvider`, `dll:QnnHtp`, `import:onnxruntime_qnn`, and `import:transformers` are present; else `cuda` when `gpu_vendor == "nvidia"` and `cuda_available` and
 `ct2:cuda:<n>` with `n > 0`; otherwise `cpu`. CUDA ready requires
 `import:faster_whisper`; the CPU floor is ready when an ONNX STT runtime such
 as `onnx_asr` or `sherpa_onnx` is importable. This keeps Windows ARM64 and

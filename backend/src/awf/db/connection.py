@@ -18,6 +18,7 @@ def get_connection(db_path: Path, *, enable_wal: bool = True) -> sqlite3.Connect
             journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
             if str(journal_mode).lower() != "wal":
                 conn.execute("PRAGMA journal_mode = WAL").fetchone()
+            conn.execute("PRAGMA synchronous = NORMAL")
         except sqlite3.OperationalError as exc:
             if "database is locked" not in str(exc).lower():
                 raise

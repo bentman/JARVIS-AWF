@@ -23,8 +23,10 @@ def op_improvement_get(conn: sqlite3.Connection, *, improvement_id: str) -> dict
         raise CoreOpError(str(exc)) from exc
 
 
-def op_improvement_list(conn: sqlite3.Connection, *, status: str | None = None) -> list[dict]:
-    return improvement_proposals.list_(conn, status=status)
+def op_improvement_list(
+    conn: sqlite3.Connection, *, status: str | None = None, run_id: str | None = None
+) -> list[dict]:
+    return improvement_proposals.list_(conn, status=status, run_id=run_id)
 
 
 def op_improvement_mark_ready(

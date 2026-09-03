@@ -3,6 +3,17 @@
 import sqlite3
 from pathlib import Path
 
+from awf.memory.context import retrieve_memory_context
+from awf.memory.episodic import run_timeline, search_events
+from awf.memory.proposals import MemoryProposalError, propose_semantic_memory
+from awf.memory.semantic import search_semantic_memories
+from awf.memory.sessions import (
+    SessionError,
+    append_entry,
+    show_session,
+    start_session,
+    summarize_session,
+)
 from awf.ops.authoring import op_proposal_publish, op_proposal_reject
 from awf.ops.registry import op_registry_get, op_registry_retire
 from awf.ops.shared import CoreOpError
@@ -22,10 +33,6 @@ def op_memory_search(
     query: str,
     profile_ref: str = "default@1.0.0",
 ) -> dict:
-    from awf.memory.context import retrieve_memory_context
-    from awf.memory.episodic import search_events
-    from awf.memory.semantic import search_semantic_memories
-
     try:
         semantic = search_semantic_memories(repo_root, conn, query=query, profile_ref=profile_ref)
         episodic = search_events(conn, query=query, limit=20)
@@ -41,8 +48,6 @@ def op_memory_get(repo_root: Path, conn: sqlite3.Connection, *, ref: str) -> dic
 
 
 def op_memory_propose(repo_root: Path, conn: sqlite3.Connection, *, path: Path, summary: str | None = None) -> dict:
-    from awf.memory.proposals import MemoryProposalError, propose_semantic_memory
-
     try:
         return propose_semantic_memory(repo_root, conn, path=path, summary=summary)
     except MemoryProposalError as exc:
@@ -63,8 +68,6 @@ def op_memory_block(conn: sqlite3.Connection, *, ref: str) -> dict:
 
 
 def op_session_start(conn: sqlite3.Connection, *, title: str | None = None, expires_at: str | None = None) -> dict:
-    from awf.memory.sessions import start_session
-
     return start_session(conn, title=title, expires_at=expires_at)
 
 
@@ -76,8 +79,6 @@ def op_session_append(
     content: dict,
     summary: str | None = None,
 ) -> dict:
-    from awf.memory.sessions import SessionError, append_entry
-
     try:
         return append_entry(conn, session_id=session_id, role=role, content=content, summary=summary)
     except SessionError as exc:
@@ -85,8 +86,6 @@ def op_session_append(
 
 
 def op_session_show(conn: sqlite3.Connection, *, session_id: str) -> dict:
-    from awf.memory.sessions import SessionError, show_session
-
     try:
         return show_session(conn, session_id=session_id)
     except SessionError as exc:
@@ -94,8 +93,6 @@ def op_session_show(conn: sqlite3.Connection, *, session_id: str) -> dict:
 
 
 def op_session_summarize(conn: sqlite3.Connection, *, session_id: str, summary: str | None = None) -> dict:
-    from awf.memory.sessions import SessionError, summarize_session
-
     try:
         return summarize_session(conn, session_id=session_id, summary=summary)
     except SessionError as exc:
@@ -103,14 +100,10 @@ def op_session_summarize(conn: sqlite3.Connection, *, session_id: str, summary: 
 
 
 def op_episodic_search(conn: sqlite3.Connection, *, query: str, run_id: str | None = None) -> list[dict]:
-    from awf.memory.episodic import search_events
-
     return search_events(conn, query=query, run_id=run_id)
 
 
 def op_episodic_timeline(conn: sqlite3.Connection, *, run_id: str) -> dict:
-    from awf.memory.episodic import run_timeline
-
     try:
         return run_timeline(conn, run_id=run_id)
     except ValueError as exc:

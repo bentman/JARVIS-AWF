@@ -21,6 +21,12 @@ def make_awf_repo(tmp_path: Path):
     return repo_root, get_connection(db_path)
 
 
+def make_db(tmp_path: Path):
+    db_path = tmp_path / "awf.db"
+    init_db(db_path)
+    return get_connection(db_path)
+
+
 def seed_run_step(conn, *, run_id: str = "run-1", step_id: str = "s1", node_id: str = "n1") -> None:
     create_run(conn, run_id=run_id, workflow_ref="demo@1.0.0")
     create_step(conn, step_id=step_id, run_id=run_id, node_id=node_id)

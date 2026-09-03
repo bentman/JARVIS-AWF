@@ -26,10 +26,9 @@ Corrective update, 2026-08-12: `data/registry/memory-profiles/.gitkeep` and
 re-include rules, so every declared memory registry kind has consistent
 operator-data scaffolding.
 
-Alignment update, 2026-08-14: memory, session, and episodic operations now
-live in `awf.ops.memory`; registry publication/listing lives in
-`awf.ops.registry`. `awf.cli.core_ops` remains a compatibility re-export
-surface only.
+Alignment update: memory, session, and episodic operations live in
+`awf.ops.memory`; registry publication/listing lives in `awf.ops.registry`.
+All operations are centralized in `awf.ops`.
 
 ## Context
 
@@ -56,7 +55,7 @@ The current codebase has useful entry points:
 - `registry/kinds.py`, `registry/resolve.py`, `registry/index.py`, and
   `awf.ops.registry.op_registry_publish` already provide versioned registry publishing,
   lookup, indexing, trust status, and digest checks.
-- `awf.cognition.PromptEnvelope` already has `session`, `memory`, and
+- `awf.cognition.envelope.PromptEnvelope` already has `session`, `memory`, and
   `retrieval` authorities.
 - Persona loading rejects `memory_policy` and `memory_permissions`, so memory
   authority stays outside persona text.
@@ -381,7 +380,7 @@ Rules:
 
 ### Task G — CLI, JSON-RPC, and frontend app flow
 
-Add CLI commands:
+Add CLI commands (consolidated under `awf memory` per ADR-0029):
 
 ```text
 awf memory search <query> [--profile <name>@<version>]
@@ -390,12 +389,12 @@ awf memory propose --file <path>
 awf memory publish <proposal-id> --digest <draft-digest>
 awf memory reject <proposal-id> --reason <text>
 awf memory block <name>@<version>
-awf session start [--title <title>]
-awf session append <session-id> --role <role> --json <path>
-awf session show <session-id>
-awf session summarize <session-id>
-awf episodic search <query> [--run-id <run-id>]
-awf episodic timeline <run-id>
+awf memory session start [--title <title>]
+awf memory session append <session-id> --role <role> --json <path>
+awf memory session show <session-id>
+awf memory session summarize <session-id>
+awf memory episodic search <query> [--run-id <run-id>]
+awf memory episodic timeline <run-id>
 ```
 
 Add JSON-RPC methods:

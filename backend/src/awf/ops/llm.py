@@ -27,9 +27,17 @@ def op_llm_servers(
     selection = current_selection(repo_root)
     models = local_models(repo_root)
 
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(servers))) as executor:
+        probe_futures = {
+            s_id: executor.submit(probe, s, timeout_seconds=probe_timeout_seconds) for s_id, s in servers.items()
+        }
+        probed_health = {s_id: fut.result() for s_id, fut in probe_futures.items()}
+
     server_reports = {}
     for s_id, s in servers.items():
-        h = probe(s, timeout_seconds=probe_timeout_seconds)
+        h = probed_health[s_id]
         art = artifact_for(s, profile_id)
         bin_p = binary_path(repo_root, profile_id, art) if art else None
 

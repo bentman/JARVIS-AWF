@@ -1,17 +1,12 @@
 import subprocess
 import sys
 
-from awf.db.bootstrap import init_db
+from backend.tests.support import make_db
+
 from awf.db.connection import get_connection
 from awf.engine.executor import run_step, run_workflow
 from awf.engine.recovery import scan_incomplete_runs
 from awf.engine.run import create_run, create_step
-
-
-def make_db(tmp_path):
-    db_path = tmp_path / "awf.db"
-    init_db(db_path)
-    return get_connection(db_path)
 
 
 def test_run_workflow_executes_steps_in_order_and_marks_run_succeeded(tmp_path):

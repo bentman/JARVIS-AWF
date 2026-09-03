@@ -124,39 +124,3 @@ def parse_patch_diff_previews(patch_text: str, max_lines_per_file: int = 15) -> 
             }
         )
     return previews
-
-
-def diff_file_previews(
-    repo_root: Path, base_commit: str, candidate_commit: str, max_lines_per_file: int = 15
-) -> list[dict]:
-    """Extract structured per-file diff stats and compact previews from git commits."""
-    try:
-        raw_diff = git_text(["diff", "--binary", base_commit, candidate_commit], repo_root)
-        numstat_rows = changed_paths(repo_root, base_commit, candidate_commit)
-    except Exception:
-        return []
-
-    parsed = parse_patch_diff_previews(raw_diff, max_lines_per_file=max_lines_per_file)
-    parsed_map = {item["path"]: item for item in parsed}
-
-    previews: list[dict] = []
-    for item in numstat_rows:
-        path = item["path"]
-        if path in parsed_map:
-            previews.append(parsed_map[path])
-        else:
-            added_str = str(item.get("added", "0"))
-            deleted_str = str(item.get("deleted", "0"))
-            is_binary = added_str == "-" or deleted_str == "-"
-            previews.append(
-                {
-                    "path": path,
-                    "additions": int(added_str) if not is_binary and added_str.isdigit() else 0,
-                    "deletions": int(deleted_str) if not is_binary and deleted_str.isdigit() else 0,
-                    "is_binary": is_binary,
-                    "preview_lines": [],
-                    "truncated": False,
-                    "total_lines": 0,
-                }
-            )
-    return previews

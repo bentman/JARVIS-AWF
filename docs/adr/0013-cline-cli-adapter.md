@@ -5,7 +5,7 @@
 Implemented. Adds the fifth of the five named CLI adapters called out in
 `README.md` §Status ("one of the five named CLI adapters … is
 outstanding"). The adapter contract (Section 10.1) and its single
-wiring point `ADAPTER_REGISTRY` (`cli/core_ops.py`) already exist and are
+wiring point `ADAPTER_REGISTRY` (`awf.ops.run_execution`, formerly `cli/core_ops.py`) already exist and are
 adapter-agnostic; this record proposes a Cline adapter that mirrors the
 other four in shape, pattern, and functionality. No source-of-truth
 conflict. No code is implemented by this record.
@@ -20,7 +20,7 @@ Section 10 names five CLI coding agents "driven through one adapter
 contract." Four are implemented and registered:
 
 ```python
-ADAPTER_REGISTRY = {  # cli/core_ops.py:57
+ADAPTER_REGISTRY = {  # awf.ops.run_execution (formerly cli/core_ops.py:57)
     "claude-code": claude_code_invoke,  # adapters/claude_code.py
     "codex": codex_invoke,  # adapters/codex_cli.py
     "antigravity": antigravity_invoke,  # adapters/antigravity_cli.py
@@ -160,7 +160,7 @@ env={**os.environ, **mcp_env_overlay})` — identical to `copilot_cli`/`antigrav
    `FORBIDDEN_CONSTRAINT_KEYS = ("yolo", "dangerously_skip_permissions")`,
    `def invoke(invocation) -> AgentResult`. No committed profile file
    (unlike Codex). Reuses `awf.adapters.base` envelopes only.
-2. `backend/src/awf/cli/core_ops.py` — two lines:
+2. `backend/src/awf/ops/run_execution.py` (formerly `core_ops.py`) — two lines:
    `from awf.adapters.cline_cli import invoke as cline_invoke` and add
    `"cline": cline_invoke` to `ADAPTER_REGISTRY`. This is the single
    wiring point for both `make_agent_node_executor` and

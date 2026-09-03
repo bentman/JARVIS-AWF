@@ -1,6 +1,5 @@
-import subprocess
-
 import pytest
+from backend.tests.support import run_git
 
 from awf.adapters.base import AgentInvocation, AgentResult, AgentStatus
 from awf.db.bootstrap import init_db
@@ -9,12 +8,6 @@ from awf.engine.agent_step import run_agent_step
 from awf.engine.run import create_run, create_step
 from awf.isolation.worktree import create_worktree
 from awf.registry.agent_manifest import SkillRef
-
-
-def run_git(args, cwd):
-    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
-    return result
 
 
 @pytest.fixture

@@ -65,6 +65,7 @@ from awf.guard.capability_guard import Decision, authorize
 from awf.isolation.scratch import scratch_path
 from awf.isolation.worktree import commit_all_changes
 from awf.machine.action import MachineAction, content_digest
+from awf.machine.approvals import write_machine_action_event as _agent_event
 from awf.machine.artifacts import write_report_artifact
 from awf.mcp.render import RENDERERS
 from awf.paths import artifacts_dir, env_path
@@ -90,28 +91,6 @@ AGENT_STATUS_FAILURE_CLASSES = {
 
 class AgentStepError(StepFailure):
     pass
-
-
-def _agent_event(
-    conn: sqlite3.Connection,
-    *,
-    action: MachineAction,
-    reason_code: str,
-    actor: str,
-    approval_id: str | None = None,
-) -> None:
-    payload = {"machine_action": action.to_dict(), "machine_action_digest": action.digest}
-    if approval_id is not None:
-        payload["approval_id"] = approval_id
-    write_event(
-        conn,
-        run_id=action.run_id,
-        step_id=action.step_id,
-        new_status=reason_code,
-        actor=actor,
-        reason_code=reason_code,
-        payload_json=json.dumps(payload, sort_keys=True),
-    )
 
 
 def _build_agent_action(

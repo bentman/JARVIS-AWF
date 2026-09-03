@@ -1,5 +1,6 @@
 """Run executor construction and lifecycle helpers."""
 
+import json
 import shlex
 import sqlite3
 import subprocess
@@ -12,6 +13,7 @@ from awf.adapters.cline_cli import invoke as cline_invoke
 from awf.adapters.codex_cli import invoke as codex_invoke
 from awf.adapters.copilot_cli import invoke as copilot_invoke
 from awf.clock import utc_now_rfc3339
+from awf.db.connection import get_connection
 from awf.engine.run import create_run
 from awf.envfile import get_env_value
 from awf.gates.gate_node import make_trifecta_gate_executor
@@ -233,10 +235,6 @@ def _make_run_map_item(artifacts_root: Path, repo_root: Path):
         item,
         item_conn_override: sqlite3.Connection | None = None,
     ) -> tuple[str, Path, dict]:
-        import json
-
-        from awf.db.connection import get_connection
-
         db_path = resolve_db_path(repo_root)
         with _MAP_ITEM_DB_LOCK:
             close_item_conn = item_conn_override is None

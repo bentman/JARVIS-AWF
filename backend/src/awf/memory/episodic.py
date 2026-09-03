@@ -3,11 +3,6 @@
 import sqlite3
 
 
-def _matches(query: str, *values: object) -> bool:
-    lowered = query.lower()
-    return any(lowered in str(value or "").lower() for value in values)
-
-
 def search_events(
     conn: sqlite3.Connection,
     *,

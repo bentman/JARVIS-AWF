@@ -6,14 +6,21 @@ from pathlib import Path
 from awf.ops.run import DEFAULT_ASSISTANT_WORKFLOW_REF, op_run_start
 from awf.ops.shared import CoreOpError
 from awf.registry.resolve import resolve_registry_object
-from awf.registry.voice_profile import load_voice_profile
+from awf.registry.voice_profile import DEFAULT_VOICE_PROFILE_REF, load_voice_profile
+from awf.speech.session import (
+    VoiceFrame,
+    VoiceSessionError,
+    accept_frame,
+    append_assistant_response,
+    append_operator_utterance,
+    current_voice_session,
+    start_voice_session,
+)
 
 
 def _resolve_voice_profile(
     repo_root: Path, voice_profile_ref: str | None = None, conn: sqlite3.Connection | None = None
 ) -> dict:
-    from awf.registry.voice_profile import DEFAULT_VOICE_PROFILE_REF
-
     ref = voice_profile_ref or DEFAULT_VOICE_PROFILE_REF
     name, sep, version = ref.partition("@")
     if not sep or not name or not version:
@@ -43,8 +50,6 @@ def _voice_response_text(workflow_ref: str, run_result: dict) -> str:
 
 
 def op_voice_session_start(conn: sqlite3.Connection, *, title: str | None = None, wake_enabled: bool = False) -> dict:
-    from awf.speech.session import start_voice_session
-
     session = start_voice_session(conn, title=title, wake_enabled=wake_enabled)
     return {
         "voice_session_id": session.voice_session_id,
@@ -61,8 +66,6 @@ def op_voice_session_event(
     payload: dict | None = None,
     turn_id: str | None = None,
 ) -> dict:
-    from awf.speech.session import VoiceFrame, VoiceSessionError, accept_frame
-
     try:
         session = accept_frame(
             conn,
@@ -97,8 +100,6 @@ def op_voice_submit_text(
     voice_profile_ref: str | None = None,
     turn_id: str | None = None,
 ) -> dict:
-    from awf.speech.session import append_assistant_response, append_operator_utterance, current_voice_session
-
     workflow_ref = workflow_ref or DEFAULT_ASSISTANT_WORKFLOW_REF
     if not text.strip():
         raise CoreOpError("voice.submitText requires non-empty text")

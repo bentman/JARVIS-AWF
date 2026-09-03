@@ -1,19 +1,15 @@
 import hashlib
 import json
 
-from awf.db.bootstrap import init_db
-from awf.db.connection import get_connection
-from awf.engine.run import create_run, create_step
+from backend.tests.support import make_db, seed_run_step
+
 from awf.gates.artifacts import write_finding_artifact, write_verdict_artifact
 from awf.gates.schema import Finding, Verdict
 
 
 def make_conn(tmp_path):
-    db_path = tmp_path / "awf.db"
-    init_db(db_path)
-    conn = get_connection(db_path)
-    create_run(conn, run_id="run-1", workflow_ref="demo@1.0.0")
-    create_step(conn, step_id="step-1", run_id="run-1", node_id="check")
+    conn = make_db(tmp_path)
+    seed_run_step(conn, run_id="run-1", step_id="step-1", node_id="check")
     return conn
 
 

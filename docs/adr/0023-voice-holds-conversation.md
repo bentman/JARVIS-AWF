@@ -28,11 +28,11 @@ textarea editing remains the fallback for any error. `partialText` display
 stays in the UI but is no longer populated on this path — interim text
 requires a streaming STT contract and is reserved for a future frame.
 
-Alignment update, 2026-08-14: voice JSON-RPC handlers now live in
-`awf.ops.voice`; approval handlers live in `awf.ops.approval`. Shared
-R2+ voice-acknowledgement policy lives in `awf.approval_policy`, so
+Alignment update: voice JSON-RPC handlers live in `awf.ops.voice`;
+approval handlers live in `awf.ops.approval`. Shared R2+
+voice-acknowledgement policy lives in `awf.approval_policy`, so
 `awf.gates.voice_approval` and approval operations do not import each other.
-`awf.cli.core_ops` remains a compatibility re-export surface only.
+All operations are centralized in `awf.ops`.
 
 ## Context
 
@@ -193,7 +193,7 @@ curatable and avoids transcript growth becoming an unbounded audio log.
   synthesis commands. The frame contract accepts future streaming frames, but
   v1 does not stream PCM chunks, partial transcription, or TTS audio chunks
   through the GUI protocol.
-- Add core operations for voice sessions in `backend/src/awf/cli/core_ops.py`:
+- Add core operations for voice sessions in `backend/src/awf/ops/voice.py`:
   - `op_voice_session_start`
   - `op_voice_session_event`
   - `op_voice_session_close`

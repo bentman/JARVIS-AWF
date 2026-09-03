@@ -1,7 +1,7 @@
 import json
-import subprocess
 
 import pytest
+from backend.tests.support import run_git
 
 from awf.adapters.base import AgentResult, AgentStatus
 from awf.db.bootstrap import init_db
@@ -10,12 +10,6 @@ from awf.engine.run import create_run
 from awf.workflow.definition import parse_workflow
 from awf.workflow.engine import run_workflow_definition
 from awf.workflow.handoff import make_handoff_node_executor
-
-
-def run_git(args, cwd):
-    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
-    return result
 
 
 @pytest.fixture

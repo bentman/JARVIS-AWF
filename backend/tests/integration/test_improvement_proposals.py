@@ -1,8 +1,8 @@
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
+from backend.tests.support import run_git
 
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
@@ -19,12 +19,6 @@ from awf.ops.improvement import (
 )
 from awf.ops.shared import CoreOpError
 from awf.paths import artifacts_dir
-
-
-def run_git(args: list[str], cwd: Path):
-    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
-    return result
 
 
 @pytest.fixture

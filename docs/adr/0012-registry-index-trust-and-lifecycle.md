@@ -29,7 +29,7 @@ indexes over.
 Alignment update, 2026-08-14: the index/trust lifecycle now spans the full
 twelve-kind vocabulary from ADR-0011, including `hardware-voice-manifests` and
 `llm-servers`. Registry list/get/publish/validate/reindex/retire/trust
-operations live in `awf.ops.registry`; `awf.cli.core_ops` re-exports them only
+operations live in `awf.ops.registry`; all operations are centralized in `awf.ops`
 for compatibility.
 
 ## Context
@@ -251,7 +251,7 @@ backend/src/awf/
     voice_profile.py    (name/version required; ref; path agreement)
     model_profile.py    (name/version required; ref; path agreement)
   cli/
-    core_ops.py         (publish all seven kinds; retire; trust; structured get; list joins index)
+    awf.ops (formerly core_ops) (publish all seven kinds; retire; trust; structured get; list joins index)
     main.py             (`registry reindex`, `registry retire`, `registry trust`; `run start` without @version)
 
 config/app_registry/

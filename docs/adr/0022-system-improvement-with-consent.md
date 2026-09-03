@@ -15,11 +15,10 @@ the Codex sandbox -> 559 passed, 7 warnings; `backend/.venv/bin/python -m ruff
 check .` passed; `npm --prefix frontend run build --workspaces` passed; `npm
 --prefix frontend test --workspaces` passed.
 
-Alignment update, 2026-08-14: improvement operations now live in
-`awf.ops.improvement`, run operations in `awf.ops.run`, registry operations in
-`awf.ops.registry`, and artifact helpers in `awf.ops.artifact`/`awf.artifacts`.
-`awf.cli.core_ops` remains a compatibility re-export surface for external
-imports only.
+Alignment update: improvement operations live in `awf.ops.improvement`,
+run operations in `awf.ops.run`, registry operations in `awf.ops.registry`,
+and artifact helpers in `awf.ops.artifact`/`awf.artifacts`. All operations
+are centralized in `awf.ops`.
 
 ## Context
 

@@ -26,7 +26,7 @@ def _recent_verdict_artifacts(conn: sqlite3.Connection, *, limit: int = 5) -> li
 def _registry_counts(repo_root: Path, conn: sqlite3.Connection) -> dict[str, int]:
     counts: dict[str, int] = {}
     for registry_kind in KINDS:
-        counts[registry_kind.key] = len(op_registry_list(repo_root, kind=registry_kind.key, conn=conn))
+        counts[registry_kind.key] = len(op_registry_list(repo_root, kind=registry_kind.key, conn=None))
     return counts
 
 
@@ -605,11 +605,11 @@ def op_control_center_summary(repo_root: Path, conn: sqlite3.Connection) -> dict
     readiness = op_system_readiness(repo_root)
     host_profile_id = readiness.get("profile_id") if isinstance(readiness, dict) else None
     try:
-        llm_servers = op_llm_servers(repo_root, host_profile_id=host_profile_id, probe_timeout_seconds=0.25)
+        llm_servers = op_llm_servers(repo_root, host_profile_id=host_profile_id, probe_timeout_seconds=0.15)
     except Exception as exc:
         llm_servers = _control_error(exc)
     try:
-        llm_status = op_llm_serve(repo_root, conn, action="status", probe_timeout_seconds=0.25)
+        llm_status = op_llm_serve(repo_root, conn, action="status", probe_timeout_seconds=0.15)
     except Exception as exc:
         llm_status = _control_error(exc)
     doctor = op_system_doctor(repo_root, readiness=readiness, quick=True)
@@ -647,14 +647,14 @@ def op_control_center_summary(repo_root: Path, conn: sqlite3.Connection) -> dict
 
 def op_control_center_run_detail(repo_root: Path, conn: sqlite3.Connection, *, run_id: str) -> dict:
     status = op_run_status(conn, run_id=run_id)
-    outcome = op_run_outcome(conn, run_id=run_id)
+    outcome = status.get("outcome") or op_run_outcome(conn, run_id=run_id)
     artifacts = op_artifact_list(conn, run_id=run_id)
     timeline = op_episodic_timeline(conn, run_id=run_id)
-    improvements = [proposal for proposal in op_improvement_list(conn) if proposal.get("run_id") == run_id]
+    improvements = op_improvement_list(conn, run_id=run_id)
     verdicts = [artifact for artifact in artifacts if artifact.get("artifact_type") == "verdict"]
     run_work_items = _derive_operator_work_items(
         runs=[{**status, "outcome": outcome}],
-        approvals=[approval for approval in op_approval_list(conn) if approval.get("run_id") == run_id],
+        approvals=op_approval_list(conn, run_id=run_id),
         improvements=improvements,
         recent_verdicts=verdicts,
         readiness={},

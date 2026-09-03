@@ -50,8 +50,11 @@ A Step that raises is caught here at the Run level: the Run is marked
 exception propagate to the caller as an unhandled crash.
 """
 
+import json
+import random
 import re
 import sqlite3
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -71,7 +74,7 @@ from awf.workflow.activities import (
     ActivityRegistration,
     UnknownActivityError,
 )
-from awf.workflow.definition import WorkflowDefinition
+from awf.workflow.definition import WorkflowDefinition, resolve_retry_policy
 from awf.workflow.io_schema import OutputValidationError, render_outputs, validate_output
 
 NodeExecutor = Callable[[sqlite3.Connection, str, str, dict], dict]
@@ -340,22 +343,75 @@ def run_workflow_definition(
         if executor is None:
             raise WorkflowEngineError(f"no executor registered for node type '{node_type}'")
 
-        attempt_counts[current_id] = attempt_counts.get(current_id, 0) + 1
-        # step_id is globally unique (Section 8: PRIMARY KEY) - scoped by
-        # run_id, not just node id, since the same node id recurs across
-        # different Runs of the same workflow.
-        step_id = f"{run_id}:{current_id}#{attempt_counts[current_id]}"
-        if node_type not in SELF_STEPPING_NODE_TYPES:
-            create_step(conn, step_id=step_id, run_id=run_id, node_id=current_id, attempt=attempt_counts[current_id])
+        policy = resolve_retry_policy(workflow, node)
+        retries_attempted = 0
+        output = None
 
-        try:
-            output = executor(conn, run_id, step_id, node)
-        except Exception as exc:
-            # run_step (or the handoff executor's own per-hop run_step calls)
-            # already recorded the Step's FAILED status and failure_class
-            # before this propagated - this is the Run-level consequence.
-            _mark_run_failed(conn, run_id=run_id, reason_code=f"step_failed:{exc}")
-            return {"status": "FAILED", "repairs_used": repairs_used, "error": str(exc)}
+        while True:
+            attempt_counts[current_id] = attempt_counts.get(current_id, 0) + 1
+            attempt = attempt_counts[current_id]
+            # step_id is globally unique (Section 8: PRIMARY KEY) - scoped by
+            # run_id, not just node id, since the same node id recurs across
+            # different Runs of the same workflow.
+            step_id = f"{run_id}:{current_id}#{attempt}"
+            if node_type not in SELF_STEPPING_NODE_TYPES:
+                create_step(conn, step_id=step_id, run_id=run_id, node_id=current_id, attempt=attempt)
+
+            try:
+                output = executor(conn, run_id, step_id, node)
+                break
+            except Exception as exc:
+                failure_class = getattr(exc, "failure_class", "INTERNAL")
+                if failure_class in policy.retry_on and retries_attempted < policy.max_retries:
+                    base_delay = policy.backoff_seconds * (policy.backoff_factor**retries_attempted)
+                    if policy.jitter and base_delay > 0:
+                        delay = random.uniform(0.5 * base_delay, 1.5 * base_delay)
+                    else:
+                        delay = base_delay
+
+                    retries_attempted += 1
+                    next_attempt = attempt + 1
+
+                    write_event(
+                        conn,
+                        run_id=run_id,
+                        step_id=step_id,
+                        new_status="RETRY_WAIT",
+                        actor="engine",
+                        reason_code="step_retry_scheduled",
+                        payload_json=json.dumps(
+                            {
+                                "node_id": current_id,
+                                "failed_attempt": attempt,
+                                "next_attempt": next_attempt,
+                                "failure_class": failure_class,
+                                "backoff_seconds": delay,
+                                "retries_attempted": retries_attempted,
+                                "max_retries": policy.max_retries,
+                            }
+                        ),
+                    )
+
+                    next_step_id = f"{run_id}:{current_id}#{next_attempt}"
+                    if node_type not in SELF_STEPPING_NODE_TYPES:
+                        now_str = utc_now_rfc3339()
+                        conn.execute(
+                            "INSERT OR IGNORE INTO steps (step_id, run_id, node_id, attempt, status, input_json, started_at) "
+                            "VALUES (?, ?, ?, ?, 'RETRY_WAIT', '{}', ?)",
+                            (next_step_id, run_id, current_id, next_attempt, now_str),
+                        )
+                        conn.commit()
+
+                    if delay > 0:
+                        time.sleep(delay)
+
+                    continue
+                else:
+                    # run_step (or the handoff executor's own per-hop run_step calls)
+                    # already recorded the Step's FAILED status and failure_class
+                    # before this propagated - this is the Run-level consequence.
+                    _mark_run_failed(conn, run_id=run_id, reason_code=f"step_failed:{exc}")
+                    return {"status": "FAILED", "repairs_used": repairs_used, "error": str(exc)}
 
         if "hops_used" in output:
             hops_used = output["hops_used"]

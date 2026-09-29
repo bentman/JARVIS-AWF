@@ -152,4 +152,86 @@ describe("App live voice session (text-first invariant)", () => {
     render(<App onApprove={vi.fn()} onReject={vi.fn()} />);
     expect(screen.queryByRole("group", { name: "Voice session" })).toBeNull();
   });
+
+  it("stops playing response audio when barge-in interrupt occurs", async () => {
+    const props = liveVoiceProps();
+    const pauseMock = vi.fn();
+    const playMock = vi.fn().mockResolvedValue(undefined);
+    let audioInstance: any = null;
+    (globalThis as any).Audio = vi.fn(function MockAudio(this: any, src: string) {
+      audioInstance = {
+        src,
+        currentTime: 0,
+        play: playMock,
+        pause: pauseMock,
+        onended: null,
+      };
+      return audioInstance;
+    });
+
+    render(<App onApprove={vi.fn()} onReject={vi.fn()} {...props} />);
+
+    fireEvent.click(screen.getByText("Start voice session"));
+    expect(await screen.findByText(/Voice session: vs-1/)).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Final recognized text" }), {
+      target: { value: "Hello world." },
+    });
+    fireEvent.click(screen.getByText("Submit voice text"));
+
+    await waitFor(() => expect(playMock).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByText("Interrupt"));
+    expect(pauseMock).toHaveBeenCalledTimes(1);
+    expect(audioInstance.currentTime).toBe(0);
+    expect(props.onVoiceInterrupt).toHaveBeenCalledWith("vs-1", expect.stringMatching(/^turn-/));
+  });
+
+  it("emits tts.done when response audio finishes playing", async () => {
+    const onVoiceEvent = vi.fn().mockResolvedValue({ voice_session_id: "vs-1", state: "idle" });
+    const props = { ...liveVoiceProps(), onVoiceEvent };
+    let audioInstance: any = null;
+    (globalThis as any).Audio = vi.fn(function MockAudio(this: any, src: string) {
+      audioInstance = {
+        src,
+        currentTime: 0,
+        play: vi.fn().mockResolvedValue(undefined),
+        pause: vi.fn(),
+        onended: null,
+      };
+      return audioInstance;
+    });
+
+    render(<App onApprove={vi.fn()} onReject={vi.fn()} {...props} />);
+
+    fireEvent.click(screen.getByText("Start voice session"));
+    expect(await screen.findByText(/Voice session: vs-1/)).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Final recognized text" }), {
+      target: { value: "Hello world." },
+    });
+    fireEvent.click(screen.getByText("Submit voice text"));
+
+    await waitFor(() => expect(audioInstance?.play).toHaveBeenCalled());
+
+    audioInstance.onended?.();
+    expect(onVoiceEvent).toHaveBeenCalledWith("vs-1", "tts.done", {}, expect.stringMatching(/^turn-/));
+  });
+
+  it("toggles continuous listening mode", async () => {
+    const props = liveVoiceProps();
+    render(<App onApprove={vi.fn()} onReject={vi.fn()} {...props} />);
+
+    fireEvent.click(screen.getByText("Start voice session"));
+    expect(await screen.findByText(/Voice session: vs-1/)).toBeTruthy();
+
+    const continuousBtn = screen.getByText("Continuous: Off");
+    expect(continuousBtn).toBeTruthy();
+
+    fireEvent.click(continuousBtn);
+    expect(await screen.findByText("Continuous: On")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Continuous: On"));
+    expect(await screen.findByText("Continuous: Off")).toBeTruthy();
+  });
 });

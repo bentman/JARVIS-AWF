@@ -313,4 +313,63 @@ describe("ProtocolClient", () => {
     expect(transport.lastRequest().method).toBe("awf/events.subscribe");
     expect(transport.lastRequest().params).toEqual({ runId: "run-1", limit: 10 });
   });
+
+  it("sends params.async = true when runStart is called with asyncExecution", () => {
+    const { transport, client } = setup();
+    void client.runStart("demo@1.0.0", { objective: "x" }, true);
+
+    const request = transport.lastRequest();
+    expect(request.method).toBe("awf/run.start");
+    expect(request.params).toEqual({ workflow: "demo@1.0.0", input: { objective: "x" }, async: true });
+  });
+
+  it("polls run status until a terminal status is reached", async () => {
+    const { transport, client } = setup();
+    const updates: string[] = [];
+
+    const pollPromise = client.pollRunStatus("run-1", {
+      intervalMs: 10,
+      onUpdate: (status) => updates.push(status.status),
+    });
+
+    // First poll returns RUNNING
+    let req = transport.lastRequest();
+    expect(req.method).toBe("awf/run.status");
+    transport.emit({
+      jsonrpc: "2.0",
+      id: req.id,
+      result: { run_id: "run-1", workflow_ref: "demo@1.0.0", status: "RUNNING", steps: [] },
+    });
+
+    // Wait for the next poll
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    // Second poll returns SUCCEEDED
+    req = transport.lastRequest();
+    transport.emit({
+      jsonrpc: "2.0",
+      id: req.id,
+      result: { run_id: "run-1", workflow_ref: "demo@1.0.0", status: "SUCCEEDED", steps: [] },
+    });
+
+    const finalStatus = await pollPromise;
+    expect(finalStatus.status).toBe("SUCCEEDED");
+    expect(updates).toEqual(["RUNNING", "SUCCEEDED"]);
+  });
+
+  it("sends well-formed JSON-RPC requests for intentClassify and intentDispatch", () => {
+    const { transport, client } = setup();
+
+    void client.intentClassify("run demo");
+    expect(transport.lastRequest().method).toBe("awf/intent.classify");
+    expect(transport.lastRequest().params).toEqual({ text: "run demo" });
+
+    void client.intentDispatch("run demo", { voiceSessionId: "s-1", async: true });
+    expect(transport.lastRequest().method).toBe("awf/intent.dispatch");
+    expect(transport.lastRequest().params).toEqual({
+      text: "run demo",
+      voiceSessionId: "s-1",
+      async: true,
+    });
+  });
 });

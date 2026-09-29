@@ -4,13 +4,11 @@
 
 Implemented.
 
-Corrective update, 2026-08-15: `_semantic_line` in `memory/context.py` now
-reads the actual `search_semantic_memories` result schema — `ref` as label,
-`object.subject / object.predicate / object.value` as body, top-level
-`confidence` appended when present. The previous implementation read `title`,
-`key`, `text`, `content`, and `summary`, none of which that function emits,
-and fell through to `json.dumps(result)`, injecting digest, trust_status, and
-all governance fields into the prompt. The rule in Task F below is corrected
+Alignment update, 2026-08-15: `_semantic_line` in `memory/context.py` reads
+the `search_semantic_memories` result schema — `ref` as label,
+`object.subject / object.predicate / object.value` as body, and top-level
+`confidence` appended when present, preventing digest, trust_status, and
+governance fields from leaking into the prompt. The rule in Task F below is aligned
 accordingly.
 
 Corrective update, 2026-08-12: agent execution now retrieves memory context
@@ -515,3 +513,33 @@ git diff --check
 
 Frontend commands were validated in the current shell with Node v22.19.0. The
 repo policy remains Node.js 24 LTS `>=24.15.0`.
+
+## Amendment: Summary Persistence, TTL Enforcement, and Optional Embedding (2026-09-28)
+
+### Context
+
+The ADR-0026 audit noted that:
+1. `summarize_session` computed a summary and returned it in-memory, but the SQLite
+   `active_sessions` table lacked a `summary` column, discarding summaries upon restart.
+2. `active_session_ttl_hours` was declared in `MemoryProfile.retention`, but session
+   expiration timestamps were unpopulated and expired sessions were not prevented from
+   accepting new entries.
+3. The `embedding` configuration block was strictly required in the memory profile schema,
+   forcing boilerplate placeholder stubs when vector search was inactive.
+
+### Decision
+
+1. **Persistent Session Summary**:
+   - Added `summary TEXT` column to `active_sessions` in `awf.db.schema` and
+     `_COLUMN_MIGRATIONS` in `awf.db.bootstrap`.
+   - `summarize_session` updates both `status = 'summarized'` and `summary = ?`
+     atomically. `show_session` returns `summary`.
+2. **Deterministic Session TTL Enforcement**:
+   - `start_session` accepts `ttl_hours: int | None = None` and computes RFC3339
+     `expires_at = (now + ttl_hours)`. Voice sessions default to 72 hours.
+   - `show_session` automatically marks sessions `expired` if `now >= expires_at`.
+   - `append_entry` rejects appending entries to expired sessions with `SessionError`.
+3. **Optional Embedding Configuration**:
+   - `embedding` is removed from `required` in `awf.registry.schemas.memory_profiles`.
+   - `parse_memory_profile` defaults omitted embedding blocks to disabled
+     (`enabled=False, model_profile_ref=None, version="none"`).

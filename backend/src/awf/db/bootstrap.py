@@ -11,6 +11,7 @@ from awf.db.schema import DDL_STATEMENTS
 # every `init_db` call; a no-op once the column is already there.
 _COLUMN_MIGRATIONS = [
     ("approvals", "risk_class", "TEXT CHECK (risk_class IS NULL OR risk_class IN ('R0', 'R1', 'R2', 'R3'))"),
+    ("active_sessions", "summary", "TEXT"),
 ]
 
 

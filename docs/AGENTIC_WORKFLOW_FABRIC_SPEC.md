@@ -254,7 +254,7 @@ Every object kind validates through the shared registry loader path and a kind-s
 
 Lookup checks `data/registry/<kind>/<name>/` first. If any version exists there, resolution uses that tree exclusively for that `kind`+`name` — `config/app_registry/` is not read, merged, or blended in for the same name. Only when `data/registry/<kind>/<name>/` has no entry does resolution fall back to `config/app_registry/<kind>/<name>/`. Version selection (`name@version`) proceeds normally within whichever tree resolution lands on.
 
-Both roots are content-addressed: each file's SHA-256 is its digest, computed at publish time. `registry_index` in SQLite (Section 8) is a derived cache spanning both roots, disambiguated by its `source` column; it is rebuilt by rescanning both trees and defers to the files on disk whenever they disagree.
+Both roots are content-addressed: each file's SHA-256 is its digest, computed at publish time. `registry_index` in SQLite (Section 8) is a derived cache spanning both roots, disambiguated by its `source` column; it is rebuilt by rescanning both trees and gives precedence to the files on disk whenever they disagree.
 
 Each `MCP/<name>/<version>.yaml` file is an MCP server definition: it declares how AWF starts or connects to that server (transport, command/args or URL, required environment references), the tools/resources/prompts it exposes (by name, for cross-referencing with Capability Records), and — in `data/registry/` — its trust status. The `provider` field on a Capability Record MUST reference an MCP server name resolvable through the lookup above when the capability type is `mcp-tool`.
 

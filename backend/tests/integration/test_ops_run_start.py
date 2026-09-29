@@ -10,7 +10,14 @@ from backend.tests.support import (
     single_gate_workflow,
 )
 
-from awf.ops.run import _check_command_args, op_run_resume, op_run_start
+from awf.ops.run import (
+    _check_command_args,
+    get_run_thread,
+    op_run_resume,
+    op_run_start,
+    op_run_status,
+    wait_for_run,
+)
 from awf.ops.shared import CoreOpError
 from awf.paths import artifacts_dir
 from awf.pyexec import repo_python_executable
@@ -341,3 +348,57 @@ def test_op_run_start_dispatches_composite_child_node_types(tmp_path):
 
     assert result["status"] == "WAITING_INPUT"
     assert len(conn.execute("SELECT run_id FROM runs WHERE workflow_ref = 'child-ok@1.0.0'").fetchall()) == 3
+
+
+def test_op_run_start_async_execution_success(tmp_path):
+    repo_root, conn = make_git_awf_repo(tmp_path)
+    publish_workflow(repo_root, single_gate_workflow("async-demo", "1.0.0", "sha256:v1"))
+
+    started = op_run_start(repo_root, conn, workflow_ref="async-demo", input_data={}, async_execution=True)
+    assert started["status"] == "RUNNING"
+    assert started["workflow_ref"] == "async-demo@1.0.0"
+    run_id = started["run_id"]
+    assert run_id
+
+    # The background thread was launched and registered
+    assert get_run_thread(run_id) is not None
+
+    # Wait for the background execution to complete
+    completed = wait_for_run(run_id, timeout=10.0)
+    assert completed is True
+
+    # Polling op_run_status reflects terminal success
+    status = op_run_status(conn, run_id=run_id)
+    assert status["status"] == "SUCCEEDED"
+    assert len(status["steps"]) == 1
+    assert status["steps"][0]["status"] == "SUCCEEDED"
+    assert status["outcome"]["status"] == "SUCCEEDED"
+
+
+def test_op_run_start_async_execution_failure(tmp_path):
+    repo_root, conn = make_git_awf_repo(tmp_path)
+    publish_workflow(
+        repo_root,
+        {
+            "apiVersion": "awf/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "async-bad", "version": "1.0.0", "digest": "sha256:bad"},
+            "spec": {
+                "inputSchema": {},
+                "outputSchema": {},
+                "budgets": {},
+                "nodes": [{"id": "fail-node", "type": "activity", "function": "non-existent-activity", "next": None}],
+                "outputs": {},
+            },
+        },
+    )
+
+    started = op_run_start(repo_root, conn, workflow_ref="async-bad", input_data={}, async_execution=True)
+    assert started["status"] == "RUNNING"
+    run_id = started["run_id"]
+
+    completed = wait_for_run(run_id, timeout=10.0)
+    assert completed is True
+
+    status = op_run_status(conn, run_id=run_id)
+    assert status["status"] == "FAILED"

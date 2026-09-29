@@ -106,7 +106,12 @@ def _authorize_completion_call(
         raise GatewayError(f"model completion blocked by Capability Guard: {decision.value}")
 
 
-def _candidate_kwargs(profile: ModelProfile, candidate: Candidate, api_key: str | None) -> dict:
+def _candidate_kwargs(
+    profile: ModelProfile,
+    candidate: Candidate,
+    api_key: str | None,
+    generation: dict | None = None,
+) -> dict:
     kwargs: dict = {
         "model": candidate.litellm_model,
         "messages": None,
@@ -118,6 +123,14 @@ def _candidate_kwargs(profile: ModelProfile, candidate: Candidate, api_key: str 
         kwargs["api_key"] = api_key
     elif candidate.provider == "openai" and _is_loopback_api_base(candidate.api_base):
         kwargs["api_key"] = "local-dev"
+    if generation:
+        for key, value in generation.items():
+            if key == "max_tokens":
+                kwargs["max_tokens"] = min(int(value), profile.limits.max_output_tokens_per_call)
+            elif key in ("temperature", "top_p", "top_k", "stop", "presence_penalty", "frequency_penalty"):
+                kwargs[key] = value
+            elif key == "repeat_penalty":
+                kwargs["frequency_penalty"] = value
     return kwargs
 
 
@@ -125,6 +138,7 @@ def complete(
     profile: ModelProfile,
     messages: list[dict],
     *,
+    generation: dict | None = None,
     conn: sqlite3.Connection | None = None,
     secret_key: bytes | None = None,
     run_id: str | None = None,
@@ -149,7 +163,7 @@ def complete(
             agent_allowlist=agent_allowlist,
         )
         api_key = _resolve_api_key(candidate, conn, secret_key)
-        kwargs = _candidate_kwargs(profile, candidate, api_key)
+        kwargs = _candidate_kwargs(profile, candidate, api_key, generation=generation)
         kwargs["messages"] = messages
 
         try:
@@ -169,6 +183,7 @@ def complete_structured(
     *,
     schema_name: str,
     schema: dict,
+    generation: dict | None = None,
     conn: sqlite3.Connection | None = None,
     secret_key: bytes | None = None,
     run_id: str | None = None,
@@ -193,7 +208,7 @@ def complete_structured(
             agent_allowlist=agent_allowlist,
         )
         api_key = _resolve_api_key(candidate, conn, secret_key)
-        kwargs = _candidate_kwargs(profile, candidate, api_key)
+        kwargs = _candidate_kwargs(profile, candidate, api_key, generation=generation)
         kwargs["messages"] = messages
         kwargs["response_format"] = {
             "type": "json_schema",
@@ -236,6 +251,7 @@ def complete_envelope(
     return complete(
         profile,
         chat.messages,
+        generation=chat.generation,
         conn=conn,
         secret_key=secret_key,
         run_id=run_id,

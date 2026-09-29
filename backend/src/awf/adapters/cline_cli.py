@@ -63,19 +63,36 @@ def invoke(invocation: AgentInvocation) -> AgentResult:
         if invocation.constraints.get(key):
             raise ClineAdapterError("--yolo/--dangerously-skip-permissions MUST NOT be used by AWF's default profile")
     timeout_seconds = invocation.constraints.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
+    is_plan_mode = invocation.constraints.get("mode") == "plan" or invocation.constraints.get("plan_mode") is True
 
     command = [
         "cline",
         invocation.objective,
         "--json",
         "--auto-approve",
-        "true",
+        "false" if is_plan_mode else "true",
         "--cwd",
         str(invocation.workspace_root),
     ]
+    if is_plan_mode:
+        command.append("--plan")
+
     model_override = invocation.constraints.get("model_override")
     if model_override:
         command += ["-m", model_override]
+
+    provider_override = invocation.constraints.get("model_override_provider") or invocation.constraints.get("provider")
+    if provider_override:
+        command += ["-P", provider_override]
+
+    api_key = invocation.constraints.get("api_key")
+    if api_key:
+        command += ["-k", api_key]
+
+    thinking = invocation.constraints.get("thinking")
+    if thinking:
+        command += ["--thinking", str(thinking)]
+
     command += list(invocation.constraints.get("mcp_extra_args", []))
 
     result = run_cli(command, invocation, timeout_seconds=timeout_seconds, run_fn=subprocess.run)

@@ -325,3 +325,84 @@ def test_detect_cuda_info_prefers_usr_local_cuda_over_distro_nvcc(monkeypatch):
 
     monkeypatch.setattr(profiler, "_run_command", fake_run)
     assert detect_cuda_info() == {"cuda_available": True, "cuda_version": "12.4"}
+
+
+def test_gpu_from_linux_sysfs_drm_detection(tmp_path, monkeypatch):
+    import awf.hardware.profiler as profiler
+
+    fake_drm = tmp_path / "drm"
+    card0 = fake_drm / "card0" / "device"
+    card0.mkdir(parents=True)
+    (card0 / "vendor").write_text("0x10de\n", encoding="utf-8")
+
+    orig_path = profiler.Path
+    monkeypatch.setattr(
+        profiler,
+        "Path",
+        lambda p, *a, **k: fake_drm if str(p) == "/sys/class/drm" else orig_path(p, *a, **k),
+    )
+
+    result = profiler._gpu_from_linux_sysfs()
+    assert result is not None
+    assert result["gpu_available"] is True
+    assert result["gpu_vendor"] == "nvidia"
+    assert result["gpu_vram_source"] == "linux-sysfs-drm"
+
+
+def test_gpu_from_linux_sysfs_pci_detection(tmp_path, monkeypatch):
+    import awf.hardware.profiler as profiler
+
+    fake_drm = tmp_path / "empty_drm"
+    fake_drm.mkdir(parents=True)
+    fake_pci = tmp_path / "pci"
+    dev0 = fake_pci / "pci_dev0"
+    dev0.mkdir(parents=True)
+    (dev0 / "class").write_text("0x030000\n", encoding="utf-8")
+    (dev0 / "vendor").write_text("0x1002\n", encoding="utf-8")
+
+    orig_path = profiler.Path
+
+    def fake_path_resolver(p, *a, **k):
+        if str(p) == "/sys/class/drm":
+            return fake_drm
+        if str(p) == "/sys/bus/pci/devices":
+            return fake_pci
+        return orig_path(p, *a, **k)
+
+    monkeypatch.setattr(profiler, "Path", fake_path_resolver)
+
+    result = profiler._gpu_from_linux_sysfs()
+    assert result is not None
+    assert result["gpu_available"] is True
+    assert result["gpu_vendor"] == "amd"
+    assert result["gpu_vram_source"] == "linux-sysfs-pci"
+
+
+def test_gpu_from_linux_sysfs_lspci_fallback(tmp_path, monkeypatch):
+    import awf.hardware.profiler as profiler
+
+    fake_empty = tmp_path / "empty"
+    fake_empty.mkdir(parents=True)
+    orig_path = profiler.Path
+
+    def fake_path_resolver(p, *a, **k):
+        if str(p) in ("/sys/class/drm", "/sys/bus/pci/devices"):
+            return fake_empty
+        return orig_path(p, *a, **k)
+
+    monkeypatch.setattr(profiler, "Path", fake_path_resolver)
+    monkeypatch.setattr(
+        profiler,
+        "_run_command",
+        lambda cmd, **k: (
+            "00:02.0 VGA compatible controller [0300]: Intel Corporation [8086:9a49] (rev 01)"
+            if cmd[0] == "lspci"
+            else ""
+        ),
+    )
+
+    result = profiler._gpu_from_linux_sysfs()
+    assert result is not None
+    assert result["gpu_available"] is True
+    assert result["gpu_vendor"] == "intel"
+    assert result["gpu_vram_source"] == "linux-lspci"

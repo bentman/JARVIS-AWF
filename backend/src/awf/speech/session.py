@@ -90,7 +90,7 @@ class VoiceSession:
 def start_voice_session(
     conn: sqlite3.Connection, *, title: str | None = None, wake_enabled: bool = False
 ) -> VoiceSession:
-    session = start_session(conn, title=title or "Voice session")
+    session = start_session(conn, title=title or "Voice session", ttl_hours=72)
     state: VoiceSessionState = "armed" if wake_enabled else "idle"
     voice_session = VoiceSession(
         voice_session_id=session["session_id"],

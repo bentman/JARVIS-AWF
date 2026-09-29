@@ -546,3 +546,25 @@ backend/src/awf/
 - Voice Profiles describe sound only.
 - The Gateway can be called with an envelope, which is the entry point a
   conversational turn will use.
+
+## Amendment: Runtime Execution Wiring (2026-09-28)
+
+### Context
+
+The ADR-0026 audit noted that while `examples` and `generation` were validated by
+`parse_persona` and compiled into `CompiledPersona.example_messages` and
+`CompiledPersona.generation`, they were omitted from the prompt envelope in
+`activities.py:assistant_reply`, dropped from `render_flat`, and not forwarded to
+underlying model completion calls by `awf.gateway.client.complete`.
+
+### Decision
+
+1. **Envelope Population**: `activities.py:assistant_reply` populates
+   `example_messages=persona.example_messages` and `generation=dict(persona.generation)`
+   into `PromptEnvelope` whenever a persona is active.
+2. **Chat Rendering & Gateway Forwarding**: `render_chat` formats few-shot example dialogues
+   between the system and user messages, and `awf.gateway.client.complete`,
+   `complete_structured`, and `complete_envelope` forward generation parameters
+   (`temperature`, `top_p`, `top_k`, `stop`, `presence_penalty`, `frequency_penalty`,
+   and `max_tokens` clamped by `profile.limits.max_output_tokens_per_call`) to
+   `litellm.completion`.

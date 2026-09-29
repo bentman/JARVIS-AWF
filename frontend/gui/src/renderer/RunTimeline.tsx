@@ -138,7 +138,7 @@ export function RunTimeline({
           </ol>
         </>
       )}
-      {detail.improvements.length > 0 && (
+      {(detail.improvements?.length ?? 0) > 0 && (
         <div>
           <h3>Follow-up proposals</h3>
           <ul className="list">

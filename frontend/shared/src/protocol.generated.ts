@@ -83,15 +83,21 @@ export type MethodName =
   | "awf/llm.servers"
   | "awf/llm.models"
   | "awf/llm.serveStatus"
-  | "awf/events.subscribe";
+  | "awf/events.subscribe"
+  | "awf/intent.classify"
+  | "awf/intent.dispatch";
 
 export abstract class ProtocolGeneratedClient {
   protected abstract runCallTimeoutMs: number;
   protected abstract callTimeoutMs: number;
   protected abstract call<T>(method: MethodName, params?: Record<string, unknown>, timeoutMs?: number): Promise<T>;
 
-  runStart(workflowRef: string, input: Record<string, unknown> = {}): Promise<RunStartResult> {
-    return this.call("awf/run.start", { workflow: workflowRef, input }, this.runCallTimeoutMs);
+  runStart(workflowRef: string, input: Record<string, unknown> = {}, asyncExecution: boolean = false): Promise<RunStartResult> {
+    const params: Record<string, unknown> = { workflow: workflowRef, input };
+    if (asyncExecution) {
+      params.async = true;
+    }
+    return this.call("awf/run.start", params, this.runCallTimeoutMs);
   }
 
   runStatus(runId: string): Promise<RunStatus> {
@@ -341,5 +347,13 @@ export abstract class ProtocolGeneratedClient {
 
   eventsSubscribe(options: { runId?: string; limit?: number } = {}): Promise<EventsSnapshot> {
     return this.call("awf/events.subscribe", options);
+  }
+
+  intentClassify(text: string): Promise<Record<string, unknown>> {
+    return this.call("awf/intent.classify", { text });
+  }
+
+  intentDispatch(text: string, options: { voiceSessionId?: string; turnId?: string; async?: boolean } = {}): Promise<Record<string, unknown>> {
+    return this.call("awf/intent.dispatch", { text, ...options }, this.runCallTimeoutMs);
   }
 }

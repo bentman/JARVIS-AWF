@@ -3,6 +3,7 @@ import { ProtocolGeneratedClient, type MethodName } from "./protocol.generated.j
 import {
   ProtocolError,
   type JsonRpcResponse,
+  type RunStatus,
 } from "./types.js";
 
 /** The single TypeScript protocol client (Section 16.3) - both frontends
@@ -81,6 +82,26 @@ export class ProtocolClient extends ProtocolGeneratedClient {
     });
     this.transport.send(JSON.stringify(request));
     return promise;
+  }
+
+  async pollRunStatus(
+    runId: string,
+    options: { intervalMs?: number; timeoutMs?: number; onUpdate?: (status: RunStatus) => void } = {}
+  ): Promise<RunStatus> {
+    const intervalMs = options.intervalMs ?? 300;
+    const timeoutMs = options.timeoutMs ?? this.runCallTimeoutMs;
+    const startTime = Date.now();
+    const terminalStatuses = new Set(["SUCCEEDED", "FAILED", "CANCELLED", "WAITING_APPROVAL", "WAITING_INPUT"]);
+
+    while (Date.now() - startTime < timeoutMs) {
+      const status = await this.runStatus(runId);
+      options.onUpdate?.(status);
+      if (terminalStatuses.has(status.status)) {
+        return status;
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    throw new Error(`awf pollRunStatus timed out after ${timeoutMs}ms for run ${runId}`);
   }
 
   close(): void {

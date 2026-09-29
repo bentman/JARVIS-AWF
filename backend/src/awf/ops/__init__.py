@@ -33,6 +33,11 @@ from awf.ops.improvement import (
     op_improvement_prepare,
     op_improvement_reject,
     op_improvement_request_merge,
+    op_improvement_verify,
+)
+from awf.ops.intent import (
+    op_intent_classify,
+    op_intent_dispatch,
 )
 from awf.ops.llm import (
     op_llm_acquire,
@@ -67,11 +72,13 @@ from awf.ops.registry import (
 )
 from awf.ops.run import (
     DEFAULT_ASSISTANT_WORKFLOW_REF,
+    get_run_thread,
     op_run_list,
     op_run_outcome,
     op_run_resume,
     op_run_start,
     op_run_status,
+    wait_for_run,
 )
 from awf.ops.shared import CoreOpError
 from awf.ops.system import (
@@ -91,6 +98,7 @@ __all__ = (
     "DEFAULT_ASSISTANT_WORKFLOW_REF",
     "DEFAULT_AUTHOR_PROFILE",
     "CoreOpError",
+    "get_run_thread",
     "op_approval_approve",
     "op_approval_detail",
     "op_approval_list",
@@ -109,6 +117,9 @@ __all__ = (
     "op_improvement_prepare",
     "op_improvement_reject",
     "op_improvement_request_merge",
+    "op_improvement_verify",
+    "op_intent_classify",
+    "op_intent_dispatch",
     "op_llm_acquire",
     "op_llm_models",
     "op_llm_select",
@@ -151,5 +162,6 @@ __all__ = (
     "op_voice_session_start",
     "op_voice_submit_text",
     "op_workflow_author_draft",
+    "wait_for_run",
     "workflow_authoring",
 )

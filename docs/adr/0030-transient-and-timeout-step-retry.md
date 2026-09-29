@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. Implemented Sep 02, 2026. Refines Section 13.3 of
+Implemented Sep 02, 2026. Refines Section 13.3 of
 `docs/AGENTIC_WORKFLOW_FABRIC_SPEC.md` and implements Increment 1 of
 `plans/remaining-gap-remediation.md`.
 

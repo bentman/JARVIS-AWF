@@ -175,3 +175,64 @@ def test_invoke_refuses_yolo_constraint():
 def test_invoke_refuses_dangerously_skip_permissions_constraint():
     with pytest.raises(ClineAdapterError):
         invoke(make_invocation(dangerously_skip_permissions=True))
+
+
+def test_invoke_appends_api_key(monkeypatch):
+    captured = {}
+
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
+        captured["command"] = command
+        return SimpleNamespace(returncode=0, stdout=json.dumps(_run_result_event()), stderr="")
+
+    monkeypatch.setattr("awf.adapters.cline_cli.subprocess.run", fake_run)
+
+    invoke(make_invocation(api_key="secret-cline-key-123"))
+
+    assert "-k" in captured["command"]
+    assert captured["command"][captured["command"].index("-k") + 1] == "secret-cline-key-123"
+
+
+def test_invoke_appends_provider_override(monkeypatch):
+    captured = {}
+
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
+        captured["command"] = command
+        return SimpleNamespace(returncode=0, stdout=json.dumps(_run_result_event()), stderr="")
+
+    monkeypatch.setattr("awf.adapters.cline_cli.subprocess.run", fake_run)
+
+    invoke(make_invocation(model_override_provider="openrouter"))
+
+    assert "-P" in captured["command"]
+    assert captured["command"][captured["command"].index("-P") + 1] == "openrouter"
+
+
+def test_invoke_handles_plan_mode(monkeypatch):
+    captured = {}
+
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
+        captured["command"] = command
+        return SimpleNamespace(returncode=0, stdout=json.dumps(_run_result_event()), stderr="")
+
+    monkeypatch.setattr("awf.adapters.cline_cli.subprocess.run", fake_run)
+
+    invoke(make_invocation(mode="plan"))
+
+    assert "--plan" in captured["command"]
+    assert "--auto-approve" in captured["command"]
+    assert captured["command"][captured["command"].index("--auto-approve") + 1] == "false"
+
+
+def test_invoke_appends_thinking(monkeypatch):
+    captured = {}
+
+    def fake_run(command, cwd, capture_output, text, timeout, stdin, env):
+        captured["command"] = command
+        return SimpleNamespace(returncode=0, stdout=json.dumps(_run_result_event()), stderr="")
+
+    monkeypatch.setattr("awf.adapters.cline_cli.subprocess.run", fake_run)
+
+    invoke(make_invocation(thinking="high"))
+
+    assert "--thinking" in captured["command"]
+    assert captured["command"][captured["command"].index("--thinking") + 1] == "high"

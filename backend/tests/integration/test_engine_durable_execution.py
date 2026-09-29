@@ -57,7 +57,7 @@ def test_scan_incomplete_runs_excludes_terminal_statuses(tmp_path):
 
 
 def test_mid_run_crash_and_resume_no_duplicate_side_effects(tmp_path, repo_root):
-    crash_runner = repo_root / "backend" / "tests" / "scripts" / "test_engine_mid_run_crash_runner.py"
+    crash_runner = repo_root / "backend" / "tests" / "scripts" / "engine_mid_run_crash_runner.py"
     db_path = tmp_path / "awf.db"
     counter_path = tmp_path / "counter.txt"
 

@@ -972,6 +972,19 @@ input.mono, textarea.mono {
   box-shadow: none;
 }
 
+.voice-partial {
+  font-size: 11px;
+  color: var(--color-accent);
+  padding: 4px 8px;
+  background: rgba(0, 191, 255, 0.08);
+  border-radius: var(--radius-sm);
+  border: 1px dashed rgba(0, 191, 255, 0.4);
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* transcript */
 .transcript-panel {
   max-height: 540px;

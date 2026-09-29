@@ -290,3 +290,79 @@ def test_skill_invoke_over_jsonrpc(tmp_path, monkeypatch):
 
     assert response["result"]["ref"] == "demo-skill@1.0.0"
     assert response["result"]["response_text"] == "skill response"
+
+
+def test_run_start_over_jsonrpc_async(tmp_path, monkeypatch):
+    repo_root, conn = make_repo(tmp_path)
+    captured = {}
+
+    def fake_run_start(repo_root, conn, *, workflow_ref, input_data, async_execution=False):
+        captured["workflow_ref"] = workflow_ref
+        captured["input_data"] = input_data
+        captured["async_execution"] = async_execution
+        return {"run_id": "run-async-99", "status": "RUNNING", "workflow_ref": workflow_ref}
+
+    monkeypatch.setattr("awf.ops.run.op_run_start", fake_run_start)
+
+    response = send(
+        repo_root,
+        conn,
+        {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "awf/run.start",
+            "params": {"workflow": "demo@1.0.0", "input": {"x": 1}, "async": True},
+        },
+    )
+
+    assert response["result"]["run_id"] == "run-async-99"
+    assert response["result"]["status"] == "RUNNING"
+    assert captured["async_execution"] is True
+    assert captured["input_data"] == {"x": 1}
+
+
+def test_intent_classify_over_jsonrpc(tmp_path):
+    repo_root, conn = make_repo(tmp_path)
+
+    response = send(
+        repo_root,
+        conn,
+        {
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "awf/intent.classify",
+            "params": {"text": "run demo"},
+        },
+    )
+
+    assert response["id"] == 11
+    assert response["result"]["intent"] == "run_workflow"
+    assert response["result"]["target_ref"] == "demo"
+
+
+def test_intent_dispatch_over_jsonrpc(tmp_path, monkeypatch):
+    repo_root, conn = make_repo(tmp_path)
+
+    def fake_dispatch(repo_root, conn, *, text, voice_session_id=None, turn_id=None, async_execution=False):
+        return {
+            "intent": "run_workflow",
+            "workflow_ref": "demo",
+            "response_text": "Started workflow demo.",
+        }
+
+    monkeypatch.setattr("awf.ops.intent.op_intent_dispatch", fake_dispatch)
+
+    response = send(
+        repo_root,
+        conn,
+        {
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": "awf/intent.dispatch",
+            "params": {"text": "run demo"},
+        },
+    )
+
+    assert response["id"] == 12
+    assert response["result"]["intent"] == "run_workflow"
+    assert response["result"]["response_text"] == "Started workflow demo."

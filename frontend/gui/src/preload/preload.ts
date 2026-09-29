@@ -8,8 +8,11 @@ import { VOICE_CHANNEL, VOICE_SESSION_CHANNELS } from "../main/voicePipeline.js"
  * themselves only call the same ProtocolClient methods the CLI uses, or
  * spawn the same `awf-speech` subprocess described there. */
 contextBridge.exposeInMainWorld("awf", {
-  runStart: (workflowRef: string, input: Record<string, unknown> = {}) =>
-    ipcRenderer.invoke(CHANNELS.runStart, workflowRef, input),
+  runStart: (workflowRef: string, input: Record<string, unknown> = {}, asyncExecution: boolean = false) =>
+    ipcRenderer.invoke(CHANNELS.runStart, workflowRef, input, asyncExecution),
+  intentClassify: (text: string) => ipcRenderer.invoke(CHANNELS.intentClassify, text),
+  intentDispatch: (text: string, options: { voiceSessionId?: string; turnId?: string; async?: boolean } = {}) =>
+    ipcRenderer.invoke(CHANNELS.intentDispatch, text, options),
   controlSummary: () => ipcRenderer.invoke(CHANNELS.controlSummary),
   controlRunDetail: (runId: string) => ipcRenderer.invoke(CHANNELS.controlRunDetail, runId),
   systemReadiness: () => ipcRenderer.invoke(CHANNELS.systemReadiness),
@@ -72,6 +75,8 @@ contextBridge.exposeInMainWorld("awf", {
     ipcRenderer.invoke(VOICE_SESSION_CHANNELS.pushToTalkStop, voiceSessionId, turnId),
   voiceInterrupt: (voiceSessionId: string, turnId?: string) =>
     ipcRenderer.invoke(VOICE_SESSION_CHANNELS.interrupt, voiceSessionId, turnId),
+  voiceEvent: (voiceSessionId: string, frameType: string, payload: Record<string, unknown> = {}, turnId?: string) =>
+    ipcRenderer.invoke(VOICE_SESSION_CHANNELS.event, voiceSessionId, frameType, payload, turnId),
   voiceSubmitText: (
     voiceSessionId: string,
     text: string,

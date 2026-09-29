@@ -29,28 +29,16 @@ AWF adheres to a minimal-infrastructure, single-operator operational model:
 ### 4. In-Database Observability Ledger
 - **Event Stream**: Append-only, SQL-queryable `events` table recording every state transition, policy decision, approval, and verification verdict without external dependencies.
 
-### 5. Governed Self-Improvement (ADR-0021, ADR-0022)
+### 5. Governed Self-Improvement (ADR-0021, ADR-0022, ADR-0032)
 - **Proposal Lifecycle**: Automated branch preparation, diff generation, safety assessments, and operator-consented merges bound to cryptographic action digests.
+- **Autonomous Verification Gate (ADR-0032)**: Deterministic evaluation runner (`backend/src/awf/eval/runner.py`) executing declared verification commands within candidate proposal worktrees, emitting immutable `test-result` artifacts gating branch merges.
 
 ---
 
-## What We Want
-
-### 1. Automated Continuous Integration (`.github/workflows/ci.yml`)
-- **Purpose**: Eliminates manual pre-commit test execution overhead by verifying changes automatically on push and pull request.
-- **Specification**:
-  - `backend` job (Ubuntu, Python 3.12): Installs `backend[dev]`, executes `scripts/validate_backend.py ci` (enforcing protocol parity, CLI argument consistency, Ruff formatting/linting, and regression suites), and archives validation logs.
-  - `frontend` job (Ubuntu, Node 24 LTS): Installs dependencies via `npm ci` and runs `npm test --workspaces --if-present`.
-
-### 2. Autonomous Proposal Verification Gate (`awf.eval.runner`)
-- **Purpose**: Eliminates manual operator testing of self-improvement proposals by automatically executing declared check sets before presenting changes for review.
-- **Specification**:
-  - Deterministic evaluation runner (`backend/src/awf/eval/runner.py`) executing declared verification commands within the candidate proposal worktree.
-  - Generates immutable `test-result` artifact rows in the `artifacts` table.
-  - `awf.improvement.proposals.merge` gates on a valid passing `test-result` artifact before executing a branch merge.
-
-### 3. Static License Attribution (`NOTICE`)
-- **Purpose**: Plaintext copyright and licensing notice file at the repository root covering third-party open-source components (Kokoro-82M, Whisper, Silero VAD, openWakeWord).
+### 6. Automated CI & License Attribution (ADR-0035)
+- **Continuous Integration**: `.github/workflows/ci.yml` verifying backend (`scripts/validate_backend.py ci`) and frontend (`npm test --workspaces`) across Python 3.12 and Node.js 24 LTS on every push/PR.
+- **Static License Attribution**: Plaintext `NOTICE` at root documenting licenses and origins for Kokoro-82M, OpenAI Whisper, Silero VAD, openWakeWord, and LiteLLM.
+- **Security & Dependency Governance**: `SECURITY.md` vulnerability reporting policy and `.github/dependabot.yml` weekly automated monitoring.
 
 ---
 

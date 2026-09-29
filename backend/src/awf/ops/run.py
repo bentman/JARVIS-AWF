@@ -2,9 +2,11 @@
 
 import json
 import sqlite3
+import threading
 from pathlib import Path
 
 from awf.clock import utc_now_rfc3339
+from awf.db.connection import get_connection
 from awf.engine.recovery import reset_interrupted_node_steps, scan_incomplete_runs
 from awf.engine.run import create_run
 from awf.ids import uuid7
@@ -22,6 +24,7 @@ from awf.ops.run_execution import (
 )
 from awf.ops.shared import CoreOpError
 from awf.paths import artifacts_dir
+from awf.paths import db_path as resolve_db_path
 from awf.workflow.io_schema import InputValidationError, validate_input
 
 
@@ -203,19 +206,31 @@ def op_run_outcome(conn: sqlite3.Connection, *, run_id: str) -> dict:
     return _run_outcome_from_parts(run, steps, artifacts, approvals, conn=conn)
 
 
-def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str, input_data: dict) -> dict:
-    workflow = _resolve_workflow(repo_root, workflow_ref, conn=conn)
-    input_data = _adapt_objective_input(input_data, workflow.input_schema)
-    try:
-        validate_input(input_data, workflow.input_schema)
-    except InputValidationError as exc:
-        raise CoreOpError(f"input does not match {workflow.ref}'s inputSchema: {exc}") from exc
+_ACTIVE_RUN_THREADS: dict[str, threading.Thread] = {}
 
-    run_id = uuid7()
-    create_run(conn, run_id=run_id, workflow_ref=workflow.ref, input_json=json.dumps(input_data))
 
-    worktree = create_worktree(repo_root, run_id)
-    run_scratch_dir = create_scratch_dir(repo_root, run_id)
+def get_run_thread(run_id: str) -> threading.Thread | None:
+    return _ACTIVE_RUN_THREADS.get(run_id)
+
+
+def wait_for_run(run_id: str, timeout: float | None = None) -> bool:
+    thread = _ACTIVE_RUN_THREADS.get(run_id)
+    if thread is None:
+        return True
+    thread.join(timeout=timeout)
+    return not thread.is_alive()
+
+
+def _execute_run(
+    repo_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    run_id: str,
+    workflow,
+    input_data: dict,
+    worktree: Path,
+    run_scratch_dir: Path,
+) -> dict:
     node_executors = _build_node_executors(
         workflow, worktree, artifacts_dir(repo_root), repo_root, run_scratch_dir, input_data
     )
@@ -260,6 +275,75 @@ def op_run_start(repo_root: Path, conn: sqlite3.Connection, *, workflow_ref: str
         retain_worktree=retain_worktree,
     )
     return {"run_id": run_id, **result, "outcome": op_run_outcome(conn, run_id=run_id)}
+
+
+def op_run_start(
+    repo_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    workflow_ref: str,
+    input_data: dict,
+    async_execution: bool = False,
+) -> dict:
+    workflow = _resolve_workflow(repo_root, workflow_ref, conn=conn)
+    input_data = _adapt_objective_input(input_data, workflow.input_schema)
+    try:
+        validate_input(input_data, workflow.input_schema)
+    except InputValidationError as exc:
+        raise CoreOpError(f"input does not match {workflow.ref}'s inputSchema: {exc}") from exc
+
+    run_id = uuid7()
+    create_run(conn, run_id=run_id, workflow_ref=workflow.ref, input_json=json.dumps(input_data))
+
+    worktree = create_worktree(repo_root, run_id)
+    run_scratch_dir = create_scratch_dir(repo_root, run_id)
+
+    if async_execution:
+        conn.execute(
+            "UPDATE runs SET status = 'RUNNING', updated_at = ? WHERE run_id = ?",
+            (utc_now_rfc3339(), run_id),
+        )
+        conn.commit()
+
+        def _background_worker() -> None:
+            worker_conn = get_connection(resolve_db_path(repo_root))
+            try:
+                _execute_run(
+                    repo_root,
+                    worker_conn,
+                    run_id=run_id,
+                    workflow=workflow,
+                    input_data=input_data,
+                    worktree=worktree,
+                    run_scratch_dir=run_scratch_dir,
+                )
+            except Exception:
+                try:
+                    worker_conn.execute(
+                        "UPDATE runs SET status = 'FAILED', updated_at = ? WHERE run_id = ?",
+                        (utc_now_rfc3339(), run_id),
+                    )
+                    worker_conn.commit()
+                except Exception:
+                    pass
+            finally:
+                worker_conn.close()
+                _ACTIVE_RUN_THREADS.pop(run_id, None)
+
+        thread = threading.Thread(target=_background_worker, name=f"awf-run-{run_id}", daemon=True)
+        _ACTIVE_RUN_THREADS[run_id] = thread
+        thread.start()
+        return {"run_id": run_id, "status": "RUNNING", "workflow_ref": workflow.ref}
+
+    return _execute_run(
+        repo_root,
+        conn,
+        run_id=run_id,
+        workflow=workflow,
+        input_data=input_data,
+        worktree=worktree,
+        run_scratch_dir=run_scratch_dir,
+    )
 
 
 def op_run_status(conn: sqlite3.Connection, *, run_id: str) -> dict:
@@ -343,9 +427,11 @@ __all__ = (
     "DEFAULT_ASSISTANT_WORKFLOW_REF",
     "_check_command_args",
     "_cleanup_run_workspace",
+    "get_run_thread",
     "op_run_list",
     "op_run_outcome",
     "op_run_resume",
     "op_run_start",
     "op_run_status",
+    "wait_for_run",
 )

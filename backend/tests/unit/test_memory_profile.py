@@ -46,3 +46,12 @@ def test_parse_memory_profile_schema_rejects_missing_retrieval_field():
 
     with pytest.raises(MemoryProfileValidationError, match="minConfidence"):
         parse_memory_profile(raw)
+
+
+def test_parse_memory_profile_accepts_omitted_embedding():
+    raw = valid_profile()
+    del raw["spec"]["embedding"]
+    profile = parse_memory_profile(raw)
+    assert profile.embedding.enabled is False
+    assert profile.embedding.model_profile_ref is None
+    assert profile.embedding.version == "none"

@@ -307,6 +307,9 @@ describe("registerVoiceSessionIpcHandlers", () => {
     await handlers.get(VOICE_SESSION_CHANNELS.interrupt)?.({}, "vs-1", "turn-1");
     expect(client.voiceEvent).toHaveBeenCalledWith("vs-1", "interruption", {}, "turn-1");
 
+    await handlers.get(VOICE_SESSION_CHANNELS.event)?.({}, "vs-1", "tts.done", { detail: "ok" }, "turn-1");
+    expect(client.voiceEvent).toHaveBeenCalledWith("vs-1", "tts.done", { detail: "ok" }, "turn-1");
+
     await handlers.get(VOICE_SESSION_CHANNELS.submitText)?.(
       {},
       "vs-1",

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. Implemented Sep 02, 2026. Aligns Section 10.4 and Section 14 of
+Implemented Sep 02, 2026. Aligns Section 10.4 and Section 14 of
 `docs/AGENTIC_WORKFLOW_FABRIC_SPEC.md` with the single-operator repository contract.
 
 ## Context

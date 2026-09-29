@@ -1,9 +1,12 @@
 import json
+import sys
 from pathlib import Path
 
 import pytest
 from backend.tests.support import run_git
 
+from awf.artifacts import write_artifact
+from awf.clock import utc_now_rfc3339
 from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.engine.run import create_run, create_step
@@ -16,6 +19,7 @@ from awf.ops.improvement import (
     op_improvement_prepare,
     op_improvement_reject,
     op_improvement_request_merge,
+    op_improvement_verify,
 )
 from awf.ops.shared import CoreOpError
 from awf.paths import artifacts_dir
@@ -65,6 +69,28 @@ def _write_verdict(repo_root: Path, conn, run_id: str, *, passed: bool = True) -
         run_id=run_id,
         step_id=f"{run_id}:agent#1",
         verdict=Verdict(passed=passed, tier="default", findings=(), reason="ok" if passed else "failed"),
+    )
+
+
+def _write_test_result(repo_root: Path, conn, run_id: str, candidate_commit: str, *, passed: bool = True) -> str:
+    payload = json.dumps(
+        {
+            "run_id": run_id,
+            "step_id": f"{run_id}:agent#1",
+            "candidate_commit": candidate_commit,
+            "passed": passed,
+            "evaluated_at": utc_now_rfc3339(),
+            "commands": [{"command": ["test"], "exit_code": 0 if passed else 1}],
+        }
+    ).encode("utf-8")
+    return write_artifact(
+        conn,
+        artifacts_root=artifacts_dir(repo_root),
+        run_id=run_id,
+        step_id=f"{run_id}:agent#1",
+        payload=payload,
+        media_type="application/json",
+        artifact_type="test-result",
     )
 
 
@@ -139,6 +165,10 @@ def test_request_merge_creates_step_and_exact_approval(repo_conn):
         validation_artifact_ids=[],
     )
 
+    with pytest.raises(CoreOpError, match="passing test-result artifact"):
+        op_improvement_request_merge(repo_root, conn, improvement_id=ready["improvement_id"])
+
+    _write_test_result(repo_root, conn, run_id, ready["candidate_commit"])
     requested = op_improvement_request_merge(repo_root, conn, improvement_id=ready["improvement_id"])
 
     approval = requested["approval"]
@@ -161,6 +191,7 @@ def test_merge_requires_approved_matching_digest_and_merges(repo_conn):
         verdict_artifact_id=verdict_id,
         validation_artifact_ids=[],
     )
+    _write_test_result(repo_root, conn, run_id, ready["candidate_commit"])
     requested = op_improvement_request_merge(repo_root, conn, improvement_id=ready["improvement_id"])
 
     with pytest.raises(CoreOpError, match="not approved"):
@@ -195,6 +226,7 @@ def test_changed_candidate_invalidates_merge_approval(repo_conn):
         verdict_artifact_id=verdict_id,
         validation_artifact_ids=[],
     )
+    _write_test_result(repo_root, conn, run_id, ready["candidate_commit"])
     requested = op_improvement_request_merge(repo_root, conn, improvement_id=ready["improvement_id"])
     conn.execute(
         "UPDATE approvals SET status = 'approved' WHERE approval_id = ?",
@@ -210,6 +242,35 @@ def test_changed_candidate_invalidates_merge_approval(repo_conn):
         op_improvement_merge(
             repo_root, conn, improvement_id=ready["improvement_id"], approval_id=requested["approval"]["approval_id"]
         )
+
+
+def test_verify_proposal_runs_evaluation_and_allows_merge(repo_conn):
+    repo_root, conn = repo_conn
+    run_id = _seed_successful_candidate(repo_root, conn)
+    proposal = op_improvement_prepare(repo_root, conn, run_id=run_id)
+    verdict_id = _write_verdict(repo_root, conn, run_id)
+    ready = op_improvement_mark_ready(
+        repo_root,
+        conn,
+        improvement_id=proposal["improvement_id"],
+        verdict_artifact_id=verdict_id,
+        validation_artifact_ids=[],
+    )
+
+    with pytest.raises(CoreOpError, match="passing test-result artifact"):
+        op_improvement_request_merge(repo_root, conn, improvement_id=ready["improvement_id"])
+
+    res = op_improvement_verify(
+        repo_root,
+        conn,
+        improvement_id=ready["improvement_id"],
+        commands=[[sys.executable, "-c", "print('evaluation OK')"]],
+    )
+    assert res["passed"] is True
+    assert res["artifact_id"]
+
+    requested = op_improvement_request_merge(repo_root, conn, improvement_id=ready["improvement_id"])
+    assert requested["approval"]["status"] == "pending"
 
 
 def test_reject_closes_without_merging(repo_conn):

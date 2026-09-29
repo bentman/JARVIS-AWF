@@ -67,6 +67,7 @@ def _assistant_reply(conn: sqlite3.Connection, args: dict) -> dict:
             "Answer the operator directly and concisely as the AWF resident mind.",
         )
     ]
+    persona = None
     persona_ref = args.get("personaRef")
     if isinstance(persona_ref, str) and persona_ref.strip():
         persona_name, _, persona_version = persona_ref.partition("@")
@@ -92,11 +93,17 @@ def _assistant_reply(conn: sqlite3.Connection, args: dict) -> dict:
     except Exception:
         pass
     segments.append(PromptSegment("user", "input", False, objective))
-    envelope = PromptEnvelope(segments=tuple(segments))
+    envelope = PromptEnvelope(
+        segments=tuple(segments),
+        example_messages=persona.example_messages if persona is not None else (),
+        generation=dict(persona.generation) if persona is not None else {},
+    )
+    chat = render_chat(envelope)
     return {
         "response_text": complete(
             profile,
-            render_chat(envelope).messages,
+            chat.messages,
+            generation=chat.generation,
             conn=conn,
             run_id=run_id,
             step_id=step_id,

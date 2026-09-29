@@ -47,9 +47,6 @@ class WorkflowDefinition:
                 return node
         raise WorkflowValidationError(f"no node with id '{node_id}'")
 
-    def retry_policy_for_node(self, node: dict) -> "NodeRetryPolicy":
-        return resolve_retry_policy(self, node)
-
 
 DEFAULT_RETRY_CLASSES = ("TRANSIENT", "TIMEOUT")
 

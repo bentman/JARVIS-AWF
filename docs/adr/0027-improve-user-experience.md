@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. Implemented and validated (Aug 30, 2026).
+Implemented and validated (Aug 30, 2026).
 
 This record treats the AWF operator as the primary customer for the product. The
 user is not a developer reading JSON or a database row; they are a person who

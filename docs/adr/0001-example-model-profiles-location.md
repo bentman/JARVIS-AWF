@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Implemented. Acceptance run: `pytest backend/tests/integration/test_gateway_model.py backend/tests/integration/test_registry_agent_manifest_wiring.py backend/tests/integration/test_engine_agent_step_model_profile.py -q` -> 35 passed; all 7 shipped model profile configurations in `config/app_registry/model-profiles/` load cleanly and resolve through `MODEL_PROFILES`.
+
 
 ## Context
 

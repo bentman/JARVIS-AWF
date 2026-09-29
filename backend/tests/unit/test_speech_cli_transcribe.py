@@ -1,7 +1,9 @@
 import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import awf.speech.cli as speech_cli
+from awf.speech import stt_whisper
 
 
 def test_transcribe_resolves_readiness_and_prints_json(tmp_path, repo_root, monkeypatch, capsys):
@@ -89,3 +91,24 @@ def test_transcribe_returns_error_when_runtime_fails(tmp_path, repo_root, monkey
     assert exit_code == 1
     result = json.loads(capsys.readouterr().out)
     assert result == {"error": "STT failed: missing model"}
+
+
+def test_faster_whisper_transcribe_uses_local_files_only(tmp_path, monkeypatch):
+    seen = {}
+
+    class FakeWhisperModel:
+        def __init__(self, *args, **kwargs):
+            seen["init"] = {"args": args, "kwargs": kwargs}
+
+        def transcribe(self, audio_path):
+            seen["audio_path"] = audio_path
+            info = SimpleNamespace(language="en", language_probability=1.0)
+            segment = SimpleNamespace(text="Hello world.")
+            return [segment], info
+
+    monkeypatch.setitem(__import__("sys").modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
+
+    result = stt_whisper.transcribe(tmp_path / "clip.wav", download_root=tmp_path / "models")
+
+    assert result["text"] == "Hello world."
+    assert seen["init"]["kwargs"]["local_files_only"] is True

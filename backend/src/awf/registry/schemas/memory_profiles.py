@@ -19,7 +19,7 @@ SCHEMA = {
         },
         "spec": {
             "type": "object",
-            "required": ["enabled", "maximum_data_class", "retrieval", "retention", "embedding"],
+            "required": ["enabled", "maximum_data_class", "retrieval", "retention"],
             "properties": {
                 "enabled": {"type": "boolean"},
                 "maximum_data_class": {"enum": list(DATA_CLASSES)},

@@ -139,6 +139,21 @@ describe("dispatchCommand", () => {
     });
   });
 
+  it("routes plain assistant input through intentDispatch when provided", async () => {
+    const intentDispatch = vi.fn().mockResolvedValue({
+      intent: "run_workflow",
+      response_text: "Started workflow demo@1.0.0.",
+    });
+    const client = makeFakeClient({ intentDispatch });
+    const result = await dispatchAssistantInput(client, "run demo", DEFAULT_ASSISTANT_WORKFLOW_REF);
+
+    expect(intentDispatch).toHaveBeenCalledWith("run demo");
+    expect(result.kind).toBe("text");
+    if (result.kind === "text") {
+      expect(result.text).toBe("Started workflow demo@1.0.0.");
+    }
+  });
+
   it("/run without an argument raises CommandError", async () => {
     const client = makeFakeClient();
     await expect(dispatchCommand(client, "/run", DEFAULT_SETTINGS)).rejects.toBeInstanceOf(CommandError);

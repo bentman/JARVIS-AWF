@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. Implemented Aug 30, 2026. Supersedes Sections 16.1 and 16.2 of
+Implemented Aug 30, 2026. Supersedes Sections 16.1 and 16.2 of
 `docs/AGENTIC_WORKFLOW_FABRIC_SPEC.md` on the shape of the operator surface.
 
 ## Context

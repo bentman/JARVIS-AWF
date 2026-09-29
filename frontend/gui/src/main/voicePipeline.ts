@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ProtocolClient } from "@awf/protocol-client";
+import type { ProtocolClient, VoiceFrameType } from "@awf/protocol-client";
 import type { IpcMainLike } from "./ipc.js";
 
 export const VOICE_CHANNEL = "awf:voiceRoundTrip";
@@ -15,6 +15,7 @@ export const VOICE_SESSION_CHANNELS = {
   submitText: "awf:voiceSubmitText",
   speakText: "awf:voiceSpeakText",
   transcribe: "awf:voiceTranscribe",
+  event: "awf:voiceSessionEvent",
 } as const;
 
 export interface VoiceRoundTripResult {
@@ -183,6 +184,14 @@ export function registerVoiceSessionIpcHandlers(ipcMain: IpcMainLike, client: Pr
   );
   ipcMain.handle(VOICE_SESSION_CHANNELS.interrupt, (_event, voiceSessionId, turnId) =>
     client.voiceEvent(voiceSessionId as string, "interruption", {}, turnId as string | undefined),
+  );
+  ipcMain.handle(VOICE_SESSION_CHANNELS.event, (_event, voiceSessionId, frameType, payload, turnId) =>
+    client.voiceEvent(
+      voiceSessionId as string,
+      frameType as VoiceFrameType,
+      (payload as Record<string, unknown>) || {},
+      turnId as string | undefined,
+    ),
   );
   ipcMain.handle(VOICE_SESSION_CHANNELS.submitText, (_event, voiceSessionId, text, workflowRef, voiceProfileRef, turnId) =>
     client.voiceSubmitText({

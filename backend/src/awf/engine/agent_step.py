@@ -673,6 +673,8 @@ def _apply_model_profile(
     constraints = dict(invocation.constraints)
     constraints["model_override"] = winner.model
     constraints["model_override_provider"] = winner.provider
+    if winner.api_key_secret_name:
+        constraints["api_key_secret_name"] = winner.api_key_secret_name
     return AgentInvocation(
         objective=invocation.objective,
         inputs=invocation.inputs,

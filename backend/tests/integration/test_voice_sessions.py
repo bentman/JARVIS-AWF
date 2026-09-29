@@ -169,6 +169,13 @@ def test_voice_submit_text_defaults_to_assistant_workflow(tmp_path, monkeypatch)
     assert captured["input_data"]["objective"] == "hello"
     assert result["response_text"] == "default response"
 
+    # When assistant-default@1.0.0 is explicitly passed with a run command:
+    sid2 = op_voice_session_start(conn)["voice_session_id"]
+    op_voice_submit_text(
+        repo_root, conn, voice_session_id=sid2, text="run demo@1.0.0", workflow_ref="assistant-default@1.0.0"
+    )
+    assert captured["workflow_ref"] == "demo@1.0.0"
+
 
 def test_voice_json_rpc_methods_dispatch(tmp_path):
     repo_root, conn = make_git_awf_repo(tmp_path)

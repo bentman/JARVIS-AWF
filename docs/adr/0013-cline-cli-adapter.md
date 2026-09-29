@@ -239,21 +239,11 @@ Met and independently verified (2026-08-08):
 
 ## Open decisions
 
-- **Cline API-key / provider auth for headless runs.** AWF's model
-  profile wiring (`agent_step._apply_model_profile`) sets
-  `model_override`/`model_override_provider` but does not currently
-  inject a `api_key_secret_name` into the adapter subprocess env. For a
-  Cline-backed manifest that needs a key, `-k <key>` should be sourced
-  from the encrypted secret store (ADR-0005) and passed as a
-  `constraints["api_key"]` consumed by the adapter — same surface the
-  `api_key_secret_name` candidate field already names. Deferred until a
-  Cline-backed workflow actually needs headless auth.
-- **Provider-id reconciliation.** Cline's `-P` ids
-  (`cline`, `openai`, `anthropic`, `openai-codex`, `openrouter`, `google`,
-  …) differ from AWF's LiteLLM-style profile `provider` values
-  (`llamafile`, `ollama`, `openai`, …). This record deliberately follows
-  the three ignore-provider adapters and does not map them; a future ADR
-  (ADR-0005 follow-up) can decide whether Cline gets a `provider` flag.
+- **Cline API-key / provider auth for headless runs.** Implemented: when an
+  invocation specifies `constraints["api_key"]` or `constraints["model_override_provider"]`
+  / `constraints["provider"]`, the adapter passes `-k <key>` and `-P <provider>`
+  directly to the Cline CLI subprocess. When omitted, the adapter executes against
+  the operator profile's connected OAuth session and free-tier models in `~/.cline`.
 - **Cline's non-interceptable network tools.** Per the spec's Section 10.3
   caveat ("A CLI adapter that cannot intercept its agent's built-in
   network tools ... must run with sandbox network egress disabled and is

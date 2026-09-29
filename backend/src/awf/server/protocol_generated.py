@@ -64,6 +64,8 @@ _HANDLER_PATHS = {
     "_handler_54": "awf.ops.llm.op_llm_models",
     "_handler_55": "awf.ops.llm.op_llm_serve",
     "_handler_56": "awf.ops.control.op_events_snapshot",
+    "_handler_57": "awf.ops.intent.op_intent_classify",
+    "_handler_58": "awf.ops.intent.op_intent_dispatch",
 }
 
 
@@ -75,7 +77,11 @@ def _resolve_handler(alias):
 
 def _call_0(repo_root, conn, params):
     return _resolve_handler("_handler_0")(
-        repo_root, conn, workflow_ref=params["workflow"], input_data=params.get("input", {})
+        repo_root,
+        conn,
+        workflow_ref=params["workflow"],
+        input_data=params.get("input", {}),
+        async_execution=bool(params.get("async", False)),
     )
 
 
@@ -367,6 +373,21 @@ def _call_56(repo_root, conn, params):
     return _resolve_handler("_handler_56")(conn, run_id=params.get("runId"), limit=int(params.get("limit", 100)))
 
 
+def _call_57(repo_root, conn, params):
+    return _resolve_handler("_handler_57")(repo_root, conn, text=params["text"])
+
+
+def _call_58(repo_root, conn, params):
+    return _resolve_handler("_handler_58")(
+        repo_root,
+        conn,
+        text=params["text"],
+        voice_session_id=params.get("voiceSessionId"),
+        turn_id=params.get("turnId"),
+        async_execution=bool(params.get("async", False)),
+    )
+
+
 METHOD_NAMES = (
     "awf/run.start",
     "awf/run.status",
@@ -425,6 +446,8 @@ METHOD_NAMES = (
     "awf/llm.models",
     "awf/llm.serveStatus",
     "awf/events.subscribe",
+    "awf/intent.classify",
+    "awf/intent.dispatch",
 )
 
 DISPATCH_TABLE = {
@@ -485,4 +508,6 @@ DISPATCH_TABLE = {
     "awf/llm.models": _call_54,
     "awf/llm.serveStatus": _call_55,
     "awf/events.subscribe": _call_56,
+    "awf/intent.classify": _call_57,
+    "awf/intent.dispatch": _call_58,
 }

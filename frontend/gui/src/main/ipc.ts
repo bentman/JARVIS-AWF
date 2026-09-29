@@ -43,6 +43,8 @@ export const CHANNELS = {
   memoryPublish: "awf:memoryPublish",
   memoryReject: "awf:memoryReject",
   memoryBlock: "awf:memoryBlock",
+  intentClassify: "awf:intentClassify",
+  intentDispatch: "awf:intentDispatch",
 } as const;
 
 /** Registers IPC handlers that delegate to the same ProtocolClient the CLI
@@ -50,8 +52,24 @@ export const CHANNELS = {
  * gets direct access to the client or to Node - only these narrow, typed
  * channels via the preload's contextBridge. */
 export function registerIpcHandlers(ipcMain: IpcMainLike, client: ProtocolClient): void {
-  ipcMain.handle(CHANNELS.runStart, (_event, workflowRef, input) =>
-    client.runStart(workflowRef as string, (input as Record<string, unknown> | undefined) ?? {}),
+  ipcMain.handle(CHANNELS.runStart, (_event, workflowRef, input, asyncExecution) =>
+    asyncExecution !== undefined
+      ? client.runStart(
+          workflowRef as string,
+          (input as Record<string, unknown> | undefined) ?? {},
+          Boolean(asyncExecution),
+        )
+      : client.runStart(
+          workflowRef as string,
+          (input as Record<string, unknown> | undefined) ?? {},
+        ),
+  );
+  ipcMain.handle(CHANNELS.intentClassify, (_event, text) => client.intentClassify(text as string));
+  ipcMain.handle(CHANNELS.intentDispatch, (_event, text, options) =>
+    client.intentDispatch(
+      text as string,
+      (options as { voiceSessionId?: string; turnId?: string; async?: boolean } | undefined) ?? {},
+    ),
   );
   ipcMain.handle(CHANNELS.controlSummary, () => client.controlSummary());
   ipcMain.handle(CHANNELS.controlRunDetail, (_event, runId) => client.controlRunDetail(runId as string));

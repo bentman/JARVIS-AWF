@@ -38,6 +38,12 @@ export interface VoiceSessionFns {
   onVoicePushToTalkStart?: (voiceSessionId: string, turnId: string) => Promise<VoiceSessionResult>;
   onVoicePushToTalkStop?: (voiceSessionId: string, turnId: string) => Promise<VoiceSessionResult>;
   onVoiceInterrupt?: (voiceSessionId: string, turnId: string) => Promise<VoiceSessionResult>;
+  onVoiceEvent?: (
+    voiceSessionId: string,
+    frameType: string,
+    payload?: Record<string, unknown>,
+    turnId?: string,
+  ) => Promise<VoiceSessionResult>;
   onVoiceSubmitText?: (
     voiceSessionId: string,
     text: string,
@@ -71,7 +77,9 @@ export interface AppProps extends VoiceSessionFns {
   onApprove: (approvalId: string) => void;
   onReject: (approvalId: string, reason: string) => void;
   onTextSubmit?: (text: string, workflowRef: string) => Promise<TextSubmitResult>;
-  onRunStart?: (workflowRef: string, input?: Record<string, unknown>) => Promise<TextSubmitResult>;
+  onRunStart?: (workflowRef: string, input?: Record<string, unknown>, asyncExecution?: boolean) => Promise<TextSubmitResult>;
+  onIntentDispatch?: (text: string, options?: { voiceSessionId?: string; turnId?: string; async?: boolean }) => Promise<Record<string, unknown>>;
+  onIntentClassify?: (text: string) => Promise<Record<string, unknown>>;
   onRunList?: () => Promise<RunSummary[]>;
   onApprovalList?: () => Promise<ApprovalSummary[]>;
   onApprovalDetail?: (approvalId: string) => Promise<{ approval: ApprovalSummary; preview?: PendingApproval["preview"] }>;
@@ -127,10 +135,13 @@ export function App({
   onReject,
   onTextSubmit,
   onRunStart,
+  onIntentDispatch,
+  onIntentClassify,
   onVoiceSessionStart,
   onVoicePushToTalkStart,
   onVoicePushToTalkStop,
   onVoiceInterrupt,
+  onVoiceEvent,
   onVoiceSubmitText,
   onVoiceSpeakText,
   onRunList,
@@ -162,6 +173,7 @@ export function App({
   const [entries, setEntries] = useState<TranscriptEntry[]>(initialTranscript);
   const nextId = useRef(initialTranscript.length);
   const voiceRef = useRef<VoiceActivationHandle | null>(null);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [approvals, setApprovals] = useState<ApprovalSummary[]>([]);
   const [improvements, setImprovements] = useState<ImprovementSummary[]>([]);
@@ -209,9 +221,50 @@ export function App({
     return inFlight;
   };
 
+  const activePollingRunId = useRef<string | null>(null);
+
+  const pollRunProgress = (runId: string, onComplete?: (detail: ControlRunDetail) => void) => {
+    activePollingRunId.current = runId;
+    const pollInterval = 400;
+    const poll = async () => {
+      if (activePollingRunId.current !== runId) return;
+      try {
+        if (onControlRunDetail) {
+          const detail = await onControlRunDetail(runId);
+          if (activePollingRunId.current === runId) {
+            setSelectedRunDetail(detail);
+            const status = detail.run?.status;
+            if (status && status !== "RUNNING") {
+              activePollingRunId.current = null;
+              void refresh();
+              onComplete?.(detail);
+              return;
+            }
+          }
+        }
+      } catch {
+        // Polling retry
+      }
+      if (activePollingRunId.current === runId) {
+        setTimeout(poll, pollInterval);
+      }
+    };
+    setTimeout(poll, pollInterval);
+  };
+
+  useEffect(() => {
+    return () => {
+      activePollingRunId.current = null;
+    };
+  }, []);
+
   const handleRunDetail = async (runId: string) => {
     if (!onControlRunDetail) return;
-    setSelectedRunDetail(await onControlRunDetail(runId));
+    const detail = await onControlRunDetail(runId);
+    setSelectedRunDetail(detail);
+    if (detail.run?.status === "RUNNING" && activePollingRunId.current !== runId) {
+      pollRunProgress(runId);
+    }
   };
 
   const handleStartWorkflow = async (workflowRef: string, input: Record<string, unknown>) => {
@@ -220,7 +273,12 @@ export function App({
       ? await onRunStart(workflowRef, input)
       : await onTextSubmit!(typeof input.objective === "string" ? input.objective : "", workflowRef);
     await refresh();
-    if (result.run_id) void handleRunDetail(result.run_id).catch(() => undefined);
+    if (result.run_id) {
+      void handleRunDetail(result.run_id).catch(() => undefined);
+      if (result.status === "RUNNING") {
+        pollRunProgress(result.run_id);
+      }
+    }
     return { run_id: result.run_id, status: result.status };
   };
 
@@ -259,6 +317,30 @@ export function App({
       .catch(() => undefined);
   }, [onRegistryList]);
 
+  const handleVoicePushToTalkStart = async (voiceSessionId: string, turnId: string) => {
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current.currentTime = 0;
+      activeAudioRef.current = null;
+    }
+    if (onVoicePushToTalkStart) {
+      return onVoicePushToTalkStart(voiceSessionId, turnId);
+    }
+    throw new Error("voice push to talk is not available");
+  };
+
+  const handleVoiceInterrupt = async (voiceSessionId: string, turnId: string) => {
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current.currentTime = 0;
+      activeAudioRef.current = null;
+    }
+    if (onVoiceInterrupt) {
+      return onVoiceInterrupt(voiceSessionId, turnId);
+    }
+    throw new Error("voice interrupt is not available");
+  };
+
   const handleVoiceSubmit = async (
     voiceSessionId: string,
     text: string,
@@ -283,7 +365,19 @@ export function App({
         result.voice?.voice_id,
       );
       if (typeof Audio !== "undefined") {
-        void new Audio(spoken.response_audio_path).play().catch(() => undefined);
+        if (activeAudioRef.current) {
+          activeAudioRef.current.pause();
+          activeAudioRef.current = null;
+        }
+        const audio = new Audio(spoken.response_audio_path);
+        activeAudioRef.current = audio;
+        audio.onended = () => {
+          activeAudioRef.current = null;
+          if (onVoiceEvent) {
+            void onVoiceEvent(voiceSessionId, "tts.done", {}, turnId).catch(() => undefined);
+          }
+        };
+        void audio.play().catch(() => undefined);
       }
     }
     if (result.run?.run_id) {
@@ -294,16 +388,60 @@ export function App({
 
   const handleComposerSend = async (text: string) => {
     setChatSubmitError(null);
-    if (!onTextSubmit) {
+    if (!onTextSubmit && !onIntentDispatch) {
       setEntries((prev) => [...prev, { id: nextId.current++, speaker: "Operator", text }]);
       return;
     }
-    if (!chatWorkflowRef.trim()) {
+    if (!chatWorkflowRef.trim() && !onIntentDispatch) {
       setChatSubmitError("Set a workflow before sending typed chat.");
       return false;
     }
     setChatSubmitting(true);
     try {
+      if ((chatWorkflowRef.trim() === DEFAULT_CHAT_WORKFLOW_REF || !chatWorkflowRef.trim()) && onIntentDispatch) {
+        const dispatchResult = await onIntentDispatch(text, { async: true });
+        const responseText = String(dispatchResult.response_text ?? "");
+        const runId = dispatchResult.run_id as string | undefined;
+        const status = String(dispatchResult.status ?? "");
+        const outcome = dispatchResult.outcome as { next_action?: string } | undefined;
+        const nextAction = outcome?.next_action ? ` Next: ${outcome.next_action}` : "";
+        const runSuffix = runId && !responseText.includes(runId) ? ` (run ${runId})` : "";
+        setEntries((prev) => [
+          ...prev,
+          { id: nextId.current++, speaker: "Operator", text },
+          {
+            id: nextId.current++,
+            speaker: "AWF",
+            text: `${responseText || "Request processed."}${runSuffix}.${nextAction}`,
+          },
+        ]);
+        void refresh();
+        if (runId) {
+          void handleRunDetail(runId).catch(() => undefined);
+          if (status === "RUNNING") {
+            pollRunProgress(runId, (finalDetail) => {
+              const runOutcome = finalDetail.outcome;
+              const completedText =
+                runOutcome?.response_text ??
+                `Workflow ${finalDetail.run?.workflow_ref ?? runId} finished with status ${finalDetail.run?.status}.`;
+              const next = runOutcome?.next_action ? ` Next: ${runOutcome.next_action}` : "";
+              setEntries((prev) => [
+                ...prev,
+                {
+                  id: nextId.current++,
+                  speaker: "AWF",
+                  text: `${completedText}${next}`,
+                },
+              ]);
+            });
+          }
+        }
+        return;
+      }
+      if (!onTextSubmit) {
+        setChatSubmitError("Text submit handler is not available.");
+        return false;
+      }
       const result = await onTextSubmit(text, chatWorkflowRef.trim());
       const responseText =
         result.outputs?.response_text ??
@@ -322,7 +460,26 @@ export function App({
         },
       ]);
       void refresh();
-      void handleRunDetail(result.run_id).catch(() => undefined);
+      if (result.run_id) {
+        void handleRunDetail(result.run_id).catch(() => undefined);
+        if (result.status === "RUNNING") {
+          pollRunProgress(result.run_id, (finalDetail) => {
+            const runOutcome = finalDetail.outcome;
+            const completedText =
+              runOutcome?.response_text ??
+              `Workflow ${finalDetail.run?.workflow_ref ?? result.run_id} finished with status ${finalDetail.run?.status}.`;
+            const next = runOutcome?.next_action ? ` Next: ${runOutcome.next_action}` : "";
+            setEntries((prev) => [
+              ...prev,
+              {
+                id: nextId.current++,
+                speaker: "AWF",
+                text: `${completedText}${next}`,
+              },
+            ]);
+          });
+        }
+      }
     } catch (err) {
       setChatSubmitError((err as Error).message);
       return false;
@@ -456,9 +613,10 @@ export function App({
                     defaultWorkflowRef={chatWorkflowRef || DEFAULT_CHAT_WORKFLOW_REF}
                     workflowOptions={workflowOptions}
                     onSessionStart={onVoiceSessionStart!}
-                    onPushToTalkStart={onVoicePushToTalkStart!}
+                    onPushToTalkStart={handleVoicePushToTalkStart}
                     onPushToTalkStop={onVoicePushToTalkStop!}
-                    onInterrupt={onVoiceInterrupt!}
+                    onInterrupt={handleVoiceInterrupt}
+                    onVoiceEvent={onVoiceEvent}
                     onSubmitText={handleVoiceSubmit}
                   />
                 )}

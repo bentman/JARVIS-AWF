@@ -72,6 +72,22 @@ def op_improvement_reject(
         raise CoreOpError(str(exc)) from exc
 
 
+def op_improvement_verify(
+    repo_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    improvement_id: str,
+    commands: list[list[str]] | None = None,
+    timeout_seconds: float = 300.0,
+) -> dict:
+    try:
+        return improvement_proposals.verify(
+            repo_root, conn, improvement_id=improvement_id, commands=commands, timeout_seconds=timeout_seconds
+        )
+    except improvement_proposals.ImprovementProposalError as exc:
+        raise CoreOpError(str(exc)) from exc
+
+
 __all__ = (
     "op_improvement_get",
     "op_improvement_list",
@@ -80,4 +96,5 @@ __all__ = (
     "op_improvement_prepare",
     "op_improvement_reject",
     "op_improvement_request_merge",
+    "op_improvement_verify",
 )

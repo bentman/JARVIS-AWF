@@ -438,7 +438,12 @@ def cmd_run(args: argparse.Namespace, repo_root: Path, conn) -> int:
     input_data = {"objective": args.objective} if args.objective else {}
     if args.input:
         input_data = json.loads(Path(args.input).read_text())
-    result = ops.op_run_start(repo_root, conn, workflow_ref=args.workflow, input_data=input_data)
+    async_execution = bool(getattr(args, "async_run", False))
+    kwargs = {"async_execution": True} if async_execution else {}
+    result = ops.op_run_start(repo_root, conn, workflow_ref=args.workflow, input_data=input_data, **kwargs)
+    if async_execution:
+        _print_or_json(args, result, f"Started workflow {args.workflow} asynchronously (run_id: {result['run_id']}).")
+        return 0
     _print_or_json(args, result, _format_outcome(_outcome_from_result(result)))
     return 0 if result.get("status") == "SUCCEEDED" else 1
 
@@ -540,6 +545,11 @@ def cmd_improvement_request_merge(args: argparse.Namespace, repo_root: Path, con
 
 def cmd_improvement_merge(args: argparse.Namespace, repo_root: Path, conn) -> int:
     _print(ops.op_improvement_merge(repo_root, conn, improvement_id=args.improvement_id, approval_id=args.approval_id))
+    return 0
+
+
+def cmd_improvement_verify(args: argparse.Namespace, repo_root: Path, conn) -> int:
+    _print(ops.op_improvement_verify(repo_root, conn, improvement_id=args.improvement_id))
     return 0
 
 
@@ -780,6 +790,7 @@ CLI_HELP = {
     ("review", "mark-ready"): "Mark a proposed change ready for review",
     ("review", "request-merge"): "Request merge approval for a change",
     ("review", "merge"): "Merge an approved change",
+    ("review", "verify"): "Run evaluation suites on a proposed change",
     ("review", "draft"): "Draft a new workflow from an objective",
     ("review", "update"): "Replace a draft's definition file",
     ("review", "publish"): "Publish a draft into the registry",
@@ -837,6 +848,7 @@ CLI_COMMAND_SPECS = (
             {"flags": ("workflow",)},
             {"flags": ("--input",), "default": None, "group": "input"},
             {"flags": ("--objective",), "default": None, "group": "input"},
+            {"flags": ("--async",), "action": "store_true", "dest": "async_run"},
             {"flags": ("--json",), "action": "store_true"},
         ),
     },
@@ -896,6 +908,11 @@ CLI_COMMAND_SPECS = (
         "path": ("review", "merge"),
         "func": cmd_improvement_merge,
         "args": ({"flags": ("improvement_id",)}, {"flags": ("approval_id",)}),
+    },
+    {
+        "path": ("review", "verify"),
+        "func": cmd_improvement_verify,
+        "args": ({"flags": ("improvement_id",)},),
     },
     {
         "path": ("registry", "validate"),
@@ -1025,6 +1042,7 @@ CLI_COMMAND_SPECS = (
 # Argument names carry the same meaning everywhere they appear, so their help
 # text is written once here rather than repeated per command.
 ARG_HELP = {
+    "--async": "Run the workflow asynchronously in the background and return immediately",
     "--json": "Print the raw JSON payload instead of the operator summary",
     "--objective": "Plain-language objective for the run",
     "--input": "Path to a JSON file matching the workflow's inputSchema",

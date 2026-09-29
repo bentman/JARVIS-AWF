@@ -302,4 +302,108 @@ describe("App first page (chat + voice, ADR-0025)", () => {
     expect(onTextSubmit).not.toHaveBeenCalled();
     expect(message.value).toBe("typed work");
   });
+
+  it("routes typed chat through onIntentDispatch when present on the default workflow", async () => {
+    const onIntentDispatch = vi.fn().mockResolvedValue({
+      intent: "propose_memory",
+      response_text: "Recorded memory proposal for staging IP.",
+    });
+    const onControlSummary = vi.fn().mockResolvedValue({
+      runs: [],
+      approvals: [],
+      improvements: [],
+      recent_verdicts: [],
+      registry_counts: {},
+      llm: {},
+      readiness: { profile_id: "linux-x64-cpu", inventory: null, tokens: [], readiness: {} },
+    });
+
+    render(
+      <App
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+        onIntentDispatch={onIntentDispatch}
+        onControlSummary={onControlSummary}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Chat" }));
+    const message = screen.getByRole("textbox", { name: "Message" });
+    fireEvent.change(message, { target: { value: "remember staging server is 10.0.0.1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onIntentDispatch).toHaveBeenCalledWith("remember staging server is 10.0.0.1", { async: true }));
+    expect(await screen.findByText(/Recorded memory proposal for staging IP\./)).toBeTruthy();
+  });
+
+  it("polls live progress when a workflow starts in RUNNING state", async () => {
+    let pollCount = 0;
+    const onControlRunDetail = vi.fn().mockImplementation((runId: string) => {
+      pollCount++;
+      return Promise.resolve({
+        run: {
+          run_id: runId,
+          workflow_ref: "demo@1.0.0",
+          status: pollCount >= 2 ? "SUCCEEDED" : "RUNNING",
+          steps: [
+            { step_id: "s1", node_id: "n1", status: pollCount >= 2 ? "SUCCEEDED" : "RUNNING", attempt: 1 },
+          ],
+        },
+        artifacts: [],
+        timeline: {},
+        operator_timeline: [],
+        improvements: [],
+        verdicts: [],
+      });
+    });
+
+    const onRunStart = vi.fn().mockResolvedValue({
+      run_id: "run-async-1",
+      status: "RUNNING",
+    });
+
+    const onControlSummary = vi.fn().mockResolvedValue({
+      runs: [],
+      approvals: [],
+      improvements: [],
+      recent_verdicts: [],
+      registry_counts: {},
+      llm: {},
+      readiness: { profile_id: "linux-x64-cpu", inventory: null, tokens: [], readiness: {} },
+      operator_start_options: [
+        {
+          workflow_ref: "demo@1.0.0",
+          name: "demo",
+          version: "1.0.0",
+          source: "config",
+          trust_status: "trusted",
+          status: "ready",
+          description: "Run demo@1.0.0",
+          input_schema: { type: "object", properties: { objective: { type: "string" } }, required: ["objective"] },
+          input_schema_summary: {
+            type: "object",
+            required: ["objective"],
+            fields: [{ name: "objective", type: "string", required: true }],
+          },
+          primary_action: { kind: "workflow.start", label: "Start workflow", command: "awf run demo@1.0.0", workflow_ref: "demo@1.0.0" },
+        },
+      ],
+    });
+
+    render(
+      <App
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+        onRunStart={onRunStart}
+        onControlSummary={onControlSummary}
+        onControlRunDetail={onControlRunDetail}
+      />,
+    );
+
+    fireEvent.change(await screen.findByLabelText("objective"), { target: { value: "async run test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start workflow" }));
+
+    await waitFor(() => expect(onRunStart).toHaveBeenCalledWith("demo@1.0.0", { objective: "async run test" }));
+    await waitFor(() => expect(pollCount).toBeGreaterThanOrEqual(2));
+  });
 });

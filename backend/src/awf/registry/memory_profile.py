@@ -64,7 +64,7 @@ def parse_memory_profile(raw: dict) -> MemoryProfile:
     spec_raw = raw["spec"]
     retrieval_raw = spec_raw["retrieval"]
     retention_raw = spec_raw["retention"]
-    embedding_raw = spec_raw["embedding"]
+    embedding_raw = spec_raw.get("embedding")
 
     retrieval = MemoryRetrieval(
         max_items=retrieval_raw["maxItems"],
@@ -73,6 +73,19 @@ def parse_memory_profile(raw: dict) -> MemoryProfile:
         include_semantic=retrieval_raw["includeSemantic"],
         min_confidence=retrieval_raw["minConfidence"],
     )
+
+    if embedding_raw is not None:
+        embedding = MemoryEmbedding(
+            enabled=embedding_raw["enabled"],
+            model_profile_ref=embedding_raw.get("modelProfileRef"),
+            version=embedding_raw["version"],
+        )
+    else:
+        embedding = MemoryEmbedding(
+            enabled=False,
+            model_profile_ref=None,
+            version="none",
+        )
 
     return MemoryProfile(
         api_version=raw["apiVersion"],
@@ -89,11 +102,7 @@ def parse_memory_profile(raw: dict) -> MemoryProfile:
             active_session_ttl_hours=retention_raw["activeSessionTtlHours"],
             require_explicit_semantic_publish=retention_raw["requireExplicitSemanticPublish"],
         ),
-        embedding=MemoryEmbedding(
-            enabled=embedding_raw["enabled"],
-            model_profile_ref=embedding_raw.get("modelProfileRef"),
-            version=embedding_raw["version"],
-        ),
+        embedding=embedding,
     )
 
 

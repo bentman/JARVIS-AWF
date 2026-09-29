@@ -3,6 +3,7 @@
 import sqlite3
 from pathlib import Path
 
+from awf.cognition.router import INTENT_RUN_WORKFLOW, classify_intent
 from awf.ops.run import DEFAULT_ASSISTANT_WORKFLOW_REF, op_run_start
 from awf.ops.shared import CoreOpError
 from awf.registry.resolve import resolve_registry_object
@@ -100,7 +101,12 @@ def op_voice_submit_text(
     voice_profile_ref: str | None = None,
     turn_id: str | None = None,
 ) -> dict:
-    workflow_ref = workflow_ref or DEFAULT_ASSISTANT_WORKFLOW_REF
+    if workflow_ref is None or workflow_ref == DEFAULT_ASSISTANT_WORKFLOW_REF:
+        classified = classify_intent(repo_root, conn, text)
+        if classified.intent == INTENT_RUN_WORKFLOW and classified.target_ref:
+            workflow_ref = classified.target_ref
+        else:
+            workflow_ref = DEFAULT_ASSISTANT_WORKFLOW_REF
     if not text.strip():
         raise CoreOpError("voice.submitText requires non-empty text")
 

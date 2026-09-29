@@ -2,21 +2,18 @@
 
 ## Status
 
-Accepted.
-
-Implemented on 2026-08-14 in branch
-`adr/0026-the-run-speaks-and-the-mind-remembers`. The implementation keeps
-`awf/events.subscribe` as snapshot polling, persists bounded agent output in
-step output, reuses the existing approval record/action-preview bridge for
-agent approvals, makes the assistant read recent session and memory context,
-and applies the adjacent Windows/SQLite/pathing correctness fixes described
-below.
+Implemented. Core execution repairs landed on 2026-08-14 in branch
+`adr/0026-the-run-speaks-and-the-mind-remembers` (shared adapter runner,
+bounded output persistence, approval bridge, assistant session/memory retrieval,
+and SQLite WAL correctness). Follow-up dependencies are fully resolved:
+ADR-0033 implements asynchronous run execution and live progress polling;
+ADR-0034 implements the conversational intent router.
 
 Change entry, 2026-08-14: final implementation alignment records that the
 shared adapter runner preserves each adapter's existing command-line prompt
 delivery rather than moving prompts to stdin/temp files; CLI and GUI status
-surfaces gained readable summaries and post-request run detail, but continuous
-frontend polling during an in-flight `run.start` remains deferred. Related ADR
+surfaces gained readable summaries and post-request run detail, with continuous
+frontend polling during an in-flight `run.start` resolved by ADR-0033. Related ADR
 corrections from this pass: ADR-0021 now notes that ADR-0026 extends the
 approval bridge to agent nodes, while ADR-0023's SpeechRecognition caveat,
 ADR-0024's snapshot-only `events.subscribe`, ADR-0017's resident-mind/default
@@ -142,9 +139,8 @@ for approvals, control, LLM status, memory search, run status, and event/run
 snapshots; raw payloads remain available on JSON-oriented paths. `COMMAND_NAMES`
 is derived from `HELP_TEXT` so autocomplete stays aligned with the help text.
 True live frontend polling while a synchronous `run.start` request is still
-executing remains deferred until the frontend run-start path is split into
-start-and-poll or another async interaction shape. Server-push streaming
-remains parked where ADR-0024 left it.
+executing is tracked under Pending ADR-0033 (Asynchronous Run Execution and
+Live Progress Polling). Server-push streaming remains excluded per ADR-0024.
 
 **The mind remembers.** `_assistant_reply` resolves the voice profile's
 persona via `compile_persona`, appends recent session entries as
@@ -196,32 +192,25 @@ the decision touches; folding them in avoids re-visiting the files.
   writers but stays on the rollback journal; `PRAGMA journal_mode=WAL` is one
   line and removes writer-blocks-readers stalls during long agent steps.
 
-## Explicitly deferred
+## Follow-up Architecture Decisions (ADR-0033, ADR-0034, ADR-0035)
 
-Each of these is real, was observed in the audit, and is *not* decided here —
-they carry their own tradeoffs and deserve their own records:
+Each of these is real, was observed in the audit, and is assigned to a designated follow-up architecture decision:
 
-- **Intent routing.** Today every utterance runs `assistant-default@1.0.0`;
-  nothing conversational reaches `workflow.authorDraft` or maps "run the
-  deploy workflow" to `op_run_start`. A structured-output router (answer /
-  run workflow / draft workflow / propose memory) in front of the assistant
-  is the largest single intuitiveness jump available, and an architectural
-  change warranting its own ADR.
-- **Persona schema.** Implement-or-delete for `example_messages` and
-  `generation` (an ADR-0018 amendment either threads them through to real
-  model calls or stops validating discarded data).
-- **Session/memory schema.** Persist `summarize_session` output, enforce or
-  delete `active_session_ttl_hours` and the unused embedding config (an
-  ADR-0020 amendment).
-- **Streaming/live progress transport.** ADR-0024 parked server-push, and this
-  implementation keeps `events.subscribe` as snapshot polling. Continuous
-  frontend progress updates during an in-flight synchronous `run.start` remain
-  deferred.
-- **CI graduation.** Every CHANGE_LOG entry already cites test counts — the
-  validation culture is CI-shaped and runs by hand. A minimal
-  `.github/workflows/ci.yml` (ruff, `pytest -m "not live and not slow"`,
-  `npm test --workspaces`), a `v0.1.0` tag, dependabot, and SECURITY.md are
-  recommended as a separate, code-free change.
+- **Intent routing (Resolved by ADR-0034).** Structured-output intent routing
+  (answer / run workflow / draft workflow / propose memory) in front of
+  conversational surfaces is implemented under ADR-0034.
+- **Persona schema (Resolved by ADR-0018 Amendment).** `example_messages` and
+  `generation` are threaded through prompt envelopes and model completion calls.
+- **Session/memory schema (Resolved by ADR-0020 Amendment).** `summarize_session`
+  output persists to `active_sessions.summary` in SQLite, session TTL is enforced,
+  and `embedding` configuration is optional in memory profiles.
+- **Streaming/live progress transport (Resolved by ADR-0033).** ADR-0024
+  parked server-push, and this implementation keeps `events.subscribe` as
+  snapshot polling. Continuous frontend progress updates during an in-flight
+  run are resolved via asynchronous execution and status polling under ADR-0033.
+- **CI graduation (Resolved by ADR-0035).** Continuous integration
+  (`.github/workflows/ci.yml`), dependabot, `SECURITY.md`, and `NOTICE` static
+  attribution are implemented under ADR-0035.
 
 ## The tradeoffs accepted
 

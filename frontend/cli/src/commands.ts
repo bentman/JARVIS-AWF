@@ -28,6 +28,8 @@ export type CommandClient = Pick<
   | "systemDoctor"
   | "llmServers"
   | "llmModels"
+  | "intentDispatch"
+  | "intentClassify"
   | "llmServeStatus"
   | "registryList"
   | "registryGet"
@@ -541,6 +543,13 @@ export async function dispatchAssistantInput(
 ): Promise<CommandResult> {
   const trimmed = text.trim();
   if (!trimmed) throw new CommandError("assistant input is empty");
+  if (workflowRef === DEFAULT_ASSISTANT_WORKFLOW_REF && typeof client.intentDispatch === "function") {
+    const dispatchResult = (await client.intentDispatch(trimmed)) as Record<string, unknown>;
+    const responseText = String(dispatchResult.response_text ?? "");
+    if (responseText) {
+      return { kind: "text", text: responseText };
+    }
+  }
   const result = (await client.runStart(workflowRef, { objective: trimmed })) as Record<string, unknown>;
   return { kind: "text", text: formatOutcome(result) };
 }

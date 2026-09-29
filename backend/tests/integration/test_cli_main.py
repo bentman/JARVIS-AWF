@@ -83,6 +83,24 @@ def test_run_command_accepts_objective_shorthand(tmp_path, monkeypatch):
     assert captured["input_data"] == {"objective": "check the system"}
 
 
+def test_run_command_async_flag(tmp_path, capsys, monkeypatch):
+    repo_root = make_repo(tmp_path)
+    captured = {}
+
+    def fake_op_run_start(repo_root, conn, *, workflow_ref, input_data, async_execution=False):
+        captured["workflow_ref"] = workflow_ref
+        captured["async_execution"] = async_execution
+        return {"run_id": "run-async-1", "status": "RUNNING", "workflow_ref": workflow_ref}
+
+    monkeypatch.setattr(cli_main.ops, "op_run_start", fake_op_run_start)
+
+    exit_code = cli_main.run(["run", "demo@1.0.0", "--async"], repo_root)
+
+    assert exit_code == 0
+    assert captured["async_execution"] is True
+    assert "Started workflow demo@1.0.0 asynchronously (run_id: run-async-1)." in capsys.readouterr().out
+
+
 def test_run_command_prints_operator_outcome(tmp_path, capsys, monkeypatch):
     repo_root = make_repo(tmp_path)
     monkeypatch.setattr(

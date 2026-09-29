@@ -67,8 +67,14 @@ def op_memory_block(conn: sqlite3.Connection, *, ref: str) -> dict:
     return op_registry_retire(conn, kind="semantic-memories", name=name, version=version)
 
 
-def op_session_start(conn: sqlite3.Connection, *, title: str | None = None, expires_at: str | None = None) -> dict:
-    return start_session(conn, title=title, expires_at=expires_at)
+def op_session_start(
+    conn: sqlite3.Connection,
+    *,
+    title: str | None = None,
+    expires_at: str | None = None,
+    ttl_hours: int | None = None,
+) -> dict:
+    return start_session(conn, title=title, expires_at=expires_at, ttl_hours=ttl_hours)
 
 
 def op_session_append(

@@ -53,6 +53,8 @@ function makeFakeClient() {
     voiceEvent: vi.fn().mockResolvedValue({ voice_session_id: "vs-1", state: "listening" }),
     voiceSessionClose: vi.fn().mockResolvedValue({ voice_session_id: "vs-1", state: "closed" }),
     voiceSubmitText: vi.fn().mockResolvedValue({ voice_session_id: "vs-1", response_text: "ok" }),
+    intentClassify: vi.fn().mockResolvedValue({ intent: "answer" }),
+    intentDispatch: vi.fn().mockResolvedValue({ intent: "answer", response_text: "ok" }),
   } as any;
 }
 
@@ -170,5 +172,14 @@ describe("registerIpcHandlers", () => {
 
     await handlers.get(CHANNELS.memoryBlock)?.({}, "pref@1.0.0");
     expect(client.memoryBlock).toHaveBeenCalledWith("pref@1.0.0");
+
+    await handlers.get(CHANNELS.runStart)?.({}, "demo@1.0.0", { objective: "async work" }, true);
+    expect(client.runStart).toHaveBeenCalledWith("demo@1.0.0", { objective: "async work" }, true);
+
+    await handlers.get(CHANNELS.intentClassify)?.({}, "run test");
+    expect(client.intentClassify).toHaveBeenCalledWith("run test");
+
+    await handlers.get(CHANNELS.intentDispatch)?.({}, "run test", { async: true });
+    expect(client.intentDispatch).toHaveBeenCalledWith("run test", { async: true });
   });
 });

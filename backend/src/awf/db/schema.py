@@ -187,6 +187,7 @@ DDL_STATEMENTS = [
         session_id TEXT PRIMARY KEY,
         title TEXT,
         status TEXT NOT NULL CHECK (status IN ('active', 'summarized', 'expired')),
+        summary TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         expires_at TEXT

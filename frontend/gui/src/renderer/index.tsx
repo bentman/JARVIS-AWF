@@ -29,7 +29,16 @@ interface VoiceRoundTripResult {
 declare global {
   interface Window {
     awf: {
-      runStart: (workflowRef: string, input?: Record<string, unknown>) => Promise<{ run_id: string; status: string }>;
+      runStart: (
+        workflowRef: string,
+        input?: Record<string, unknown>,
+        asyncExecution?: boolean,
+      ) => Promise<{ run_id: string; status: string; workflow_ref?: string }>;
+      intentClassify: (text: string) => Promise<Record<string, unknown>>;
+      intentDispatch: (
+        text: string,
+        options?: { voiceSessionId?: string; turnId?: string; async?: boolean },
+      ) => Promise<Record<string, unknown>>;
       runStatus: (runId: string) => Promise<unknown>;
       controlSummary: () => Promise<ControlSummary>;
       controlRunDetail: (runId: string) => Promise<ControlRunDetail>;
@@ -76,6 +85,12 @@ declare global {
       voicePushToTalkStart: (voiceSessionId: string, turnId?: string) => Promise<VoiceSessionResult>;
       voicePushToTalkStop: (voiceSessionId: string, turnId?: string) => Promise<VoiceSessionResult>;
       voiceInterrupt: (voiceSessionId: string, turnId?: string) => Promise<VoiceSessionResult>;
+      voiceEvent: (
+        voiceSessionId: string,
+        frameType: string,
+        payload?: Record<string, unknown>,
+        turnId?: string,
+      ) => Promise<VoiceSessionResult>;
       voiceSubmitText: (
         voiceSessionId: string,
         text: string,
@@ -100,8 +115,24 @@ if (container) {
     React.createElement(App, {
       onApprove: (approvalId: string) => void window.awf.approvalApprove(approvalId),
       onReject: (approvalId: string, reason: string) => void window.awf.approvalReject(approvalId, reason),
-      onTextSubmit: (text: string, workflowRef: string) => window.awf.runStart(workflowRef, { objective: text }),
-      onRunStart: (workflowRef: string, input?: Record<string, unknown>) => window.awf.runStart(workflowRef, input ?? {}),
+      onTextSubmit: async (text: string, workflowRef: string) => {
+        if (!workflowRef || workflowRef === "assistant-default@1.0.0") {
+          const dispatched = await window.awf.intentDispatch(text);
+          const runId = (dispatched.run_id ?? dispatched.proposal_id ?? "direct") as string;
+          return {
+            run_id: runId,
+            status: (dispatched.status ?? "SUCCEEDED") as string,
+            outputs: { response_text: (dispatched.response_text ?? "") as string },
+            outcome: (dispatched.outcome as Record<string, unknown> | undefined) ?? {},
+          };
+        }
+        return window.awf.runStart(workflowRef, { objective: text }, true);
+      },
+      onRunStart: (workflowRef: string, input?: Record<string, unknown>, asyncExecution?: boolean) =>
+        window.awf.runStart(workflowRef, input ?? {}, asyncExecution ?? true),
+      onIntentDispatch: (text: string, options?: { voiceSessionId?: string; turnId?: string; async?: boolean }) =>
+        window.awf.intentDispatch(text, { async: true, ...options }),
+      onIntentClassify: (text: string) => window.awf.intentClassify(text),
       onVoiceSessionStart: (title?: string, wakeEnabled?: boolean) =>
         window.awf.voiceSessionStart(title, wakeEnabled),
       onVoicePushToTalkStart: (voiceSessionId: string, turnId: string) =>
@@ -109,6 +140,8 @@ if (container) {
       onVoicePushToTalkStop: (voiceSessionId: string, turnId: string) =>
         window.awf.voicePushToTalkStop(voiceSessionId, turnId),
       onVoiceInterrupt: (voiceSessionId: string, turnId: string) => window.awf.voiceInterrupt(voiceSessionId, turnId),
+      onVoiceEvent: (voiceSessionId: string, frameType: string, payload?: Record<string, unknown>, turnId?: string) =>
+        window.awf.voiceEvent(voiceSessionId, frameType, payload, turnId),
       onVoiceSubmitText: (
         voiceSessionId: string,
         text: string,

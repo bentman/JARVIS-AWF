@@ -260,6 +260,63 @@ def _verdict_passed(repo_root: Path, conn: sqlite3.Connection, *, run_id: str, a
     return bool(verdict.get("passed"))
 
 
+def _test_result_passed(repo_root: Path, conn: sqlite3.Connection, *, run_id: str, candidate_commit: str) -> bool:
+    rows = conn.execute(
+        "SELECT relative_path FROM artifacts WHERE run_id = ? AND artifact_type = 'test-result' ORDER BY created_at DESC",
+        (run_id,),
+    ).fetchall()
+    for row in rows:
+        path = artifacts_dir(repo_root) / row["relative_path"]
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        if data.get("candidate_commit") == candidate_commit and data.get("passed") is True:
+            return True
+    return False
+
+
+def verify(
+    repo_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    improvement_id: str,
+    commands: list[list[str]] | None = None,
+    timeout_seconds: float = 300.0,
+) -> dict:
+    row = _proposal_row(conn, improvement_id)
+    worktree = worktree_path(repo_root, row["run_id"])
+    if not worktree.is_dir():
+        raise ImprovementProposalError(f"candidate worktree is not available at {worktree}")
+    step_id = _latest_step_id(conn, row["run_id"])
+    from awf.eval.runner import run_evaluation
+
+    result = run_evaluation(
+        repo_root,
+        conn,
+        run_id=row["run_id"],
+        step_id=step_id,
+        worktree=worktree,
+        candidate_commit=row["candidate_commit"],
+        commands=commands,
+        timeout_seconds=timeout_seconds,
+    )
+    _event(
+        conn,
+        improvement_id,
+        "evaluation_completed",
+        {"artifact_id": result["artifact_id"], "passed": result["passed"]},
+    )
+    return {
+        "improvement_id": improvement_id,
+        "artifact_id": result["artifact_id"],
+        "passed": result["passed"],
+        "result": result["payload"],
+    }
+
+
 def mark_ready(
     repo_root: Path,
     conn: sqlite3.Connection,
@@ -294,6 +351,8 @@ def request_merge(repo_root: Path, conn: sqlite3.Connection, *, improvement_id: 
     if row["status"] != "ready_for_review":
         raise ImprovementProposalError(f"proposal {improvement_id} is not ready_for_review (status={row['status']})")
     _recheck_identities(repo_root, row)
+    if not _test_result_passed(repo_root, conn, run_id=row["run_id"], candidate_commit=row["candidate_commit"]):
+        raise ImprovementProposalError("cannot request merge without a passing test-result artifact")
     step_id = _merge_step_id(row["run_id"], improvement_id)
     create_step(
         conn,
@@ -364,6 +423,8 @@ def merge(repo_root: Path, conn: sqlite3.Connection, *, improvement_id: str, app
     if approval["action_digest"] != merge_action_digest(row):
         raise ImprovementProposalError("approved merge action digest does not match current proposal")
     _recheck_identities(repo_root, row)
+    if not _test_result_passed(repo_root, conn, run_id=row["run_id"], candidate_commit=row["candidate_commit"]):
+        raise ImprovementProposalError("cannot merge proposal without a passing test-result artifact")
     try:
         merge_branch(repo_root, row["candidate_branch"], message=f"Merge improvement {improvement_id}")
     except Exception as exc:

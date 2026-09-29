@@ -21,9 +21,13 @@ METHODS: tuple[MethodSpec, ...] = (
     MethodSpec(
         "awf/run.start",
         "awf.ops.run.op_run_start",
-        'repo_root, conn, workflow_ref=params["workflow"], input_data=params.get("input", {})',
-        "runStart(workflowRef: string, input: Record<string, unknown> = {}): Promise<RunStartResult> {\n"
-        '    return this.call("awf/run.start", { workflow: workflowRef, input }, this.runCallTimeoutMs);\n'
+        'repo_root, conn, workflow_ref=params["workflow"], input_data=params.get("input", {}), async_execution=bool(params.get("async", False))',
+        "runStart(workflowRef: string, input: Record<string, unknown> = {}, asyncExecution: boolean = false): Promise<RunStartResult> {\n"
+        "    const params: Record<string, unknown> = { workflow: workflowRef, input };\n"
+        "    if (asyncExecution) {\n"
+        "      params.async = true;\n"
+        "    }\n"
+        '    return this.call("awf/run.start", params, this.runCallTimeoutMs);\n'
         "  }",
         ("run",),
         True,
@@ -510,6 +514,23 @@ METHODS: tuple[MethodSpec, ...] = (
         "eventsSubscribe(options: { runId?: string; limit?: number } = {}): Promise<EventsSnapshot> {\n"
         '    return this.call("awf/events.subscribe", options);\n'
         "  }",
+    ),
+    MethodSpec(
+        "awf/intent.classify",
+        "awf.ops.intent.op_intent_classify",
+        'repo_root, conn, text=params["text"]',
+        "intentClassify(text: string): Promise<Record<string, unknown>> {\n"
+        '    return this.call("awf/intent.classify", { text });\n'
+        "  }",
+    ),
+    MethodSpec(
+        "awf/intent.dispatch",
+        "awf.ops.intent.op_intent_dispatch",
+        'repo_root, conn, text=params["text"], voice_session_id=params.get("voiceSessionId"), turn_id=params.get("turnId"), async_execution=bool(params.get("async", False))',
+        "intentDispatch(text: string, options: { voiceSessionId?: string; turnId?: string; async?: boolean } = {}): Promise<Record<string, unknown>> {\n"
+        '    return this.call("awf/intent.dispatch", { text, ...options }, this.runCallTimeoutMs);\n'
+        "  }",
+        run_timeout=True,
     ),
 )
 

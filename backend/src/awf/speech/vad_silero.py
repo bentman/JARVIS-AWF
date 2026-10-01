@@ -8,7 +8,6 @@ import wave
 from pathlib import Path
 
 import numpy as np
-import onnxruntime as ort
 
 SAMPLE_RATE = 16000
 CHUNK_SIZE = 512  # Silero VAD's expected window size at 16kHz
@@ -34,6 +33,8 @@ def _read_wav_float32(path: Path) -> np.ndarray:
 
 def speech_probabilities(audio_path: Path, model_path: Path) -> list[float]:
     """Per-chunk speech probability across the whole file, in chunk order."""
+    import onnxruntime as ort
+
     session = ort.InferenceSession(str(model_path))
     audio = _read_wav_float32(audio_path)
     input_names = {item.name for item in session.get_inputs()}

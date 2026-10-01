@@ -53,7 +53,7 @@ There are eight top-level commands - `run`, `status`, `control`, `doctor`,
 `review`, `registry`, `memory`, and `system`. `awf --help` lists them with a
 one-line description each, and `awf <command> --help` explains its arguments and
 subcommands. If a command you know from an older build reports `invalid choice`,
-it moved: see Commands That Moved in `docs\OperatorsGuide.md`.
+it moved: see Commands That Moved in `docs/OperatorsGuide.md`.
 
 Start the GUI:
 
@@ -65,8 +65,11 @@ The GUI has three destinations and opens on the first:
 
 - **Operate** - the work queue, Start work, run detail and evidence, approvals,
   proposed changes, run history, and system overview;
-- **Chat** - typed conversation with the default assistant workflow;
+- **Chat** - conversational interaction with the default assistant workflow, streaming voice, and interactive run links;
 - **Library** - registry browsing and memory curation.
+
+Use `Ctrl+1/2/3` to switch views, `Ctrl+K` to focus the composer/search, and `Esc`
+to close inspectors or modals.
 
 Use Operate's Start work panel to choose a trusted workflow, fill the
 schema-derived inputs, start the run, then resolve any Needs action cards from
@@ -78,7 +81,8 @@ Start the terminal UI:
 awf-cli
 ```
 
-Type `/help` inside it for the slash-command list, grouped by task. `/review`,
+Type `/help` inside it for the slash-command list, grouped by task. Use Up/Down
+arrows for command history and Tab to autocomplete slash commands. `/review`,
 `/memory`, and `/system` take the same subcommands as their `awf` counterparts.
 
 ## LLM Runtime
@@ -115,6 +119,7 @@ rows in Library also have a Run handoff that returns to the same start form.
 ```powershell
 awf system llm servers
 awf system llm serve status
+awf-speech wake <wake.wav>
 awf-speech models sync
 awf-speech models verify
 ```
@@ -123,5 +128,5 @@ Speech models are operator-managed local artifacts under `models\`. Runtime STT
 uses local files only; if the selected STT artifact is incomplete, transcription
 returns a clear local-model error instead of downloading implicitly.
 
-Use `docs\OperatorsGuide.md` after setup for normal operation,
+Use `docs/OperatorsGuide.md` after setup for normal operation,
 troubleshooting, and validation commands.

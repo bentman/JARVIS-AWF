@@ -1,4 +1,4 @@
-import type { ProtocolClient } from "@awf/protocol-client";
+import { DEFAULT_SETTINGS, type ProtocolClient, type Settings } from "@awf/protocol-client";
 
 /** Minimal shape of Electron's `ipcMain` this module needs - kept narrow so
  * the IPC wiring is testable without launching a real Electron process. */
@@ -7,6 +7,7 @@ export interface IpcMainLike {
 }
 
 export const CHANNELS = {
+  getSettings: "awf:getSettings",
   runStart: "awf:runStart",
   controlSummary: "awf:controlSummary",
   controlRunDetail: "awf:controlRunDetail",
@@ -51,7 +52,17 @@ export const CHANNELS = {
  * uses (Section 16.3: "the protocol adds no authority"). The renderer never
  * gets direct access to the client or to Node - only these narrow, typed
  * channels via the preload's contextBridge. */
-export function registerIpcHandlers(ipcMain: IpcMainLike, client: ProtocolClient): void {
+export function registerIpcHandlers(
+  ipcMain: IpcMainLike,
+  client: ProtocolClient,
+  settingsProvider?: Settings | (() => Settings),
+): void {
+  ipcMain.handle(CHANNELS.getSettings, () => {
+    if (typeof settingsProvider === "function") {
+      return settingsProvider();
+    }
+    return settingsProvider ?? DEFAULT_SETTINGS;
+  });
   ipcMain.handle(CHANNELS.runStart, (_event, workflowRef, input, asyncExecution) =>
     asyncExecution !== undefined
       ? client.runStart(

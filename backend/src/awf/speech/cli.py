@@ -47,6 +47,9 @@ def build_parser() -> argparse.ArgumentParser:
     transcribe_cmd = sub.add_parser("transcribe")
     transcribe_cmd.add_argument("audio_path", type=Path)
 
+    wake_cmd = sub.add_parser("wake")
+    wake_cmd.add_argument("audio_path", type=Path)
+
     models = sub.add_parser("models")
     models_sub = models.add_subparsers(dest="models_command", required=True)
     models_sub.add_parser("sync")
@@ -178,9 +181,38 @@ def run(argv: list[str], repo_root: Path) -> int:
         return _run_synthesize(args, repo_root)
     if args.command == "transcribe":
         return _run_transcribe(args, repo_root)
+    if args.command == "wake":
+        return _run_wake(args, repo_root)
     if args.command == "models":
         return _run_models(args, repo_root)
     raise AssertionError(f"unhandled command: {args.command}")
+
+
+def _run_wake(args: argparse.Namespace, repo_root: Path) -> int:
+    from awf.hardware.preflight import collect_preflight_tokens
+    from awf.hardware.profiler import collect_inventory
+    from awf.hardware.readiness import derive_wake_readiness
+    from awf.speech.wake_openwakeword import detect_wake_word
+
+    inventory = collect_inventory()
+    tokens = collect_preflight_tokens(inventory)
+    wake_paths = artifact_paths(repo_root, "wake")
+    readiness = derive_wake_readiness(inventory, tokens, wake_paths)
+    if not readiness.ready:
+        print(json.dumps({"error": f"Wake word not ready: {readiness.reason}"}))
+        return 1
+    try:
+        result = detect_wake_word(
+            args.audio_path,
+            model_path=wake_paths["hey_jarvis_v0.1.onnx"],
+            melspec_model_path=wake_paths["melspectrogram.onnx"],
+            embedding_model_path=wake_paths["embedding_model.onnx"],
+        )
+    except Exception as exc:
+        print(json.dumps({"error": f"Wake word detection failed: {exc}"}))
+        return 1
+    print(json.dumps({"detected": result["detected"], "score": result["score"]}))
+    return 0
 
 
 def main() -> int:

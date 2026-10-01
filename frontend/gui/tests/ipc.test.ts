@@ -181,5 +181,24 @@ describe("registerIpcHandlers", () => {
 
     await handlers.get(CHANNELS.intentDispatch)?.({}, "run test", { async: true });
     expect(client.intentDispatch).toHaveBeenCalledWith("run test", { async: true });
+
+    const defaultSettings = await handlers.get(CHANNELS.getSettings)?.({});
+    expect(defaultSettings).toMatchObject({ theme: "system", verbosity: "normal", wakeWordEnabled: false });
+  });
+
+  it("returns configured settings when provider is supplied", async () => {
+    const { ipcMain, handlers } = makeFakeIpcMain();
+    const client = makeFakeClient();
+    const custom = {
+      theme: "dark" as const,
+      keybindings: { "ctrl+k": "palette" },
+      verbosity: "verbose" as const,
+      defaultWorkflow: "custom-agent@1.0.0",
+      wakeWordEnabled: true,
+    };
+
+    registerIpcHandlers(ipcMain, client, () => custom);
+    const result = await handlers.get(CHANNELS.getSettings)?.({});
+    expect(result).toEqual(custom);
   });
 });

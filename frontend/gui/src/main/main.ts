@@ -1,4 +1,4 @@
-import { ChildProcessTransport, ProtocolClient } from "@awf/protocol-client";
+import { ChildProcessTransport, ProtocolClient, loadSettings } from "@awf/protocol-client";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -41,7 +41,7 @@ function createWindow(client: ProtocolClient, repoRoot: string): void {
 
   const speechCommand = process.env.AWF_SPEECH_COMMAND ?? resolveBackendCommand(repoRoot, "awf-speech");
 
-  registerIpcHandlers(ipcMain, client);
+  registerIpcHandlers(ipcMain, client, () => loadSettings(repoRoot));
   registerVoiceIpcHandler(ipcMain, {
     command: speechCommand,
     cwd: repoRoot,

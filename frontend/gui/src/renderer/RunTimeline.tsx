@@ -4,6 +4,7 @@ import { stateClass } from "./state.js";
 
 export interface RunTimelineProps {
   detail: ControlRunDetail;
+  onClose?: () => void;
   onApprove?: (approvalId: string) => Promise<void>;
   onReject?: (approvalId: string, reason: string) => Promise<void>;
   onImprovementRequestMerge?: (improvementId: string) => Promise<unknown>;
@@ -13,6 +14,7 @@ export interface RunTimelineProps {
 
 export function RunTimeline({
   detail,
+  onClose,
   onApprove,
   onReject,
   onImprovementRequestMerge,
@@ -28,7 +30,26 @@ export function RunTimeline({
   const failedSteps = detail.run.steps.filter((step) => step.status === "FAILED");
 
   return (
-    <section aria-label="Run detail" className="operate-band">
+    <section aria-label="Run detail" className="operate-band" id="selected-run-inspector">
+      <div className="inspector-header">
+        <div className="inspector-breadcrumb">
+          <span>Operate</span>
+          <span aria-hidden="true">&rsaquo;</span>
+          <span>Runs</span>
+          <span aria-hidden="true">&rsaquo;</span>
+          <strong>{detail.run.run_id}</strong>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onClose}
+            aria-label="Close run inspector"
+          >
+            &times; Close Inspector <span className="kbd-hint">Esc</span>
+          </button>
+        )}
+      </div>
       <h2>Run detail</h2>
       <div className="run-status-lane">
         <span>{detail.run.workflow_ref}</span>

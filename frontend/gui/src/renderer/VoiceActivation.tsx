@@ -425,7 +425,17 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
   return (
     <div role="group" aria-label="Voice session" className="voice-bar">
       <div className="voice-row">
-        <span className={`chip ${voiceStateClass(state)}`}>{state}</span>
+        <span className={`chip ${voiceStateClass(state)}`}>
+          {(state === "listening" || state === "speaking") && (
+            <span className="voice-wave" aria-hidden="true">
+              <span className="voice-wave-bar" />
+              <span className="voice-wave-bar" />
+              <span className="voice-wave-bar" />
+              <span className="voice-wave-bar" />
+            </span>
+          )}
+          {state}
+        </span>
         {voiceSessionId && <span className="voice-session mono">Voice session: {voiceSessionId}</span>}
         <button className="btn btn-primary" onClick={startSession} disabled={busy || state === "closed"}>
           Start voice session
@@ -461,46 +471,55 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
         <button className="btn btn-danger" onClick={interrupt} disabled={busy || !voiceSessionId}>
           Interrupt
         </button>
-      </div>
-      <div className="voice-row">
-        <label>
-          Default workflow
-          <input
-            type="text"
-            value={workflowRef}
-            onChange={(e) => setWorkflowRef(e.target.value)}
-            placeholder="workflow@1.0.0"
-            list={workflowOptions.length > 0 ? "voice-workflow-options" : undefined}
-          />
-          {workflowOptions.length > 0 && (
-            <datalist id="voice-workflow-options">
-              {workflowOptions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
-          )}
-        </label>
-        <label>
-          Voice profile
-          <input
-            type="text"
-            className="mono"
-            value={voiceProfileRef}
-            onChange={(e) => setVoiceProfileRef(e.target.value)}
-            placeholder="narrator@1.0.0"
-          />
-        </label>
-        <label>
-          Final recognized text
-          <textarea value={recognizedText} onChange={(e) => setRecognizedText(e.target.value)} />
-        </label>
         {partialText && (
-          <div className="voice-partial mono" data-testid="voice-partial-text">
+          <div className="voice-interim-card voice-partial mono" data-testid="voice-partial-text">
+            <span className="voice-wave" aria-hidden="true">
+              <span className="voice-wave-bar" />
+              <span className="voice-wave-bar" />
+              <span className="voice-wave-bar" />
+              <span className="voice-wave-bar" />
+            </span>
             Interim: {partialText}
           </div>
         )}
-        {error && <span role="alert">{error}</span>}
       </div>
+      <details className="voice-details">
+        <summary className="voice-toggle-btn">Voice Settings & Diagnostics</summary>
+        <div className="voice-drawer">
+          <label>
+            Default workflow
+            <input
+              type="text"
+              value={workflowRef}
+              onChange={(e) => setWorkflowRef(e.target.value)}
+              placeholder="workflow@1.0.0"
+              list={workflowOptions.length > 0 ? "voice-workflow-options" : undefined}
+            />
+            {workflowOptions.length > 0 && (
+              <datalist id="voice-workflow-options">
+                {workflowOptions.map((option) => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
+            )}
+          </label>
+          <label>
+            Voice profile
+            <input
+              type="text"
+              className="mono"
+              value={voiceProfileRef}
+              onChange={(e) => setVoiceProfileRef(e.target.value)}
+              placeholder="narrator@1.0.0"
+            />
+          </label>
+          <label>
+            Final recognized text
+            <textarea value={recognizedText} onChange={(e) => setRecognizedText(e.target.value)} />
+          </label>
+        </div>
+      </details>
+      {error && <span role="alert">{error}</span>}
     </div>
   );
 });

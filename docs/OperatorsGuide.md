@@ -80,7 +80,8 @@ outside the GUI.
 - sends text into the default workflow, usually `assistant-default@1.0.0`;
 - uses the resident model profile, so it needs a reachable local LLM endpoint;
 - shows conversation turns, started run IDs, pending errors, and the next action
-  returned by the run outcome.
+  returned by the run outcome;
+- includes interactive run chips that link directly to the run in Operate.
 
 **Library** is where configuration lives:
 
@@ -92,6 +93,15 @@ outside the GUI.
 - data-root objects shadow config-root defaults by normal registry precedence;
 - searches durable memory and session-adjacent context; publishing semantic
   memory remains explicit.
+
+### Keyboard Navigation
+
+- `Ctrl+1` / `Cmd+1`: Switch to Operate.
+- `Ctrl+2` / `Cmd+2`: Switch to Chat.
+- `Ctrl+3` / `Cmd+3`: Switch to Library.
+- `Ctrl+K` / `Cmd+K`: Focus active text input.
+- `Escape`: Close selected run inspector or modal.
+- `Ctrl+Enter`: Trigger primary action (approval or send).
 
 ## Operating Loop
 
@@ -165,7 +175,8 @@ does not list is not dispatchable.
 
 Plain text starts the default assistant workflow, so it has the same LLM
 requirement as GUI chat. Invoke a published registry Skill with
-`/skill-run <name>@<version> <input>`.
+`/skill-run <name>@<version> <input>`. Use Up/Down arrows to recall previous
+commands, and press Tab to autocomplete slash commands.
 
 ## Core CLI
 
@@ -312,12 +323,15 @@ approval no longer applies. Voice alone cannot approve risky actions.
 
 ## Voice
 
-Voice in the GUI is push-to-talk plus typed fallback. Browser speech recognition
+Voice in the GUI provides push-to-talk, continuous listening with hands-free
+silence endpointing, real-time interim streaming transcription, and barge-in
+playback cancellation, alongside typed fallback. Browser speech recognition
 availability is host-dependent; the typed final text path remains reliable.
 
 Debug file-based voice from the CLI:
 
 ```bash
+awf-speech wake <wake.wav>
 awf-speech round-trip <wake.wav> <command.wav> --response-audio-out <out.wav>
 awf-speech transcribe <command.wav>
 awf-speech models sync
@@ -406,6 +420,21 @@ Usually safe to delete:
 
 - `cache/`: scratch state and temporary worktrees;
 - `reports/`: diagnostics and validation evidence after saving what matters.
+
+## Configuration
+
+Operator preferences are stored in `.awf/settings.json` (precedence: `.awf/settings.local.json` > `.awf/settings.json` > `~/.awf/settings.json`):
+
+```json
+{
+  "theme": "system",
+  "defaultWorkflow": "assistant-default@1.0.0",
+  "wakeWordEnabled": false,
+  "verbosity": "normal"
+}
+```
+
+Themes support `"dark"`, `"light"`, and `"system"`.
 
 ## Troubleshooting
 

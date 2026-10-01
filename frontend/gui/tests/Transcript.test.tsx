@@ -52,4 +52,51 @@ describe("Transcript", () => {
     fireEvent.click(screen.getByRole("button", { name: "Push to talk" }));
     expect(onMic).toHaveBeenCalled();
   });
+
+  it("renders clickable run link chips when onRunSelect is provided and text references a run", () => {
+    const onRunSelect = vi.fn();
+    render(
+      <Transcript
+        entries={[
+          { id: 0, speaker: "Operator", text: "execute task" },
+          { id: 1, speaker: "AWF", text: "Started workflow demo@1.0.0 (run run-abc-123)." },
+        ]}
+        onRunSelect={onRunSelect}
+      />,
+    );
+    const chip = screen.getByRole("button", { name: "Inspect run run-abc-123" });
+    expect(chip).toBeTruthy();
+    expect(chip.className).toContain("run-link-chip");
+    fireEvent.click(chip);
+    expect(onRunSelect).toHaveBeenCalledWith("run-abc-123");
+  });
+
+  it("renders suggested starter prompts when transcript is empty and populates composer on click", () => {
+    render(<Transcript entries={[]} onSend={vi.fn()} />);
+    const starter = screen.getByRole("button", { name: "Check system readiness" });
+    expect(starter).toBeTruthy();
+    fireEvent.click(starter);
+    const input = screen.getByRole("textbox", { name: "Message" }) as HTMLInputElement;
+    expect(input.value).toBe("Check system readiness and report profile status.");
+  });
+
+  it("renders copy button on message bubble and copies text", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: { writeText },
+    });
+
+    render(
+      <Transcript
+        entries={[
+          { id: 1, speaker: "AWF", text: "Readiness verified: all 8 nodes healthy." },
+        ]}
+      />,
+    );
+
+    const copyBtn = screen.getByRole("button", { name: "Copy message from AWF" });
+    expect(copyBtn).toBeTruthy();
+    fireEvent.click(copyBtn);
+    expect(writeText).toHaveBeenCalledWith("Readiness verified: all 8 nodes healthy.");
+  });
 });

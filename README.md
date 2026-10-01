@@ -53,7 +53,8 @@ Normal operation is covered in [docs/OperatorsGuide.md](docs/OperatorsGuide.md).
 - Durable state lives under `data/`, with SQLite for run state and
   content-addressed files for artifacts.
 - Repository defaults live under `config/app_registry/`; operator registry
-  objects and overrides live under `data/registry/`.
+  objects and overrides live under `data/registry/`; operator interface
+  preferences persist in `.awf/settings.json`.
 - The Capability Guard checks requested actions against declared capabilities,
   risk classes, and allowlists before execution.
 - Mutating runs use an isolated Git worktree and scratch space.
@@ -70,9 +71,9 @@ Decision records and deviations are under [docs/adr](docs/adr).
 - `awf`: core CLI for runs, approvals, registry actions, diagnostics, memory,
   and LLM/runtime commands.
 - `awf-gui`: desktop GUI for chat, runs, approvals, readiness, registry,
-  memory, and voice.
-- `awf-cli`: terminal UI with chat and slash commands.
-- `awf-speech`: speech model checks and file-based voice diagnostics.
+  memory, and voice navigation, with global shortcuts (`Ctrl+1/2/3`, `Ctrl+K`, `Escape`) and operator theme settings.
+- `awf-cli`: terminal UI with chat, slash commands, input history, and Tab autocompletion.
+- `awf-speech`: speech model checks, wake word testing, and file-based voice diagnostics (`awf-speech wake <audio.wav>`).
 
 ## Platform
 

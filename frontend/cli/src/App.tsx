@@ -1,5 +1,5 @@
 import type { ProtocolClient } from "@awf/protocol-client";
-import { Box, Static, Text, useApp } from "ink";
+import { Box, Static, Text, useApp, useInput } from "ink";
 import TextInput from "ink-text-input";
 import React, { useRef, useState } from "react";
 import { COMMAND_NAMES, CommandError, dispatchAssistantInput, dispatchCommand } from "./commands.js";
@@ -26,6 +26,8 @@ export function App({ client, settings }: AppProps): React.JSX.Element {
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
   const nextId = useRef(1);
 
   const append = (text: string) => {
@@ -38,10 +40,36 @@ export function App({ client, settings }: AppProps): React.JSX.Element {
       ? COMMAND_NAMES.filter((name) => name.startsWith(firstToken)).slice(0, 6)
       : [];
 
+  useInput((_inputChar, key) => {
+    if (key.tab && suggestions.length > 0) {
+      setInput(`/${suggestions[0]} `);
+      return;
+    }
+    if (key.upArrow && history.length > 0) {
+      const nextIdx = historyIndex === -1 ? history.length - 1 : Math.max(0, historyIndex - 1);
+      setHistoryIndex(nextIdx);
+      setInput(history[nextIdx] ?? "");
+      return;
+    }
+    if (key.downArrow && historyIndex !== -1) {
+      const nextIdx = historyIndex + 1;
+      if (nextIdx >= history.length) {
+        setHistoryIndex(-1);
+        setInput("");
+      } else {
+        setHistoryIndex(nextIdx);
+        setInput(history[nextIdx] ?? "");
+      }
+      return;
+    }
+  });
+
   const handleSubmit = async (value: string) => {
     const trimmed = value.trim();
     setInput("");
+    setHistoryIndex(-1);
     if (!trimmed) return;
+    setHistory((prev) => (prev[prev.length - 1] === trimmed ? prev : [...prev, trimmed]));
     append(`> ${trimmed}`);
 
     setBusy(true);
@@ -79,6 +107,7 @@ export function App({ client, settings }: AppProps): React.JSX.Element {
       </Box>
       {suggestions.length > 0 && (
         <Box flexDirection="column">
+          <Text dimColor>suggestions (press Tab to complete):</Text>
           {suggestions.map((name) => (
             <Text key={name} dimColor>
               /{name}

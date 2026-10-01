@@ -18,6 +18,8 @@ export interface TranscriptProps {
   onSend?: (text: string) => boolean | void | Promise<boolean | void>;
   /** Drives the existing push-to-talk flow (mic button in the composer). */
   onMic?: () => void;
+  /** Navigates to Operate and inspects the specified run. */
+  onRunSelect?: (runId: string) => void;
 }
 
 /** Text-first invariant (Section 16.4): every recognized utterance is
@@ -36,9 +38,11 @@ export function Transcript({
   submitting = false,
   onSend,
   onMic,
+  onRunSelect,
 }: TranscriptProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState("");
+  const [copiedId, setCopiedId] = useState<number | null>(null);
 
   // Follow the newest entry so the operator always sees the live tail.
   useEffect(() => {
@@ -55,6 +59,14 @@ export function Transcript({
     setDraft("");
   };
 
+  const copyText = (id: number, text: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      void navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1500);
+    }
+  };
+
   return (
     <section aria-label="Chat" className="chat-window">
       <h2 className="chat-title">
@@ -63,10 +75,38 @@ export function Transcript({
       </h2>
       <div ref={scrollRef} role="log" aria-label="Chat log" className="chat-scroll">
         {entries.length === 0 ? (
-          <p className="empty chat-empty">No conversation yet — type a message or use voice to start.</p>
+          <div>
+            <p className="empty chat-empty">No conversation yet — type a message or use voice to start.</p>
+            <div className="starter-prompts" aria-label="Suggested starter prompts">
+              <span className="starter-prompts-title">Suggested prompts</span>
+              <button
+                type="button"
+                className="starter-chip"
+                onClick={() => setDraft("Check system readiness and report profile status.")}
+              >
+                Check system readiness
+              </button>
+              <button
+                type="button"
+                className="starter-chip"
+                onClick={() => setDraft("List active workflows in the registry.")}
+              >
+                List active workflows
+              </button>
+              <button
+                type="button"
+                className="starter-chip"
+                onClick={() => setDraft("Summarize recent workflow runs and verdicts.")}
+              >
+                Summarize recent runs
+              </button>
+            </div>
+          </div>
         ) : (
           entries.map((entry) => {
             const isUser = /^operator/i.test(entry.speaker);
+            const runMatch = onRunSelect ? entry.text.match(/\b(run-[a-zA-Z0-9_\-]+)\b/) : null;
+            const runId = runMatch ? runMatch[1] : null;
             return (
               <div key={entry.id} className={`bubble ${isUser ? "bubble-user" : "bubble-agent"}`}>
                 <span className="avatar" aria-hidden="true">
@@ -75,6 +115,28 @@ export function Transcript({
                 <span className="bubble-body">
                   <strong className="bubble-speaker">{entry.speaker}:</strong>
                   <span className="bubble-text">{entry.text}</span>
+                  <div className="bubble-actions">
+                    {runId && (
+                      <button
+                        type="button"
+                        className="run-link-chip"
+                        onClick={() => onRunSelect?.(runId)}
+                        title={`Jump to run ${runId} in Operate`}
+                        aria-label={`Inspect run ${runId}`}
+                      >
+                        Inspect run {runId}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn-copy-bubble"
+                      onClick={() => copyText(entry.id, entry.text)}
+                      title="Copy message text to clipboard"
+                      aria-label={`Copy message from ${entry.speaker}`}
+                    >
+                      {copiedId === entry.id ? "Copied" : "Copy"}
+                    </button>
+                  </div>
                 </span>
               </div>
             );
@@ -110,7 +172,7 @@ export function Transcript({
           className="composer-input"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Message AWF..."
+          placeholder="Message AWF (e.g. 'check readiness', 'run workflow')..."
           aria-label="Message"
         />
         <button type="submit" className="btn-send" disabled={!draft.trim() || submitting} aria-label="Send">
@@ -118,7 +180,15 @@ export function Transcript({
           <SendIcon size={15} />
         </button>
       </form>
-      {submitError && <div role="alert">{submitError}</div>}
+      <div className="composer-hints">
+        <span><span className="kbd-hint">Enter</span> to send &bull; <span className="kbd-hint">Ctrl+K</span> focus composer</span>
+        <span>Voice dispatches via intent routing</span>
+      </div>
+      {submitError && (
+        <div role="alert" className="chip state-danger" style={{ margin: "var(--space-2) var(--space-3)" }}>
+          {submitError}
+        </div>
+      )}
     </section>
   );
 }

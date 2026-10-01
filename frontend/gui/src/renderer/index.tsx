@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { App } from "./App.js";
+import type { Settings } from "@awf/protocol-client";
 import type {
   ApprovalSummary,
   ArtifactSummary,
@@ -29,6 +30,7 @@ interface VoiceRoundTripResult {
 declare global {
   interface Window {
     awf: {
+      getSettings: () => Promise<Settings>;
       runStart: (
         workflowRef: string,
         input?: Record<string, unknown>,
@@ -113,6 +115,7 @@ if (container) {
   const root = createRoot(container);
   root.render(
     React.createElement(App, {
+      onGetSettings: () => window.awf.getSettings(),
       onApprove: (approvalId: string) => void window.awf.approvalApprove(approvalId),
       onReject: (approvalId: string, reason: string) => void window.awf.approvalReject(approvalId, reason),
       onTextSubmit: async (text: string, workflowRef: string) => {

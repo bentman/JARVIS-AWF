@@ -7,6 +7,7 @@ import { stateClass } from "./state.js";
 export interface RunsViewProps {
   runs: RunSummary[];
   selectedRunDetail?: ControlRunDetail | null;
+  onCloseDetail?: () => void;
   onRunDetail?: (runId: string) => void;
   onArtifactRead?: (artifactId: string) => Promise<ArtifactSummary & { content: string }>;
   onApprove?: (approvalId: string) => Promise<void>;
@@ -19,6 +20,7 @@ export interface RunsViewProps {
 export function RunsView({
   runs,
   selectedRunDetail,
+  onCloseDetail,
   onRunDetail,
   onArtifactRead,
   onApprove,
@@ -57,6 +59,7 @@ export function RunsView({
           <>
             <RunTimeline
               detail={selectedRunDetail}
+              onClose={onCloseDetail}
               onApprove={onApprove}
               onReject={onReject}
               onImprovementRequestMerge={onImprovementRequestMerge}

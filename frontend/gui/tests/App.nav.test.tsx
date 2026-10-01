@@ -406,4 +406,90 @@ describe("App first page (chat + voice, ADR-0025)", () => {
     await waitFor(() => expect(onRunStart).toHaveBeenCalledWith("demo@1.0.0", { objective: "async run test" }));
     await waitFor(() => expect(pollCount).toBeGreaterThanOrEqual(2));
   });
+
+  it("loads settings and initializes default workflow and theme", async () => {
+    const onGetSettings = vi.fn().mockResolvedValue({
+      theme: "dark",
+      keybindings: {},
+      verbosity: "normal",
+      defaultWorkflow: "custom-assistant@2.0.0",
+      wakeWordEnabled: true,
+    });
+
+    render(
+      <App
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+        onGetSettings={onGetSettings}
+      />,
+    );
+
+    await waitFor(() => expect(onGetSettings).toHaveBeenCalled());
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+
+    fireEvent.click(screen.getByRole("button", { name: "Chat" }));
+    const select = await screen.findByLabelText("Workflow");
+    expect((select as HTMLSelectElement).value).toBe("custom-assistant@2.0.0");
+  });
+
+  it("supports global keyboard shortcuts for view switching and inspector dismiss", async () => {
+    const onControlSummary = vi.fn().mockResolvedValue({
+      runs: [],
+      approvals: [],
+      improvements: [],
+      recent_verdicts: [],
+      registry_counts: {},
+      llm: {},
+      readiness: { profile_id: "linux-x64-cpu", inventory: null, tokens: [], readiness: {} },
+    });
+
+    render(
+      <App
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+        onControlSummary={onControlSummary}
+      />,
+    );
+
+    await waitFor(() => expect(onControlSummary).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "Operate" })).toHaveAttribute("aria-current", "page");
+
+    // Press Ctrl+2 to switch to Chat
+    fireEvent.keyDown(window, { key: "2", ctrlKey: true });
+    expect(screen.getByRole("button", { name: "Chat" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("region", { name: "Chat" })).toBeTruthy();
+
+    // Press Ctrl+1 to switch back to Operate
+    fireEvent.keyDown(window, { key: "1", ctrlKey: true });
+    expect(screen.getByRole("button", { name: "Operate" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("navigates to operate sections when clicking status bar chips", async () => {
+    const onControlSummary = vi.fn().mockResolvedValue({
+      runs: [],
+      approvals: [{ approval_id: "ap-1", risk_class: "R1", action_digest: "sha256:123" }],
+      improvements: [],
+      recent_verdicts: [],
+      registry_counts: {},
+      llm: {},
+      readiness: { profile_id: "linux-x64-cpu", inventory: null, tokens: [], readiness: { cpu: { ready: true } } },
+    });
+
+    render(
+      <App
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+        onControlSummary={onControlSummary}
+      />,
+    );
+
+    await waitFor(() => expect(onControlSummary).toHaveBeenCalled());
+    const readinessBtn = screen.getByRole("button", { name: "Readiness: ready" });
+    expect(readinessBtn).toBeTruthy();
+    fireEvent.click(readinessBtn);
+
+    const approvalsBtn = screen.getByRole("button", { name: "1 pending approvals" });
+    expect(approvalsBtn).toBeTruthy();
+    fireEvent.click(approvalsBtn);
+  });
 });

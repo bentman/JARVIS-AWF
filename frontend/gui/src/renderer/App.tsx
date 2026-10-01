@@ -25,6 +25,7 @@ import { ChatIcon, DatabaseIcon, SparkleIcon, type IconProps } from "./icons.js"
 import { Transcript, type TranscriptEntry } from "./Transcript.js";
 import { VoiceActivation, type VoiceActivationHandle, type VoiceSessionResult, type VoiceSubmitTextResult } from "./VoiceActivation.js";
 import type { RiskClass } from "../voiceApproval.js";
+import type { Settings } from "@awf/protocol-client";
 
 export interface PendingApproval {
   approvalId: string;
@@ -71,6 +72,8 @@ export interface TextSubmitResult {
 }
 
 export interface AppProps extends VoiceSessionFns {
+  initialSettings?: Settings;
+  onGetSettings?: () => Promise<Settings>;
   initialTranscript?: TranscriptEntry[];
   pendingApproval?: PendingApproval;
   voiceConfirmed?: boolean;
@@ -128,6 +131,8 @@ function toPendingApproval(approval: ApprovalSummary): PendingApproval {
 }
 
 export function App({
+  initialSettings,
+  onGetSettings,
   initialTranscript = [],
   pendingApproval,
   voiceConfirmed = false,
@@ -170,6 +175,7 @@ export function App({
   onMemoryPublish,
   onMemoryReject,
 }: AppProps): React.JSX.Element {
+  const [settings, setSettings] = useState<Settings | undefined>(initialSettings);
   const [entries, setEntries] = useState<TranscriptEntry[]>(initialTranscript);
   const nextId = useRef(initialTranscript.length);
   const voiceRef = useRef<VoiceActivationHandle | null>(null);
@@ -181,12 +187,38 @@ export function App({
   const [selectedRunDetail, setSelectedRunDetail] = useState<ControlRunDetail | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<ViewName | undefined>(undefined);
-  const [chatWorkflowRef, setChatWorkflowRef] = useState(DEFAULT_CHAT_WORKFLOW_REF);
-  const [workflowOptions, setWorkflowOptions] = useState<string[]>([DEFAULT_CHAT_WORKFLOW_REF]);
+  const [chatWorkflowRef, setChatWorkflowRef] = useState(
+    initialSettings?.defaultWorkflow ?? DEFAULT_CHAT_WORKFLOW_REF,
+  );
+  const [workflowOptions, setWorkflowOptions] = useState<string[]>([
+    initialSettings?.defaultWorkflow ?? DEFAULT_CHAT_WORKFLOW_REF,
+  ]);
   const [chatSubmitting, setChatSubmitting] = useState(false);
   const [chatSubmitError, setChatSubmitError] = useState<string | null>(null);
   const [approvalPreview, setApprovalPreview] = useState<PendingApproval["preview"]>(undefined);
   const refreshInFlight = useRef<Promise<void> | null>(null);
+
+  useEffect(() => {
+    if (onGetSettings && !initialSettings) {
+      void onGetSettings()
+        .then((loaded) => {
+          if (!loaded) return;
+          setSettings(loaded);
+          if (loaded.defaultWorkflow) {
+            setChatWorkflowRef(loaded.defaultWorkflow);
+            setWorkflowOptions((prev) =>
+              prev.includes(loaded.defaultWorkflow!) ? prev : [...prev, loaded.defaultWorkflow!],
+            );
+          }
+          if (loaded.theme && typeof document !== "undefined") {
+            document.documentElement.setAttribute("data-theme", loaded.theme);
+          }
+        })
+        .catch(() => {});
+    } else if (initialSettings?.theme && typeof document !== "undefined") {
+      document.documentElement.setAttribute("data-theme", initialSettings.theme);
+    }
+  }, [onGetSettings, initialSettings]);
 
   const refresh = async () => {
     if (!onControlSummary && !onRunList && !onApprovalList && !onImprovementList) return;
@@ -264,6 +296,14 @@ export function App({
     setSelectedRunDetail(detail);
     if (detail.run?.status === "RUNNING" && activePollingRunId.current !== runId) {
       pollRunProgress(runId);
+    }
+    if (typeof window !== "undefined") {
+      setTimeout(() => {
+        const el = document.getElementById("selected-run-inspector");
+        if (typeof el?.scrollIntoView === "function") {
+          el.scrollIntoView({ behavior: "smooth" });
+        }
+      }, 50);
     }
   };
 
@@ -548,6 +588,56 @@ export function App({
     readinessEntries.length > 0 && readinessEntries.every((entry) => entry.ready) ? "ready" : "not ready";
   const llmState = controlSummary?.llm.status?.state ?? "idle";
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+
+      if (mod && (e.key === "1" || e.key === "2" || e.key === "3")) {
+        e.preventDefault();
+        if (e.key === "1" && statusAvailable) setView("operate");
+        else if (e.key === "2") setView("chat");
+        else if (e.key === "3" && (registryAvailable || memoryAvailable)) setView("library");
+        return;
+      }
+
+      if (mod && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        const active = view ?? "operate";
+        if (active === "chat") {
+          const composer = document.querySelector<HTMLInputElement>(".composer-input");
+          composer?.focus();
+        } else if (active === "library") {
+          const search = document.querySelector<HTMLInputElement>("input[type='search'], .memory-search input");
+          search?.focus();
+        } else {
+          const startWork = document.querySelector<HTMLInputElement>(".start-work-panel input");
+          startWork?.focus();
+        }
+        return;
+      }
+
+      if (e.key === "Escape") {
+        if (selectedRunDetail) {
+          e.preventDefault();
+          setSelectedRunDetail(null);
+        }
+        return;
+      }
+
+      if (mod && e.key === "Enter") {
+        if (effectivePendingApproval) {
+          e.preventDefault();
+          void handleApprove(effectivePendingApproval.approvalId);
+        }
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [view, selectedRunDetail, effectivePendingApproval, statusAvailable, registryAvailable, memoryAvailable]);
+
   return (
     <div className="shell">
       <header className="topbar">
@@ -565,16 +655,18 @@ export function App({
         </div>
         <nav aria-label="Views">
           <ul className="nav-list">
-            {views.map((v) => (
+            {views.map((v, idx) => (
               <li key={v.name}>
                 <button
                   type="button"
                   className="btn nav-item"
+                  aria-label={v.label}
                   aria-current={v.name === activeView ? "page" : undefined}
                   onClick={() => setView(v.name)}
                 >
                   {v.icon && <v.icon size={13} className="nav-icon" />}
                   {v.label}
+                  <span className="kbd-hint">Ctrl+{idx + 1}</span>
                   {v.badge !== undefined && <span className="rail-badge">{v.badge}</span>}
                 </button>
               </li>
@@ -583,11 +675,45 @@ export function App({
         </nav>
         <div className="status-bar" role="status" aria-label="Status">
           <span className="mono">{controlSummary?.readiness.profile_id ?? "no profile"}</span>
-          <span className={`chip ${stateClass(readinessOverall)}`}>{readinessOverall}</span>
+          <button
+            type="button"
+            className={`chip chip-btn ${stateClass(readinessOverall)}`}
+            onClick={() => {
+              setView("operate");
+              if (typeof window !== "undefined") {
+                setTimeout(() => {
+                  const el = document.querySelector(".overview, [aria-label='System readiness']");
+                  if (typeof el?.scrollIntoView === "function") {
+                    el.scrollIntoView({ behavior: "smooth" });
+                  }
+                }, 50);
+              }
+            }}
+            title="Inspect system readiness"
+            aria-label={`Readiness: ${readinessOverall}`}
+          >
+            {readinessOverall}
+          </button>
           <span className={`chip ${stateClass(llmState)}`}>{llmState}</span>
-          <span className="chip">
+          <button
+            type="button"
+            className="chip chip-btn"
+            onClick={() => {
+              setView("operate");
+              if (typeof window !== "undefined") {
+                setTimeout(() => {
+                  const el = document.querySelector("[aria-label='Approvals']");
+                  if (typeof el?.scrollIntoView === "function") {
+                    el.scrollIntoView({ behavior: "smooth" });
+                  }
+                }, 50);
+              }
+            }}
+            title="Jump to pending approvals"
+            aria-label={`${approvals.length} pending approvals`}
+          >
             {approvals.length} pending approval{approvals.length === 1 ? "" : "s"}
-          </span>
+          </button>
         </div>
         <button type="button" className="btn btn-secondary" onClick={() => void refresh()} disabled={refreshing}>
           {refreshing ? "Refreshing..." : "Refresh"}
@@ -606,6 +732,12 @@ export function App({
                   submitError={chatSubmitError}
                   onSend={handleComposerSend}
                   onMic={voiceAvailable ? () => voiceRef.current?.togglePushToTalk() : undefined}
+                  onRunSelect={(runId) => {
+                    setView("operate");
+                    if (onControlRunDetail) {
+                      void handleRunDetail(runId);
+                    }
+                  }}
                 />
                 {voiceAvailable && (
                   <VoiceActivation
@@ -633,6 +765,11 @@ export function App({
                   </div>
                   <h1 className="view-title">Operate</h1>
                 </div>
+                <div className="view-actions">
+                  <button type="button" className="btn btn-secondary" onClick={() => setView("chat")}>
+                    Jump to Chat
+                  </button>
+                </div>
               </div>
               <OperatorWorkQueue
                 items={controlSummary?.operator_work_items ?? []}
@@ -654,6 +791,7 @@ export function App({
                 <>
                   <RunTimeline
                     detail={selectedRunDetail}
+                    onClose={() => setSelectedRunDetail(null)}
                     onApprove={handleApprove}
                     onReject={handleReject}
                     onImprovementRequestMerge={onImprovementRequestMerge}
@@ -706,6 +844,20 @@ export function App({
           )}
           {activeView === "library" && (
             <>
+              <div className="view-header">
+                <div>
+                  <div className="view-kicker">
+                    <DatabaseIcon size={12} />
+                    Registry & Memory Fabric
+                  </div>
+                  <h1 className="view-title">Library</h1>
+                </div>
+                <div className="view-actions">
+                  <button type="button" className="btn btn-secondary" onClick={() => setView("operate")}>
+                    View Operations
+                  </button>
+                </div>
+              </div>
               {registryAvailable &&
                 onRegistryValidate &&
                 onRegistryPublish &&

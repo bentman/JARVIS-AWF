@@ -209,7 +209,7 @@ Each of these is real, was observed in the audit, and is assigned to a designate
   snapshot polling. Continuous frontend progress updates during an in-flight
   run are resolved via asynchronous execution and status polling under ADR-0033.
 - **CI graduation (Resolved by ADR-0035).** Continuous integration
-  (`.github/workflows/ci.yml`), dependabot, `SECURITY.md`, and `NOTICE` static
+  (`.github/workflows/ci.yml`), `SECURITY.md`, and `NOTICE` static
   attribution are implemented under ADR-0035.
 
 ## The tradeoffs accepted

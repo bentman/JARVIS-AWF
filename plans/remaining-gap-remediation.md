@@ -38,7 +38,7 @@ AWF adheres to a minimal-infrastructure, single-operator operational model:
 ### 6. Automated CI & License Attribution (ADR-0035)
 - **Continuous Integration**: `.github/workflows/ci.yml` verifying backend (`scripts/validate_backend.py ci`) and frontend (`npm test --workspaces`) across Python 3.12 and Node.js 24 LTS on every push/PR.
 - **Static License Attribution**: Plaintext `NOTICE` at root documenting licenses and origins for Kokoro-82M, OpenAI Whisper, Silero VAD, openWakeWord, and LiteLLM.
-- **Security & Dependency Governance**: `SECURITY.md` vulnerability reporting policy and `.github/dependabot.yml` weekly automated monitoring.
+- **Security Policy**: `SECURITY.md` vulnerability reporting policy.
 
 ---
 

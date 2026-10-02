@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented. Acceptance evidence: `.github/workflows/ci.yml` validates syntax, formatting, and test execution across both Python 3.12 (`scripts/validate_backend.py ci`) and Node.js 24 LTS (`npm test --workspaces`); static attribution verified in `NOTICE`; vulnerability reporting established in `SECURITY.md`; dependency monitoring declared in `.github/dependabot.yml`.
+Implemented. Acceptance evidence: `.github/workflows/ci.yml` validates syntax, formatting, and test execution across both Python 3.12 (`scripts/validate_backend.py ci`) and Node.js 24 LTS (`npm test --workspaces`); static attribution verified in `NOTICE`; vulnerability reporting established in `SECURITY.md`.
 
 ## Context
 
@@ -12,7 +12,6 @@ Additionally, ADR-0026 and `plans/remaining-gap-remediation.md` identified the n
 1. Automated CI pipelines running backend protocol parity, argument consistency, linting, and regression suites alongside frontend workspace test suites.
 2. Plaintext static license attribution (`NOTICE`) acknowledging open-source dependencies (Kokoro-82M, Whisper, Silero VAD, openWakeWord, LiteLLM).
 3. Coordinated vulnerability disclosure policy (`SECURITY.md`).
-4. Automated dependency security monitoring (`.github/dependabot.yml`).
 
 ## Decision
 
@@ -27,9 +26,6 @@ Additionally, ADR-0026 and `plans/remaining-gap-remediation.md` identified the n
 
 3. **Security Policy (`SECURITY.md`)**:
    - Publish vulnerability disclosure guidelines requiring private coordinated disclosure before public reporting, defining `0.1.x` as the supported release series.
-
-4. **Dependency Monitoring (`.github/dependabot.yml`)**:
-   - Configure weekly automated version scans for npm (frontend), pip (backend), and GitHub Actions.
 
 ## Consequences
 

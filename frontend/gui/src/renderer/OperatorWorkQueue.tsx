@@ -93,9 +93,16 @@ export function OperatorWorkQueue({
               {grouped[group].map((item) => (
                 <li key={item.item_id} className="queue-item">
                   <div className="queue-item-main">
-                    <span className={`chip ${stateClass(item.status)}`}>{item.status}</span>
-                    <strong>{item.title}</strong>
-                    <span className="chip">{GROUP_LABELS[item.kind] ?? item.kind}</span>
+                    <div className="row" style={{ alignItems: "center", marginBottom: "var(--space-1)" }}>
+                      <span className={`chip ${stateClass(item.status)}`}>{item.status}</span>
+                      <strong>{item.title}</strong>
+                      <span className="chip">{GROUP_LABELS[item.kind] ?? item.kind}</span>
+                      {item.created_at && (
+                        <span className="mono row-reason" title={item.created_at}>
+                          {item.created_at.slice(11, 19) || item.created_at}
+                        </span>
+                      )}
+                    </div>
                     <span className="row-reason">{item.description}</span>
                   </div>
                   <div className="queue-actions">

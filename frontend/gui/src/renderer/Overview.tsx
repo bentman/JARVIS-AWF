@@ -14,10 +14,18 @@ export function Overview({ controlSummary, onLlmModels }: OverviewProps): React.
   const llmServers = controlSummary?.llm.servers;
   const recentVerdicts: ArtifactSummary[] = controlSummary?.recent_verdicts ?? [];
   const [models, setModels] = useState<LlmModelsReport | null>(null);
+  const [copiedCmd, setCopiedCmd] = useState(false);
+
+  const [loadingModels, setLoadingModels] = useState(false);
 
   const loadModels = async () => {
     if (!onLlmModels) return;
-    setModels(await onLlmModels());
+    setLoadingModels(true);
+    try {
+      setModels(await onLlmModels());
+    } finally {
+      setLoadingModels(false);
+    }
   };
 
   return (
@@ -38,7 +46,25 @@ export function Overview({ controlSummary, onLlmModels }: OverviewProps): React.
                 </li>
               ))}
             </ul>
-            <div className="mono">{doctor.first_run_command}</div>
+            {doctor.first_run_command && (
+              <div className="action-cluster" style={{ marginTop: "var(--space-2)" }}>
+                <span className="mono">{doctor.first_run_command}</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.clipboard) {
+                      void navigator.clipboard.writeText(doctor.first_run_command);
+                      setCopiedCmd(true);
+                      setTimeout(() => setCopiedCmd(false), 1500);
+                    }
+                  }}
+                  style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }}
+                >
+                  {copiedCmd ? "Copied" : "Copy command"}
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <p className="empty">No operator readiness data.</p>
@@ -79,7 +105,7 @@ export function Overview({ controlSummary, onLlmModels }: OverviewProps): React.
             <div>State: {llmStatus.state ?? "unknown"}</div>
             {llmStatus.server_id && <div>Server: {llmStatus.server_id}</div>}
             {llmStatus.profile_id && <div>Runtime profile: {llmStatus.profile_id}</div>}
-            {llmStatus.error && <div>LLM error: {llmStatus.error}</div>}
+            {llmStatus.error && <div className="approval-alert" role="alert">LLM error: {llmStatus.error}</div>}
             {llmServers?.default_server && <div>Default server: {llmServers.default_server}</div>}
             {llmServers?.current_selection && (
               <div>Current selection: {JSON.stringify(llmServers.current_selection)}</div>
@@ -90,8 +116,13 @@ export function Overview({ controlSummary, onLlmModels }: OverviewProps): React.
         )}
         {onLlmModels && (
           <div>
-            <button type="button" className="btn btn-secondary" onClick={() => void loadModels()}>
-              Load models
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={loadingModels}
+              onClick={() => void loadModels()}
+            >
+              {loadingModels ? "Loading models..." : "Load models"}
             </button>
             {models && (
               <>
@@ -115,7 +146,7 @@ export function Overview({ controlSummary, onLlmModels }: OverviewProps): React.
                     </ul>
                   </div>
                 )}
-                {models.error && <div>Models error: {models.error}</div>}
+                {models.error && <div className="approval-alert" role="alert">Models error: {models.error}</div>}
               </>
             )}
           </div>

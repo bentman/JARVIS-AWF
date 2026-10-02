@@ -59,11 +59,18 @@ export function Transcript({
     setDraft("");
   };
 
+  const copyTimerRef = React.useRef<number | null>(null);
+
   const copyText = (id: number, text: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       void navigator.clipboard.writeText(text);
       setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 1500);
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = window.setTimeout(() => {
+        setCopiedId((curr) => (curr === id ? null : curr));
+      }, 1500);
     }
   };
 
@@ -168,10 +175,17 @@ export function Transcript({
             ))}
           </datalist>
         )}
-        <input
+        <textarea
           className="composer-input"
           value={draft}
+          rows={1}
           onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void submit(e);
+            }
+          }}
           placeholder="Message AWF (e.g. 'check readiness', 'run workflow')..."
           aria-label="Message"
         />
@@ -181,7 +195,7 @@ export function Transcript({
         </button>
       </form>
       <div className="composer-hints">
-        <span><span className="kbd-hint">Enter</span> to send &bull; <span className="kbd-hint">Ctrl+K</span> focus composer</span>
+        <span><span className="kbd-hint">Enter</span> send &bull; <span className="kbd-hint">Shift+Enter</span> newline &bull; <span className="kbd-hint">Ctrl+K</span> focus</span>
         <span>Voice dispatches via intent routing</span>
       </div>
       {submitError && (

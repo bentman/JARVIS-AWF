@@ -46,14 +46,30 @@ export function RegistryActions({
   const [entries, setEntries] = useState<RegistryEntry[]>([]);
   const [selectedDetail, setSelectedDetail] = useState<Record<string, unknown> | null>(null);
   const [listError, setListError] = useState<string>("");
+  const [filterQuery, setFilterQuery] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const filteredEntries = entries.filter((entry) => {
+    if (!filterQuery.trim()) return true;
+    const q = filterQuery.toLowerCase();
+    return (
+      entry.name.toLowerCase().includes(q) ||
+      entry.kind.toLowerCase().includes(q) ||
+      entry.version.toLowerCase().includes(q) ||
+      (entry.trust_status ?? "").toLowerCase().includes(q)
+    );
+  });
 
   const runAction = async (action: () => Promise<unknown>) => {
     setError("");
     setResult("");
+    setBusy(true);
     try {
       setResult(asText(await action()));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -90,20 +106,37 @@ export function RegistryActions({
 
   return (
     <section aria-label="Registry actions" className="card">
-      <h2>Registry actions</h2>
-      <label>
-        Draft path
+      <div className="section-heading">
+        <div>
+          <h2>Registry actions</h2>
+          <p className="muted">Validate, publish, reindex, retire, and set trust status for registry artifacts.</p>
+        </div>
+        <span className="chip state-ok">{kind}</span>
+      </div>
+
+      <div className="form-group">
+        <label className="field-label" htmlFor="registry-draft-path">
+          Draft path
+        </label>
         <input
+          id="registry-draft-path"
           aria-label="Registry draft path"
           className="mono"
           value={path}
           onChange={(event) => setPath(event.currentTarget.value)}
           placeholder="data/proposals/example.yaml"
         />
-      </label>
-      <label>
-        Kind
-        <select aria-label="Registry kind" value={kind} onChange={(event) => setKind(event.currentTarget.value)}>
+      </div>
+      <div className="form-group">
+        <label className="field-label" htmlFor="registry-kind-select">
+          Kind
+        </label>
+        <select
+          id="registry-kind-select"
+          aria-label="Registry kind"
+          value={kind}
+          onChange={(event) => setKind(event.currentTarget.value)}
+        >
           <option value="workflows">workflows</option>
           <option value="capabilities">capabilities</option>
           <option value="agents">agents</option>
@@ -113,16 +146,31 @@ export function RegistryActions({
           <option value="voice-profiles">voice-profiles</option>
           <option value="semantic-memories">semantic-memories</option>
         </select>
-      </label>
+      </div>
       {onRegistryList && (
-        <div aria-label="Registry browser">
-          <button type="button" className="btn btn-secondary" onClick={() => void listEntries()}>
-            List
-          </button>
+        <div aria-label="Registry browser" style={{ marginBottom: "var(--space-4)" }}>
+          <div className="action-cluster" style={{ marginTop: 0, marginBottom: "var(--space-2)" }}>
+            <button type="button" className="btn btn-secondary" onClick={() => void listEntries()}>
+              List
+            </button>
+            {entries.length > 0 && (
+              <input
+                aria-label="Filter registry entries"
+                className="mono"
+                value={filterQuery}
+                onChange={(event) => setFilterQuery(event.currentTarget.value)}
+                placeholder="Filter entries..."
+                style={{ maxWidth: "200px", padding: "var(--space-1) var(--space-2)", fontSize: "var(--text-xs)" }}
+              />
+            )}
+          </div>
           {listError && <p role="alert">{listError}</p>}
-          {entries.length > 0 && (
+          {entries.length > 0 && filteredEntries.length === 0 && (
+            <p className="empty">No entries match &quot;{filterQuery}&quot;.</p>
+          )}
+          {filteredEntries.length > 0 && (
             <ul className="list">
-              {entries.map((entry) => (
+              {filteredEntries.map((entry) => (
                 <li key={`${entry.kind}/${entry.name}@${entry.version}`} className="row">
                   <span className="mono">
                     {entry.kind}/{entry.name}@{entry.version}
@@ -152,36 +200,52 @@ export function RegistryActions({
           {selectedDetail && <RegistryObjectSummary detail={selectedDetail} onWorkflowRun={onWorkflowRun} />}
         </div>
       )}
-      <label>
-        Name
+      <div className="section-heading" style={{ marginTop: "var(--space-4)" }}>
+        <div>
+          <h3>Entity management</h3>
+          <p className="muted">Inspect, retire, or set trust status for a specific entity.</p>
+        </div>
+      </div>
+      <div className="form-group">
+        <label className="field-label" htmlFor="registry-name">
+          Name
+        </label>
         <input
+          id="registry-name"
           aria-label="Registry name"
           className="mono"
           value={name}
           onChange={(event) => setName(event.currentTarget.value)}
         />
-      </label>
-      <label>
-        Version
+      </div>
+      <div className="form-group">
+        <label className="field-label" htmlFor="registry-version">
+          Version
+        </label>
         <input
+          id="registry-version"
           aria-label="Registry version"
           className="mono"
           value={version}
           onChange={(event) => setVersion(event.currentTarget.value)}
         />
-      </label>
-      <label>
-        Trust status
+      </div>
+      <div className="form-group">
+        <label className="field-label" htmlFor="registry-trust-status">
+          Trust status
+        </label>
         <input
+          id="registry-trust-status"
           aria-label="Registry trust status"
           value={trustStatus}
           onChange={(event) => setTrustStatus(event.currentTarget.value)}
         />
-      </label>
-      <div className="row">
+      </div>
+      <div className="action-cluster">
         <button
           type="button"
           className="btn btn-primary"
+          disabled={busy}
           onClick={() => void runAction(() => onRegistryValidate(path, kind || undefined))}
         >
           Validate
@@ -189,16 +253,23 @@ export function RegistryActions({
         <button
           type="button"
           className="btn btn-primary"
+          disabled={busy}
           onClick={() => void runAction(() => onRegistryPublish(path, kind))}
         >
           Publish
         </button>
-        <button type="button" className="btn btn-primary" onClick={() => void runAction(() => onRegistryReindex())}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy}
+          onClick={() => void runAction(() => onRegistryReindex())}
+        >
           Reindex
         </button>
         <button
           type="button"
           className="btn btn-danger"
+          disabled={busy}
           onClick={() => void runAction(() => onRegistryRetire(kind, name, version))}
         >
           Retire
@@ -206,14 +277,28 @@ export function RegistryActions({
         <button
           type="button"
           className="btn btn-secondary"
+          disabled={busy}
           onClick={() => void runAction(() => onRegistryTrust(kind, name, version, trustStatus))}
         >
           Set trust
         </button>
       </div>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
+          <p role="alert" style={{ margin: 0 }}>{error}</p>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            style={{ fontSize: "11px", padding: "1px 6px" }}
+            onClick={() => setError("")}
+            title="Dismiss error"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {result && (
-        <pre aria-label="Registry action result" className="pre-scroll">
+        <pre aria-label="Registry action result" className="pre-scroll" style={{ marginTop: "var(--space-3)" }}>
           {result}
         </pre>
       )}

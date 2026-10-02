@@ -63,6 +63,7 @@ export function StartWorkPanel({
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [copiedCmd, setCopiedCmd] = React.useState(false);
 
   React.useEffect(() => {
     setWorkflowRef(firstRef);
@@ -96,6 +97,16 @@ export function StartWorkPanel({
     }
   };
 
+  const isRawInputValidJson = React.useMemo(() => {
+    if (!rawInput.trim()) return true;
+    try {
+      const parsed = JSON.parse(rawInput) as unknown;
+      return Boolean(parsed && typeof parsed === "object" && !Array.isArray(parsed));
+    } catch {
+      return false;
+    }
+  }, [rawInput]);
+
   return (
     <section aria-label="Start work" className="operate-band start-work-panel">
       <div className="section-heading">
@@ -105,80 +116,150 @@ export function StartWorkPanel({
         </div>
         {selected && <span className={`chip ${stateClass(selected.status)}`}>{selected.status}</span>}
       </div>
-      <label>
-        Workflow
-        <select aria-label="Workflow" value={workflowRef} onChange={(event) => setSelectedRef(event.currentTarget.value)}>
-          {refs.map((ref) => (
-            <option key={ref} value={ref}>
-              {ref}
-            </option>
-          ))}
-        </select>
-      </label>
-      {selected && (
-        <div className="workflow-summary">
-          <span className={`chip ${stateClass(selected.source ?? "config")}`}>{selected.source ?? "config"}</span>
-          {selected.trust_status && <span className={`chip ${stateClass(selected.trust_status)}`}>{selected.trust_status}</span>}
-          {selected.digest && <span className="mono row-reason">{selected.digest.slice(0, 24)}</span>}
+      <form onSubmit={(event) => { event.preventDefault(); void start(); }}>
+        <div className="form-group">
+          <label className="field-label" htmlFor="workflow-ref-select">
+            Workflow
+          </label>
+          <select
+            id="workflow-ref-select"
+            aria-label="Workflow"
+            value={workflowRef}
+            onChange={(event) => setSelectedRef(event.currentTarget.value)}
+          >
+            {refs.map((ref) => (
+              <option key={ref} value={ref}>
+                {ref}
+              </option>
+            ))}
+          </select>
+        </div>
+        {selected && (
+          <div className="workflow-summary" style={{ marginBottom: "var(--space-3)" }}>
+            <span className={`chip ${stateClass(selected.source ?? "config")}`}>{selected.source ?? "config"}</span>
+            {selected.trust_status && <span className={`chip ${stateClass(selected.trust_status)}`}>{selected.trust_status}</span>}
+            {selected.digest && <span className="mono row-reason">{selected.digest.slice(0, 24)}</span>}
+          </div>
+        )}
+        {(selected?.input_schema_summary?.fields ?? []).map((field) => {
+          const fieldDomId = `input-field-${workflowRef.replace(/[^a-zA-Z0-9_-]/g, "_")}-${field.name}`;
+          return (
+            <div key={field.name} className="form-group">
+              <label className="field-label" htmlFor={fieldDomId}>
+                <span>{field.name}</span>
+                {field.required && (
+                  <span className="chip state-warn" style={{ padding: "1px 6px", fontSize: "10px" }}>
+                    required
+                  </span>
+                )}
+              </label>
+              {field.enum && field.enum.length > 0 ? (
+                <select
+                  id={fieldDomId}
+                  aria-label={field.name}
+                  value={String(input[field.name] ?? "")}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setInput((prev) => ({ ...prev, [field.name]: coerceFieldValue(field, value) }));
+                  }}
+                >
+                  {field.enum.map((value) => (
+                    <option key={String(value)} value={String(value)}>
+                      {String(value)}
+                    </option>
+                  ))}
+                </select>
+              ) : field.type === "boolean" ? (
+                <input
+                  id={fieldDomId}
+                  aria-label={field.name}
+                  type="checkbox"
+                  checked={Boolean(input[field.name])}
+                  onChange={(event) => setInput((prev) => ({ ...prev, [field.name]: event.currentTarget.checked }))}
+                />
+              ) : (
+                <input
+                  id={fieldDomId}
+                  aria-label={field.name}
+                  className={field.name === "objective" ? "" : "mono"}
+                  required={field.required}
+                  type={field.type === "integer" || field.type === "number" ? "number" : "text"}
+                  value={String(input[field.name] ?? "")}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setInput((prev) => ({ ...prev, [field.name]: coerceFieldValue(field, value) }));
+                  }}
+                />
+              )}
+            </div>
+          );
+        })}
+        <details style={{ marginBottom: "var(--space-2)" }}>
+          <summary className="field-label" style={{ cursor: "pointer", userSelect: "none", marginBottom: "var(--space-1)" }}>
+            <span>Advanced input</span>
+            {!isRawInputValidJson && (
+              <span className="chip state-danger" style={{ fontSize: "10px", padding: "1px 6px" }}>
+                Invalid JSON
+              </span>
+            )}
+          </summary>
+          <div className="form-group" style={{ marginTop: "var(--space-2)" }}>
+            <textarea
+              aria-label="Advanced input"
+              className="mono"
+              value={rawInput}
+              onChange={(event) => setRawInput(event.currentTarget.value)}
+              placeholder='{"objective":"check the system"}'
+            />
+          </div>
+        </details>
+        <div className="action-cluster" style={{ marginTop: 0 }}>
+          <button
+            type="submit"
+            aria-label="Start workflow"
+            className="btn btn-primary"
+            disabled={!onStart || submitting || !isRawInputValidJson}
+          >
+            {submitting ? "Starting..." : (
+              <>
+                <span>Start workflow</span> <span className="kbd-hint">Enter</span>
+              </>
+            )}
+          </button>
+          {selected?.primary_action?.command && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)" }}>
+              <code className="mono">{selected.primary_action.command}</code>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: "11px", padding: "1px 6px" }}
+                onClick={() => {
+                  void navigator.clipboard.writeText(selected.primary_action.command);
+                  setCopiedCmd(true);
+                  setTimeout(() => setCopiedCmd(false), 1500);
+                }}
+                title="Copy command"
+              >
+                {copiedCmd ? "Copied" : "Copy"}
+              </button>
+            </div>
+          )}
+        </div>
+      </form>
+      {error && (
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
+          <p role="alert" style={{ margin: 0 }}>{error}</p>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            style={{ fontSize: "11px", padding: "1px 6px" }}
+            onClick={() => setError(null)}
+            title="Dismiss error"
+          >
+            Dismiss
+          </button>
         </div>
       )}
-      {(selected?.input_schema_summary?.fields ?? []).map((field) => (
-        <label key={field.name}>
-          {field.name}
-          {field.enum && field.enum.length > 0 ? (
-            <select
-              aria-label={field.name}
-              value={String(input[field.name] ?? "")}
-              onChange={(event) => {
-                const value = event.currentTarget.value;
-                setInput((prev) => ({ ...prev, [field.name]: coerceFieldValue(field, value) }));
-              }}
-            >
-              {field.enum.map((value) => (
-                <option key={String(value)} value={String(value)}>
-                  {String(value)}
-                </option>
-              ))}
-            </select>
-          ) : field.type === "boolean" ? (
-            <input
-              aria-label={field.name}
-              type="checkbox"
-              checked={Boolean(input[field.name])}
-              onChange={(event) => setInput((prev) => ({ ...prev, [field.name]: event.currentTarget.checked }))}
-            />
-          ) : (
-            <input
-              aria-label={field.name}
-              className={field.name === "objective" ? "" : "mono"}
-              required={field.required}
-              type={field.type === "integer" || field.type === "number" ? "number" : "text"}
-              value={String(input[field.name] ?? "")}
-              onChange={(event) => {
-                const value = event.currentTarget.value;
-                setInput((prev) => ({ ...prev, [field.name]: coerceFieldValue(field, value) }));
-              }}
-            />
-          )}
-        </label>
-      ))}
-      <details>
-        <summary>Advanced input</summary>
-        <textarea
-          aria-label="Advanced input"
-          className="mono"
-          value={rawInput}
-          onChange={(event) => setRawInput(event.currentTarget.value)}
-          placeholder='{"objective":"check the system"}'
-        />
-      </details>
-      <div className="inline-actions">
-        <button type="button" className="btn btn-primary" disabled={!onStart || submitting} onClick={() => void start()}>
-          {submitting ? "Starting..." : "Start workflow"}
-        </button>
-        {selected?.primary_action?.command && <code>{selected.primary_action.command}</code>}
-      </div>
-      {error && <p role="alert">{error}</p>}
       {result && <p role="status">{result}</p>}
     </section>
   );

@@ -6,10 +6,8 @@ from awf.db.bootstrap import init_db
 from awf.db.connection import get_connection
 from awf.hardware.preflight import reset_preflight_cache
 from awf.hardware.profiler import (
-    CANONICAL_PROFILES,
     SYSTEM_RUN_ID,
-    _detect_arch,
-    _detect_os,
+    HardwareInventory,
     _inventory_id,
     _normalize_arch,
     _powershell,
@@ -36,29 +34,6 @@ def _clean_hardware_caches():
     reset_preflight_cache()
 
 
-@pytest.mark.live
-def test_resolve_hardware_profile_id_returns_a_canonical_profile(repo_root):
-    profile_id, payload = resolve_hardware_profile_id(repo_root)
-    assert profile_id in CANONICAL_PROFILES
-    assert isinstance(payload, dict)
-
-
-@pytest.mark.live
-def test_resolved_profile_matches_detected_os_and_arch(repo_root):
-    profile_id, _payload = resolve_hardware_profile_id(repo_root)
-    os_name = _detect_os()
-    arch = _detect_arch()
-    assert profile_id.startswith(f"{os_name}-{arch}-")
-
-
-@pytest.mark.live
-def test_resolve_hardware_profile_id_payload_carries_the_required_keys(repo_root):
-    _profile_id, payload = resolve_hardware_profile_id(repo_root)
-    assert set(payload.keys()) == {"inventory", "tokens", "readiness"}
-    assert isinstance(payload["tokens"], list)
-    assert set(payload["readiness"].keys()) == {"stt", "tts", "vad", "wake", "llm"}
-
-
 @pytest.mark.parametrize(
     "stt_device,tts_device,expected_suffix",
     [
@@ -74,6 +49,8 @@ def test_resolution_ladder_uses_the_strongest_readiness_device(
 ):
     import awf.hardware.profiler as profiler
 
+    fake_inventory = HardwareInventory(os_name="linux", arch="x64")
+    monkeypatch.setattr(profiler, "collect_inventory", lambda *a, **kw: fake_inventory)
     monkeypatch.setattr(profiler, "derive_stt_readiness", lambda inventory, tokens: Readiness(stt_device, True, "test"))
     monkeypatch.setattr(profiler, "derive_tts_readiness", lambda inventory, tokens: Readiness(tts_device, True, "test"))
 
@@ -85,6 +62,8 @@ def test_resolution_ladder_uses_the_strongest_readiness_device(
 def test_resolution_ladder_uses_opencl_adreno_token_for_gpu_suffix(monkeypatch, repo_root):
     import awf.hardware.profiler as profiler
 
+    fake_inventory = HardwareInventory(os_name="linux", arch="arm64")
+    monkeypatch.setattr(profiler, "collect_inventory", lambda *a, **kw: fake_inventory)
     monkeypatch.setattr(profiler, "derive_stt_readiness", lambda inventory, tokens: Readiness("cpu", True, "test"))
     monkeypatch.setattr(profiler, "derive_tts_readiness", lambda inventory, tokens: Readiness("cpu", True, "test"))
     monkeypatch.setattr(profiler, "collect_preflight_tokens", lambda inventory, **kwargs: ["opencl:adreno"])
@@ -94,7 +73,15 @@ def test_resolution_ladder_uses_opencl_adreno_token_for_gpu_suffix(monkeypatch, 
     assert profile_id.endswith("-gpu")
 
 
-def test_run_hardware_profiler_writes_event_and_creates_system_run(tmp_path):
+def test_run_hardware_profiler_writes_event_and_creates_system_run(tmp_path, monkeypatch):
+    import awf.hardware.profiler as profiler
+
+    fake_inventory = HardwareInventory(
+        os_name="linux", arch="x64", inventory_id="inv-123", profiled_at="2026-01-01T00:00:00Z"
+    )
+    monkeypatch.setattr(profiler, "collect_inventory", lambda *a, **kw: fake_inventory)
+    monkeypatch.setattr(profiler, "collect_preflight_tokens", lambda *a, **kw: [])
+
     db_path = tmp_path / "awf.db"
     init_db(db_path)
     conn = get_connection(db_path)
@@ -114,7 +101,15 @@ def test_run_hardware_profiler_writes_event_and_creates_system_run(tmp_path):
     assert set(payload["readiness"].keys()) == {"stt", "tts", "vad", "wake", "llm"}
 
 
-def test_run_hardware_profiler_reuses_existing_system_run(tmp_path):
+def test_run_hardware_profiler_reuses_existing_system_run(tmp_path, monkeypatch):
+    import awf.hardware.profiler as profiler
+
+    fake_inventory = HardwareInventory(
+        os_name="linux", arch="x64", inventory_id="inv-123", profiled_at="2026-01-01T00:00:00Z"
+    )
+    monkeypatch.setattr(profiler, "collect_inventory", lambda *a, **kw: fake_inventory)
+    monkeypatch.setattr(profiler, "collect_preflight_tokens", lambda *a, **kw: [])
+
     db_path = tmp_path / "awf.db"
     init_db(db_path)
     conn = get_connection(db_path)

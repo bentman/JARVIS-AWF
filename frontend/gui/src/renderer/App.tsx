@@ -196,7 +196,18 @@ export function App({
   const [chatSubmitting, setChatSubmitting] = useState(false);
   const [chatSubmitError, setChatSubmitError] = useState<string | null>(null);
   const [approvalPreview, setApprovalPreview] = useState<PendingApproval["preview"]>(undefined);
+  const [theme, setTheme] = useState<"dark" | "light">(
+    initialSettings?.theme === "light" ? "light" : "dark",
+  );
   const refreshInFlight = useRef<Promise<void> | null>(null);
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    if (typeof document !== "undefined") {
+      document.documentElement.setAttribute("data-theme", next);
+    }
+  };
 
   useEffect(() => {
     if (onGetSettings && !initialSettings) {
@@ -212,6 +223,7 @@ export function App({
           }
           if (loaded.theme && typeof document !== "undefined") {
             document.documentElement.setAttribute("data-theme", loaded.theme);
+            setTheme(loaded.theme === "light" ? "light" : "dark");
           }
         })
         .catch(() => {});
@@ -611,13 +623,20 @@ export function App({
           const search = document.querySelector<HTMLInputElement>("input[type='search'], .memory-search input");
           search?.focus();
         } else {
-          const startWork = document.querySelector<HTMLInputElement>(".start-work-panel input");
+          const startWork = document.querySelector<HTMLSelectElement | HTMLInputElement>(
+            ".start-work-panel select, .start-work-panel input"
+          );
           startWork?.focus();
         }
         return;
       }
 
       if (e.key === "Escape") {
+        const activeTag = (document.activeElement?.tagName ?? "").toLowerCase();
+        if (activeTag === "input" || activeTag === "textarea") {
+          (document.activeElement as HTMLElement)?.blur();
+          return;
+        }
         if (selectedRunDetail) {
           e.preventDefault();
           setSelectedRunDetail(null);
@@ -626,6 +645,10 @@ export function App({
       }
 
       if (mod && e.key === "Enter") {
+        const activeTag = (document.activeElement?.tagName ?? "").toLowerCase();
+        if (activeTag === "input" || activeTag === "textarea") {
+          return;
+        }
         if (effectivePendingApproval) {
           e.preventDefault();
           void handleApprove(effectivePendingApproval.approvalId);
@@ -674,6 +697,16 @@ export function App({
           </ul>
         </nav>
         <div className="status-bar" role="status" aria-label="Status">
+          <button
+            type="button"
+            className="chip chip-btn"
+            aria-label={`Toggle theme: current ${theme}`}
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            onClick={toggleTheme}
+            style={{ fontSize: "var(--text-xs)" }}
+          >
+            {theme === "light" ? "Light" : "Dark"}
+          </button>
           <span className="mono">{controlSummary?.readiness.profile_id ?? "no profile"}</span>
           <button
             type="button"

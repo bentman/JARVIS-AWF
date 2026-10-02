@@ -436,6 +436,51 @@ Operator preferences are stored in `.awf/settings.json` (precedence: `.awf/setti
 
 Themes support `"dark"`, `"light"`, and `"system"`.
 
+## Validation And Harness Commands
+
+AWF provides a tiered validation harness (`scripts/validate_backend.py`) for
+verifying backend health, deterministic contracts, host hardware runtime, and
+CI requirements. Every test command writes a UTC-timestamped transcript to
+`reports/validation/` and prunes older logs to keep the newest 35 files per folder.
+
+Common harness commands (run with the repo's venv Python):
+
+```bash
+# Quick environment fingerprint diagnostic (writes to reports/diagnostics/)
+python scripts/validate_backend.py profile
+
+# Fast unit tier (pure, deterministic, in-memory)
+python scripts/validate_backend.py unit
+
+# Integration tier (multi-module, in-process SQLite, fakes, non-live)
+python scripts/validate_backend.py integration
+
+# Focused run on changed files in git working copy (<3s turnaround)
+python scripts/validate_backend.py focus changed
+
+# Focused run by file path or pytest keyword
+python scripts/validate_backend.py focus backend/tests/unit/test_paths.py
+python scripts/validate_backend.py focus memory_sessions
+
+# Runtime tier (exercises live host hardware, accelerators, and local models)
+python scripts/validate_backend.py runtime
+
+# Formatting and style check
+python scripts/validate_backend.py lint
+
+# Full repository CI gate (protocol drift check, argparse parity, lint, regression)
+python scripts/validate_backend.py ci
+```
+
+Use `-x` with any test command to fail fast on the first error (e.g. `python scripts/validate_backend.py unit -x`).
+
+Frontend packages have their own workspace tests via Vitest:
+
+```bash
+npm --prefix frontend test --workspaces
+npm --prefix frontend run build --workspaces
+```
+
 ## Troubleshooting
 
 Install state unclear:
@@ -483,5 +528,5 @@ AWF_DEBUG=1 awf <command>
 The CLI reports failures as `error: <message>` and exits non-zero. `AWF_DEBUG=1`
 raises the underlying traceback instead.
 
-Setup, dependency repair, and first-install validation belong in the QuickStart
+Initial setup, dependency repair, and first-install bootstrapping belong in the QuickStart
 docs, not this guide.

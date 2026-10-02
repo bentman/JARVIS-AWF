@@ -122,6 +122,8 @@ awf system llm serve status
 awf-speech wake <wake.wav>
 awf-speech models sync
 awf-speech models verify
+python .\scripts\validate_backend.py profile
+python .\scripts\validate_backend.py unit
 ```
 
 Speech models are operator-managed local artifacts under `models\`. Runtime STT

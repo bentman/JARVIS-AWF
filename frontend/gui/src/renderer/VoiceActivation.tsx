@@ -92,6 +92,7 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
   const [voiceProfileRef, setVoiceProfileRef] = useState("narrator@1.0.0");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedSessionId, setCopiedSessionId] = useState(false);
 
   const streamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -436,7 +437,24 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
           )}
           {state}
         </span>
-        {voiceSessionId && <span className="voice-session mono">Voice session: {voiceSessionId}</span>}
+        {voiceSessionId && (
+          <span className="voice-session mono" style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1)" }}>
+            <span>Voice session: {voiceSessionId}</span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              style={{ fontSize: "10px", padding: "1px 5px" }}
+              onClick={() => {
+                void navigator.clipboard.writeText(voiceSessionId);
+                setCopiedSessionId(true);
+                setTimeout(() => setCopiedSessionId(false), 1500);
+              }}
+              title="Copy session ID"
+            >
+              {copiedSessionId ? "Copied" : "Copy"}
+            </button>
+          </span>
+        )}
         <button className="btn btn-primary" onClick={startSession} disabled={busy || state === "closed"}>
           Start voice session
         </button>
@@ -486,9 +504,10 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
       <details className="voice-details">
         <summary className="voice-toggle-btn">Voice Settings & Diagnostics</summary>
         <div className="voice-drawer">
-          <label>
+          <label htmlFor="voice-default-workflow">
             Default workflow
             <input
+              id="voice-default-workflow"
               type="text"
               value={workflowRef}
               onChange={(e) => setWorkflowRef(e.target.value)}
@@ -503,9 +522,10 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
               </datalist>
             )}
           </label>
-          <label>
+          <label htmlFor="voice-profile-ref">
             Voice profile
             <input
+              id="voice-profile-ref"
               type="text"
               className="mono"
               value={voiceProfileRef}
@@ -513,13 +533,40 @@ export const VoiceActivation = React.forwardRef<VoiceActivationHandle, VoiceActi
               placeholder="narrator@1.0.0"
             />
           </label>
-          <label>
+          <label htmlFor="voice-recognized-text">
             Final recognized text
-            <textarea value={recognizedText} onChange={(e) => setRecognizedText(e.target.value)} />
+            <textarea
+              id="voice-recognized-text"
+              value={recognizedText}
+              onChange={(e) => setRecognizedText(e.target.value)}
+            />
           </label>
         </div>
       </details>
-      {error && <span role="alert">{error}</span>}
+      {error && (
+        <span
+          role="alert"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+            color: "var(--danger)",
+            fontSize: "var(--text-xs)",
+            marginTop: "var(--space-1)",
+          }}
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            style={{ fontSize: "10px", padding: "1px 5px" }}
+            onClick={() => setError(null)}
+            title="Dismiss error"
+          >
+            Dismiss
+          </button>
+        </span>
+      )}
     </div>
   );
 });

@@ -10,7 +10,7 @@ export interface ApprovalsViewProps {
 
 export function ApprovalsView({ approvals, onApprove, onReject }: ApprovalsViewProps): React.JSX.Element {
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [rejectReason, setRejectReason] = useState<string>("");
+  const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({});
   const [showRejectForm, setShowRejectForm] = useState<string | null>(null);
 
   const handleApprove = async (approvalId: string) => {
@@ -27,9 +27,14 @@ export function ApprovalsView({ approvals, onApprove, onReject }: ApprovalsViewP
     if (!onReject) return;
     setProcessingId(approvalId);
     try {
-      await onReject(approvalId, rejectReason || "Rejected by operator");
+      const reason = rejectReasons[approvalId]?.trim() || "Rejected by operator";
+      await onReject(approvalId, reason);
       setShowRejectForm(null);
-      setRejectReason("");
+      setRejectReasons((prev) => {
+        const next = { ...prev };
+        delete next[approvalId];
+        return next;
+      });
     } finally {
       setProcessingId(null);
     }
@@ -51,7 +56,7 @@ export function ApprovalsView({ approvals, onApprove, onReject }: ApprovalsViewP
             const improvementId = preview?.improvement_id;
 
             return (
-              <li key={approval.approval_id} className="proposal-item" style={{ marginBottom: "1.5rem", paddingBottom: "1rem", borderBottom: "1px solid var(--border-color, rgba(255,255,255,0.1))" }}>
+              <li key={approval.approval_id} className="proposal-item" style={{ marginBottom: "1.5rem", paddingBottom: "1rem", borderBottom: "1px solid var(--border)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
                   <div>
                     <div className="row" style={{ alignItems: "center", marginBottom: "0.5rem" }}>
@@ -75,12 +80,12 @@ export function ApprovalsView({ approvals, onApprove, onReject }: ApprovalsViewP
                 {isImprovement && (
                   <div style={{ marginTop: "0.75rem" }}>
                     {summary && (
-                      <div style={{ fontWeight: 500, fontSize: "0.95em", marginBottom: "0.5rem", color: "var(--text-main, #c9d1d9)" }}>
+                      <div style={{ fontWeight: 500, fontSize: "0.95em", marginBottom: "0.5rem", color: "var(--text)" }}>
                         {summary}
                       </div>
                     )}
                     {safety && (
-                      <div style={{ fontSize: "0.85em", color: "var(--text-secondary, #8b949e)", marginTop: "0.4rem", padding: "0.5rem", background: "var(--bg-subtle, rgba(255,255,255,0.03))", borderLeft: "3px solid var(--accent, #58a6ff)", borderRadius: "2px" }}>
+                      <div style={{ fontSize: "0.85em", color: "var(--text-dim)", marginTop: "0.4rem", padding: "0.5rem", background: "var(--surface-raised)", borderLeft: "3px solid var(--accent)", borderRadius: "2px" }}>
                         <strong>Safety:</strong> {safety}
                       </div>
                     )}
@@ -89,10 +94,10 @@ export function ApprovalsView({ approvals, onApprove, onReject }: ApprovalsViewP
                         <div className="muted" style={{ fontSize: "0.85em", fontWeight: 600 }}>Changed Files:</div>
                         <ul style={{ margin: "0.25rem 0", paddingLeft: "1.2rem" }}>
                           {diffStats.map((f) => (
-                            <li key={f.path} style={{ fontFamily: "monospace", fontSize: "0.8em", color: "var(--text-secondary, #8b949e)" }}>
-                              {f.path} <span style={{ color: "#2ea043" }}>+{f.additions}</span> / <span style={{ color: "#da3633" }}>-{f.deletions}</span>
+                            <li key={f.path} style={{ fontFamily: "monospace", fontSize: "0.8em", color: "var(--text-dim)" }}>
+                              {f.path} <span style={{ color: "var(--ok)" }}>+{f.additions}</span> / <span style={{ color: "var(--danger)" }}>-{f.deletions}</span>
                               {f.preview_lines && f.preview_lines.length > 0 && (
-                                <pre className="pre-scroll" style={{ fontSize: "0.75em", margin: "0.25rem 0", background: "rgba(0,0,0,0.2)", padding: "0.25rem" }}>
+                                <pre className="pre-scroll" style={{ fontSize: "0.75em", margin: "0.25rem 0", background: "var(--surface-card)", padding: "0.25rem" }}>
                                   {f.preview_lines.slice(0, 6).join("\n")}
                                 </pre>
                               )}
@@ -110,7 +115,7 @@ export function ApprovalsView({ approvals, onApprove, onReject }: ApprovalsViewP
                   </pre>
                 )}
 
-                <div style={{ marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border-color, rgba(255,255,255,0.1))", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <div style={{ marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border)", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                   {onApprove && (
                     <button
                       type="button"
@@ -119,7 +124,11 @@ export function ApprovalsView({ approvals, onApprove, onReject }: ApprovalsViewP
                       onClick={() => void handleApprove(approval.approval_id)}
                       style={{ flex: "1" }}
                     >
-                      {processingId === approval.approval_id ? "Approving..." : "✓ Approve this action"}
+                      {processingId === approval.approval_id ? "Approving..." : (
+                        <>
+                          <span>✓ Approve this action</span> <span className="kbd-hint">Ctrl+Enter</span>
+                        </>
+                      )}
                     </button>
                   )}
                   {onReject && showRejectForm !== approval.approval_id && (
@@ -136,27 +145,37 @@ export function ApprovalsView({ approvals, onApprove, onReject }: ApprovalsViewP
                 </div>
 
                 {showRejectForm === approval.approval_id && (
-                  <div style={{ marginTop: "0.75rem", padding: "0.75rem", background: "var(--bg-subtle, rgba(255,255,255,0.03))", borderRadius: "4px", borderLeft: "3px solid var(--danger, #da3633)" }}>
-                    <label style={{ display: "block", fontSize: "0.85em", marginBottom: "0.5rem" }}>
+                  <div style={{ marginTop: "0.75rem", padding: "0.75rem", background: "var(--surface-raised)", borderRadius: "var(--radius)", border: "1px solid var(--border)", borderLeft: "3px solid var(--danger)" }}>
+                    <label
+                      htmlFor={`reject-reason-${approval.approval_id}`}
+                      style={{ display: "block", fontSize: "var(--text-sm)", marginBottom: "0.5rem", color: "var(--text-dim)" }}
+                    >
                       Reason for rejection (optional):
                     </label>
                     <textarea
-                      value={rejectReason}
-                      onChange={(e) => setRejectReason(e.target.value)}
-                      placeholder="e.g., Change needs more review, concerns about scope, etc."
+                      id={`reject-reason-${approval.approval_id}`}
+                      value={rejectReasons[approval.approval_id] ?? ""}
+                      onChange={(e) => setRejectReasons((prev) => ({ ...prev, [approval.approval_id]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                          e.preventDefault();
+                          void handleReject(approval.approval_id);
+                        }
+                      }}
+                      placeholder="e.g., Change needs more review, concerns about scope, etc. (Ctrl+Enter to confirm)"
+                      className="mono"
                       style={{
                         width: "100%",
-                        minHeight: "60px",
-                        padding: "0.5rem",
-                        background: "var(--bg-input, rgba(0,0,0,0.2))",
-                        border: "1px solid var(--border-color, rgba(255,255,255,0.1))",
-                        borderRadius: "3px",
-                        color: "var(--text-main, #c9d1d9)",
-                        fontFamily: "monospace",
-                        fontSize: "0.85em",
+                        minHeight: "64px",
+                        padding: "var(--space-2)",
+                        background: "var(--surface-input)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius)",
+                        color: "var(--text)",
+                        fontSize: "var(--text-sm)",
                       }}
                     />
-                    <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem" }}>
+                    <div className="action-cluster" style={{ marginTop: "0.5rem" }}>
                       <button
                         type="button"
                         className="btn btn-danger"
@@ -169,10 +188,7 @@ export function ApprovalsView({ approvals, onApprove, onReject }: ApprovalsViewP
                         type="button"
                         className="btn btn-secondary"
                         disabled={processingId === approval.approval_id}
-                        onClick={() => {
-                          setShowRejectForm(null);
-                          setRejectReason("");
-                        }}
+                        onClick={() => setShowRejectForm(null)}
                       >
                         Cancel
                       </button>

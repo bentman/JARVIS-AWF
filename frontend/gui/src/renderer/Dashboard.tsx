@@ -301,6 +301,14 @@ export function ImprovementProposals({
 }: ImprovementProposalsProps): React.JSX.Element {
   const [openArtifact, setOpenArtifact] = React.useState<{ id: string; content: string } | null>(null);
   const [expandedDiffs, setExpandedDiffs] = React.useState<Record<string, boolean>>({});
+  const [busyId, setBusyId] = React.useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = React.useState<string | null>(null);
+
+  const copyText = (key: string, text: string) => {
+    void navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 1500);
+  };
 
   const viewArtifact = async (artifactId: string) => {
     if (!onArtifactRead) return;
@@ -326,8 +334,8 @@ export function ImprovementProposals({
             const isDiffCollapsed = expandedDiffs[proposal.improvement_id] === false;
 
             return (
-              <li key={proposal.improvement_id} className="proposal-item" style={{ padding: "1rem", marginBottom: "1rem", border: "1px solid var(--border-color, rgba(255,255,255,0.1))", borderRadius: "6px" }}>
-                <div className="proposal-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color, rgba(255,255,255,0.1))", paddingBottom: "0.5rem" }}>
+              <li key={proposal.improvement_id} className="proposal-item" style={{ padding: "1rem", marginBottom: "1rem", border: "1px solid var(--border)", borderRadius: "6px" }}>
+                <div className="proposal-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: "0.5rem" }}>
                   <div>
                     <span className="badge badge-status" style={{ marginRight: "0.5rem" }}>
                       {proposal.status.toUpperCase()} [{scope.toUpperCase()}]
@@ -340,19 +348,19 @@ export function ImprovementProposals({
                 </div>
 
                 <div className="proposal-narrative" style={{ marginTop: "1rem" }}>
-                  <div style={{ fontSize: "0.85em", fontWeight: 600, color: "var(--text-muted, #8b949e)", textTransform: "uppercase", letterSpacing: "0.5px" }}>1. What Changed</div>
-                  <div style={{ marginTop: "0.4rem", fontSize: "1em", fontWeight: 500, lineHeight: 1.5, color: "var(--text-main, #c9d1d9)" }}>
+                  <div style={{ fontSize: "0.85em", fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.5px" }}>1. What Changed</div>
+                  <div style={{ marginTop: "0.4rem", fontSize: "1em", fontWeight: 500, lineHeight: 1.5, color: "var(--text)" }}>
                     {humanText}
                   </div>
                 </div>
 
                 {diffStats.length > 0 && (
                   <div style={{ marginTop: "0.75rem" }}>
-                    <div style={{ fontSize: "0.85em", fontWeight: 600, color: "var(--text-muted, #8b949e)", textTransform: "uppercase", letterSpacing: "0.5px" }}>2. Where It Changed</div>
+                    <div style={{ fontSize: "0.85em", fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.5px" }}>2. Where It Changed</div>
                     <ul style={{ margin: "0.4rem 0 0", paddingLeft: "1.2rem" }}>
                       {diffStats.map((f) => (
-                        <li key={f.path} style={{ fontFamily: "monospace", fontSize: "0.8em", color: "var(--text-secondary, #8b949e)" }}>
-                          {f.path} <span style={{ color: "#2ea043" }}>+{f.additions}</span> / <span style={{ color: "#da3633" }}>-{f.deletions}</span>
+                        <li key={f.path} style={{ fontFamily: "monospace", fontSize: "0.8em", color: "var(--text-dim)" }}>
+                          {f.path} <span style={{ color: "var(--ok)" }}>+{f.additions}</span> / <span style={{ color: "var(--danger)" }}>-{f.deletions}</span>
                         </li>
                       ))}
                     </ul>
@@ -360,24 +368,24 @@ export function ImprovementProposals({
                 )}
 
                 <div style={{ marginTop: "0.75rem" }}>
-                  <div style={{ fontSize: "0.85em", fontWeight: 600, color: "var(--text-muted, #8b949e)", textTransform: "uppercase", letterSpacing: "0.5px" }}>3. Validation Status</div>
+                  <div style={{ fontSize: "0.85em", fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.5px" }}>3. Validation Status</div>
                   {proposal.verdict_artifact_id ? (
                     <div style={{ marginTop: "0.4rem", fontSize: "0.85em" }}>
                       <span className="badge badge-success" style={{ marginRight: "0.5rem" }}>✓ PASSED</span>
-                      <span style={{ color: "var(--text-secondary, #8b949e)" }}>All automated gate checks passed</span>
+                      <span style={{ color: "var(--text-dim)" }}>All automated gate checks passed</span>
                     </div>
                   ) : (
                     <div style={{ marginTop: "0.4rem", fontSize: "0.85em" }}>
                       <span className="badge badge-warning" style={{ marginRight: "0.5rem" }}>PENDING</span>
-                      <span style={{ color: "var(--text-secondary, #8b949e)" }}>Awaiting verification verdict</span>
+                      <span style={{ color: "var(--text-dim)" }}>Awaiting verification verdict</span>
                     </div>
                   )}
                 </div>
 
                 <div style={{ marginTop: "0.75rem" }}>
-                  <div style={{ fontSize: "0.85em", fontWeight: 600, color: "var(--text-muted, #8b949e)", textTransform: "uppercase", letterSpacing: "0.5px" }}>4. Why It's Safe To Consider</div>
+                  <div style={{ fontSize: "0.85em", fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.5px" }}>4. Why It's Safe To Consider</div>
                   {proposal.safety_assessment && (
-                    <div style={{ marginTop: "0.4rem", padding: "0.5rem", background: "var(--bg-subtle, rgba(255,255,255,0.03))", borderLeft: "3px solid var(--accent, #58a6ff)", borderRadius: "2px", fontSize: "0.85em", lineHeight: 1.5, color: "var(--text-secondary, #8b949e)" }}>
+                    <div style={{ marginTop: "0.4rem", padding: "0.5rem", background: "var(--surface-raised)", borderLeft: "3px solid var(--accent)", borderRadius: "2px", fontSize: "0.85em", lineHeight: 1.5, color: "var(--text-dim)" }}>
                       {proposal.safety_assessment}
                     </div>
                   )}
@@ -386,7 +394,7 @@ export function ImprovementProposals({
                 {diffStats.length > 0 && (
                   <div className="proposal-files" style={{ marginTop: "1rem" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ fontSize: "0.85em", fontWeight: 600, color: "var(--text-muted, #8b949e)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Diff Preview</div>
+                      <div style={{ fontSize: "0.85em", fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Diff Preview</div>
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
@@ -398,11 +406,11 @@ export function ImprovementProposals({
                     </div>
 
                     {!isDiffCollapsed && (
-                      <div className="diff-preview-box" style={{ marginTop: "0.5rem", background: "var(--bg-subtle, #161b22)", padding: "0.5rem", borderRadius: "4px" }}>
+                      <div className="diff-preview-box" style={{ marginTop: "0.5rem", background: "var(--surface-raised)", padding: "0.5rem", borderRadius: "4px" }}>
                         {diffStats.map((f) => (
                           <div key={f.path} style={{ marginBottom: "0.5rem" }}>
-                            <strong style={{ fontSize: "0.8em", color: "var(--text-muted, #8b949e)" }}>{f.path}</strong>
-                            <pre aria-label="Diff preview" className="pre-scroll" style={{ fontSize: "0.8em", margin: "0.25rem 0", background: "rgba(0,0,0,0.2)" }}>
+                            <strong style={{ fontSize: "0.8em", color: "var(--text-dim)" }}>{f.path}</strong>
+                            <pre aria-label="Diff preview" className="pre-scroll" style={{ fontSize: "0.8em", margin: "0.25rem 0", background: "var(--surface-card)" }}>
                               {f.preview_lines && f.preview_lines.length > 0
                                 ? f.preview_lines.join("\n")
                                 : "(binary or unchanged)"}
@@ -418,35 +426,51 @@ export function ImprovementProposals({
                   <div style={{
                     marginTop: "1rem",
                     padding: "0.75rem",
-                    background: "var(--bg-action, rgba(88, 166, 255, 0.08))",
-                    border: "1px solid var(--accent, #58a6ff)",
+                    background: "var(--surface-raised)",
+                    border: "1px solid var(--accent)",
                     borderRadius: "6px",
                     fontSize: "0.9em"
                   }}>
-                    <div style={{ fontWeight: 600, color: "var(--accent, #58a6ff)", marginBottom: "0.5rem" }}>
+                    <div style={{ fontWeight: 600, color: "var(--accent)", marginBottom: "0.5rem" }}>
                       ▶ NEXT ACTION: {proposal.next_action.label}
                     </div>
                     {proposal.next_action.description && (
-                      <div style={{ marginBottom: "0.5rem", color: "var(--text-main, #c9d1d9)", fontSize: "0.95em", lineHeight: 1.4 }}>
+                      <div style={{ marginBottom: "0.5rem", color: "var(--text)", fontSize: "0.95em", lineHeight: 1.4 }}>
                         {proposal.next_action.description}
                       </div>
                     )}
                     {proposal.next_action.command && (
-                      <div style={{ backgroundColor: "rgba(0, 0, 0, 0.3)", padding: "0.4rem", borderRadius: "3px", fontFamily: "monospace", fontSize: "0.85em" }}>
+                      <div style={{ backgroundColor: "var(--surface-card)", padding: "0.4rem", borderRadius: "3px", fontFamily: "monospace", fontSize: "0.85em", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <code>{proposal.next_action.command}</code>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ fontSize: "11px", padding: "1px 6px" }}
+                          onClick={() => copyText(`cmd-${proposal.improvement_id}`, proposal.next_action!.command)}
+                        >
+                          {copiedKey === `cmd-${proposal.improvement_id}` ? "Copied" : "Copy"}
+                        </button>
                       </div>
                     )}
                   </div>
                 )}
 
                 <div className="proposal-details" style={{ marginTop: "0.5rem", fontSize: "0.8em" }}>
-                  <div className="muted">
+                  <div className="muted" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
                     <span>Digest: <code>{proposal.diff_digest}</code></span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: "11px", padding: "1px 6px" }}
+                      onClick={() => copyText(`dig-${proposal.improvement_id}`, proposal.diff_digest)}
+                    >
+                      {copiedKey === `dig-${proposal.improvement_id}` ? "Copied" : "Copy digest"}
+                    </button>
                     {onArtifactRead && (
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
-                        style={{ marginLeft: "0.5rem", fontSize: "0.75em", padding: "0.15rem 0.4rem" }}
+                        style={{ fontSize: "0.75em", padding: "0.15rem 0.4rem" }}
                         onClick={() => void viewArtifact(proposal.patch_artifact_id)}
                       >
                         View raw patch artifact
@@ -455,8 +479,16 @@ export function ImprovementProposals({
                   </div>
 
                   {proposal.approval && (
-                    <div style={{ marginTop: "0.25rem" }}>
+                    <div style={{ marginTop: "0.25rem", display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
                       <span className="muted">Approval:</span> <code>{proposal.approval.approval_id}</code> ({proposal.approval.status})
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: "11px", padding: "1px 6px" }}
+                        onClick={() => copyText(`ap-${proposal.improvement_id}`, proposal.approval!.approval_id)}
+                      >
+                        {copiedKey === `ap-${proposal.improvement_id}` ? "Copied" : "Copy ID"}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -466,7 +498,15 @@ export function ImprovementProposals({
                     <button
                       type="button"
                       className="btn btn-primary"
-                      onClick={() => void onRequestMerge(proposal.improvement_id)}
+                      disabled={busyId !== null}
+                      onClick={async () => {
+                        setBusyId(`req-${proposal.improvement_id}`);
+                        try {
+                          await onRequestMerge(proposal.improvement_id);
+                        } finally {
+                          setBusyId(null);
+                        }
+                      }}
                     >
                       Request merge approval
                     </button>
@@ -475,7 +515,15 @@ export function ImprovementProposals({
                     <button
                       type="button"
                       className="btn btn-primary"
-                      onClick={() => void onMerge(proposal.improvement_id, proposal.approval!.approval_id)}
+                      disabled={busyId !== null}
+                      onClick={async () => {
+                        setBusyId(`merge-${proposal.improvement_id}`);
+                        try {
+                          await onMerge(proposal.improvement_id, proposal.approval!.approval_id);
+                        } finally {
+                          setBusyId(null);
+                        }
+                      }}
                     >
                       Merge improvement
                     </button>
@@ -484,7 +532,15 @@ export function ImprovementProposals({
                     <button
                       type="button"
                       className="btn btn-danger"
-                      onClick={() => void onReject(proposal.improvement_id, "Rejected by operator")}
+                      disabled={busyId !== null}
+                      onClick={async () => {
+                        setBusyId(`rej-${proposal.improvement_id}`);
+                        try {
+                          await onReject(proposal.improvement_id, "Rejected by operator");
+                        } finally {
+                          setBusyId(null);
+                        }
+                      }}
                     >
                       Reject proposal
                     </button>
@@ -497,11 +553,22 @@ export function ImprovementProposals({
       )}
       {openArtifact && (
         <div style={{ marginTop: "1rem" }}>
-          <button type="button" className="btn btn-secondary" onClick={() => setOpenArtifact(null)}>
-            Close artifact
-          </button>
+          <div className="action-cluster" style={{ marginTop: 0, marginBottom: "var(--space-2)" }}>
+            <button type="button" className="btn btn-secondary" onClick={() => setOpenArtifact(null)}>
+              Close artifact
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => copyText("art-content", openArtifact.content)}
+            >
+              {copiedKey === "art-content" ? "Copied" : "Copy content"}
+            </button>
+          </div>
           <pre aria-label="Artifact content" className="pre-scroll" style={{ marginTop: "0.5rem" }}>
-            {openArtifact.content}
+            {openArtifact.content.length > 50000
+              ? `${openArtifact.content.slice(0, 50000)}\n\n--- [Truncated: content exceeds 50KB] ---`
+              : openArtifact.content}
           </pre>
         </div>
       )}

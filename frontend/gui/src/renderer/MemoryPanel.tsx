@@ -55,17 +55,33 @@ export function MemoryPanel({
 
   return (
     <section aria-label="memory" className="card">
-      <h2>Memory</h2>
-      <label>
-        Search memory
-        <input value={query} onChange={(event) => setQuery(event.target.value)} />
-      </label>
-      <button type="button" className="btn btn-primary" onClick={() => void search()}>
-        Search
-      </button>
-      {message && <p>{message}</p>}
-      {result && (
+      <div className="section-heading">
         <div>
+          <h2>Memory</h2>
+          <p className="muted">Search semantic and episodic memories, or manage memory proposals.</p>
+        </div>
+      </div>
+
+      <div className="form-group">
+        <label className="field-label" htmlFor="memory-search-input">
+          Search memory
+        </label>
+        <input
+          id="memory-search-input"
+          aria-label="Search memory"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Query semantic memory..."
+        />
+      </div>
+      <div className="action-cluster" style={{ marginTop: 0, marginBottom: "var(--space-3)" }}>
+        <button type="button" className="btn btn-primary" onClick={() => void search()}>
+          Search
+        </button>
+      </div>
+      {message && <p className="mono row-reason" style={{ margin: "var(--space-2) 0" }}>{message}</p>}
+      {result && (
+        <div className="detail-stack">
           <h3>Semantic memories</h3>
           <ul className="list">
             {result.semantic.map((hit) => (
@@ -87,25 +103,55 @@ export function MemoryPanel({
           </ul>
         </div>
       )}
-      <h3>Memory proposal</h3>
-      <label>
-        Proposal id
-        <input className="mono" value={proposalId} onChange={(event) => setProposalId(event.target.value)} />
-      </label>
-      <label>
-        Digest
-        <input className="mono" value={digest} onChange={(event) => setDigest(event.target.value)} />
-      </label>
-      <label>
-        Reject reason
-        <input value={reason} onChange={(event) => setReason(event.target.value)} />
-      </label>
-      <button type="button" className="btn btn-primary" onClick={() => void publish()}>
-        Publish memory
-      </button>
-      <button type="button" className="btn btn-danger" onClick={() => void reject()}>
-        Reject memory
-      </button>
+      <div className="section-heading" style={{ marginTop: "var(--space-4)" }}>
+        <div>
+          <h3>Memory proposal</h3>
+          <p className="muted">Review and commit or reject pending memory proposals.</p>
+        </div>
+      </div>
+      <div className="form-group">
+        <label className="field-label" htmlFor="memory-proposal-id">
+          Proposal id
+        </label>
+        <input
+          id="memory-proposal-id"
+          aria-label="Proposal id"
+          className="mono"
+          value={proposalId}
+          onChange={(event) => setProposalId(event.target.value)}
+        />
+      </div>
+      <div className="form-group">
+        <label className="field-label" htmlFor="memory-digest">
+          Digest
+        </label>
+        <input
+          id="memory-digest"
+          aria-label="Digest"
+          className="mono"
+          value={digest}
+          onChange={(event) => setDigest(event.target.value)}
+        />
+      </div>
+      <div className="form-group">
+        <label className="field-label" htmlFor="memory-reject-reason">
+          Reject reason
+        </label>
+        <input
+          id="memory-reject-reason"
+          aria-label="Reject reason"
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+        />
+      </div>
+      <div className="action-cluster">
+        <button type="button" className="btn btn-primary" onClick={() => void publish()}>
+          Publish memory
+        </button>
+        <button type="button" className="btn btn-danger" onClick={() => void reject()}>
+          Reject memory
+        </button>
+      </div>
     </section>
   );
 }

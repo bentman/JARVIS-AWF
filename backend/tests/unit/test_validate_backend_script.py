@@ -154,3 +154,18 @@ def test_regression_is_broader_than_unit(repo_root, monkeypatch):
 
     assert validator.cmd_regression(None) == validator.EXIT_PASS
     assert captured == {"command_name": "regression", "pytest_args": ["-m", "not live", "backend/tests"]}
+
+
+def test_integration_excludes_live_tests(repo_root, monkeypatch):
+    validator = _load_validator(repo_root)
+    captured = {}
+    monkeypatch.setattr(
+        validator,
+        "_run_test_command",
+        lambda command_name, pytest_args: (
+            captured.update({"command_name": command_name, "pytest_args": pytest_args}) or validator.EXIT_PASS
+        ),
+    )
+
+    assert validator.cmd_integration(type("Args", (), {"exitfirst": False})()) == validator.EXIT_PASS
+    assert captured == {"command_name": "integration", "pytest_args": ["-m", "not live", "backend/tests/integration"]}

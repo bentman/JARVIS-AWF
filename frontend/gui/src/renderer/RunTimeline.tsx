@@ -26,8 +26,30 @@ export function RunTimeline({
   const [approvalReason, setApprovalReason] = React.useState("");
   const [proposalRejecting, setProposalRejecting] = React.useState<string | null>(null);
   const [proposalReason, setProposalReason] = React.useState("");
+  const [copiedRaw, setCopiedRaw] = React.useState(false);
+  const [copiedRunId, setCopiedRunId] = React.useState(false);
+  const [copiedCommand, setCopiedCommand] = React.useState(false);
+  const [busyAction, setBusyAction] = React.useState<string | null>(null);
+
+  const copyRunId = (id: string) => {
+    void navigator.clipboard.writeText(id);
+    setCopiedRunId(true);
+    setTimeout(() => setCopiedRunId(false), 1500);
+  };
+
+  const copyActionCommand = (cmd: string) => {
+    void navigator.clipboard.writeText(cmd);
+    setCopiedCommand(true);
+    setTimeout(() => setCopiedCommand(false), 1500);
+  };
+
   const currentWorkItem = detail.operator_work_items?.[0];
   const failedSteps = detail.run.steps.filter((step) => step.status === "FAILED");
+
+  const rawTimelineJson = React.useMemo(() => {
+    const str = JSON.stringify(detail.timeline, null, 2);
+    return str.length > 50000 ? `${str.slice(0, 50000)}\n\n--- [Truncated: event data exceeds 50KB] ---` : str;
+  }, [detail.timeline]);
 
   return (
     <section aria-label="Run detail" className="operate-band" id="selected-run-inspector">
@@ -54,7 +76,21 @@ export function RunTimeline({
       <div className="run-status-lane">
         <span>{detail.run.workflow_ref}</span>
         <span className={`chip ${stateClass(detail.run.status)}`}>{detail.run.status}</span>
+        {detail.run.status === "RUNNING" && (
+          <span className="chip state-warn">
+            ● LIVE
+          </span>
+        )}
         <span className="mono">{detail.run.run_id}</span>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          style={{ fontSize: "11px", padding: "1px 6px" }}
+          onClick={() => copyRunId(detail.run.run_id)}
+          title="Copy run ID"
+        >
+          {copiedRunId ? "Copied" : "Copy ID"}
+        </button>
       </div>
       <div className="run-now">
         <div>
@@ -78,7 +114,17 @@ export function RunTimeline({
         <div className="next-action-box">
           <strong>{detail.operator_next_actions[0].label}</strong>
           <span>{detail.operator_next_actions[0].description}</span>
-          <code>{detail.operator_next_actions[0].command}</code>
+          <div className="inline-actions">
+            <code>{detail.operator_next_actions[0].command}</code>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              style={{ fontSize: "11px", padding: "1px 6px" }}
+              onClick={() => copyActionCommand(detail.operator_next_actions![0].command)}
+            >
+              {copiedCommand ? "Copied" : "Copy command"}
+            </button>
+          </div>
         </div>
       )}
       {timeline.length === 0 ? (
@@ -111,7 +157,19 @@ export function RunTimeline({
                   {item.kind === "approval" && item.status === "pending" && item.approval_id && (
                     <div className="inline-actions">
                       {onApprove && (
-                        <button type="button" className="btn btn-primary" onClick={() => void onApprove(item.approval_id!)}>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={busyAction !== null}
+                          onClick={async () => {
+                            setBusyAction(`approve-${item.approval_id}`);
+                            try {
+                              await onApprove(item.approval_id!);
+                            } finally {
+                              setBusyAction(null);
+                            }
+                          }}
+                        >
                           Approve
                         </button>
                       )}
@@ -119,6 +177,7 @@ export function RunTimeline({
                         <button
                           type="button"
                           className="btn btn-danger"
+                          disabled={busyAction !== null}
                           onClick={() => setApprovalRejecting(item.approval_id!)}
                         >
                           Reject
@@ -128,21 +187,28 @@ export function RunTimeline({
                   )}
                   {approvalRejecting === item.approval_id && item.approval_id && (
                     <div className="decision-form">
-                      <label>
-                        Rejection reason
-                        <textarea
-                          value={approvalReason}
-                          onChange={(event) => setApprovalReason(event.currentTarget.value)}
-                        />
+                      <label htmlFor={`approval-reason-${item.approval_id}`} className="field-label">
+                        <span>Rejection reason</span>
                       </label>
+                      <textarea
+                        id={`approval-reason-${item.approval_id}`}
+                        value={approvalReason}
+                        onChange={(event) => setApprovalReason(event.currentTarget.value)}
+                      />
                       <div className="inline-actions">
                         <button
                           type="button"
                           className="btn btn-danger"
-                          onClick={() => {
-                            void onReject?.(item.approval_id!, approvalReason || "Rejected by operator");
-                            setApprovalRejecting(null);
-                            setApprovalReason("");
+                          disabled={busyAction !== null}
+                          onClick={async () => {
+                            setBusyAction(`reject-${item.approval_id}`);
+                            try {
+                              await onReject?.(item.approval_id!, approvalReason || "Rejected by operator");
+                              setApprovalRejecting(null);
+                              setApprovalReason("");
+                            } finally {
+                              setBusyAction(null);
+                            }
                           }}
                         >
                           Confirm rejection
@@ -171,7 +237,15 @@ export function RunTimeline({
                   <button
                     type="button"
                     className="btn btn-primary"
-                    onClick={() => void onImprovementRequestMerge(proposal.improvement_id)}
+                    disabled={busyAction !== null}
+                    onClick={async () => {
+                      setBusyAction(`req-${proposal.improvement_id}`);
+                      try {
+                        await onImprovementRequestMerge(proposal.improvement_id);
+                      } finally {
+                        setBusyAction(null);
+                      }
+                    }}
                   >
                     Request merge approval
                   </button>
@@ -180,7 +254,15 @@ export function RunTimeline({
                   <button
                     type="button"
                     className="btn btn-primary"
-                    onClick={() => void onImprovementMerge(proposal.improvement_id, proposal.approval!.approval_id)}
+                    disabled={busyAction !== null}
+                    onClick={async () => {
+                      setBusyAction(`merge-${proposal.improvement_id}`);
+                      try {
+                        await onImprovementMerge(proposal.improvement_id, proposal.approval!.approval_id);
+                      } finally {
+                        setBusyAction(null);
+                      }
+                    }}
                   >
                     Merge
                   </button>
@@ -189,6 +271,7 @@ export function RunTimeline({
                   <button
                     type="button"
                     className="btn btn-danger"
+                    disabled={busyAction !== null}
                     onClick={() => setProposalRejecting(proposal.improvement_id)}
                   >
                     Reject
@@ -196,21 +279,28 @@ export function RunTimeline({
                 )}
                 {proposalRejecting === proposal.improvement_id && (
                   <div className="decision-form">
-                    <label>
-                      Rejection reason
-                      <textarea
-                        value={proposalReason}
-                        onChange={(event) => setProposalReason(event.currentTarget.value)}
-                      />
+                    <label htmlFor={`proposal-reason-${proposal.improvement_id}`} className="field-label">
+                      <span>Rejection reason</span>
                     </label>
+                    <textarea
+                      id={`proposal-reason-${proposal.improvement_id}`}
+                      value={proposalReason}
+                      onChange={(event) => setProposalReason(event.currentTarget.value)}
+                    />
                     <div className="inline-actions">
                       <button
                         type="button"
                         className="btn btn-danger"
-                        onClick={() => {
-                          void onImprovementReject?.(proposal.improvement_id, proposalReason || "Rejected by operator");
-                          setProposalRejecting(null);
-                          setProposalReason("");
+                        disabled={busyAction !== null}
+                        onClick={async () => {
+                          setBusyAction(`impreject-${proposal.improvement_id}`);
+                          try {
+                            await onImprovementReject?.(proposal.improvement_id, proposalReason || "Rejected by operator");
+                            setProposalRejecting(null);
+                            setProposalReason("");
+                          } finally {
+                            setBusyAction(null);
+                          }
                         }}
                       >
                         Confirm rejection
@@ -227,9 +317,25 @@ export function RunTimeline({
         </div>
       )}
       {Object.keys(detail.timeline).length > 0 && (
-        <details>
+        <details style={{ marginTop: "var(--space-3)" }}>
           <summary>Advanced/raw event data</summary>
-          <pre className="pre-scroll">{JSON.stringify(detail.timeline, null, 2)}</pre>
+          <div className="action-cluster" style={{ marginTop: "var(--space-1)", marginBottom: "var(--space-2)" }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.clipboard) {
+                  void navigator.clipboard.writeText(JSON.stringify(detail.timeline, null, 2));
+                  setCopiedRaw(true);
+                  setTimeout(() => setCopiedRaw(false), 1500);
+                }
+              }}
+              style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }}
+            >
+              {copiedRaw ? "Copied" : "Copy event JSON"}
+            </button>
+          </div>
+          <pre className="pre-scroll">{rawTimelineJson}</pre>
         </details>
       )}
     </section>

@@ -372,41 +372,88 @@ def cmd_profile(_args: argparse.Namespace) -> int:
     return EXIT_PASS
 
 
-def cmd_unit(_args: argparse.Namespace) -> int:
-    return _run_test_command("unit", ["backend/tests/unit"])
+def _resolve_changed_targets() -> list[str]:
+    """Find test files corresponding to modified tracked files in git."""
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception:
+        return []
+    if proc.returncode != 0:
+        return []
+    changed_tests: set[str] = set()
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if not line or len(line) < 3:
+            continue
+        rel_path = line[3:].strip()
+        if rel_path.startswith("backend/tests/") and rel_path.endswith(".py"):
+            if (REPO_ROOT / rel_path).exists():
+                changed_tests.add(rel_path)
+        elif rel_path.startswith("backend/src/awf/") and rel_path.endswith(".py"):
+            stem = Path(rel_path).stem
+            for test_file in (REPO_ROOT / "backend" / "tests").rglob(f"test_*{stem}*.py"):
+                changed_tests.add(str(test_file.relative_to(REPO_ROOT)).replace("\\", "/"))
+    return sorted(changed_tests)
 
 
-def cmd_integration(_args: argparse.Namespace) -> int:
-    return _run_test_command("integration", ["backend/tests/integration"])
+def cmd_unit(args: argparse.Namespace | None = None) -> int:
+    extra = ["-x"] if getattr(args, "exitfirst", False) else []
+    return _run_test_command("unit", [*extra, "backend/tests/unit"])
 
 
-def cmd_runtime(_args: argparse.Namespace) -> int:
-    return _run_test_command("runtime", ["-m", "live", "backend/tests"])
+def cmd_integration(args: argparse.Namespace | None = None) -> int:
+    extra = ["-x"] if getattr(args, "exitfirst", False) else []
+    return _run_test_command("integration", ["-m", "not live", *extra, "backend/tests/integration"])
+
+
+def cmd_runtime(args: argparse.Namespace | None = None) -> int:
+    extra = ["-x"] if getattr(args, "exitfirst", False) else []
+    return _run_test_command("runtime", ["-m", "live", *extra, "backend/tests"])
 
 
 def cmd_focus(args: argparse.Namespace) -> int:
-    target = args.target
+    target = getattr(args, "target", "")
+    extra = ["-x"] if getattr(args, "exitfirst", False) else []
+    if target == "changed":
+        changed_targets = _resolve_changed_targets()
+        if not changed_targets:
+            print("no changed test files detected in git working copy; running unit tests")
+            return _run_test_command("focus", [*extra, "backend/tests/unit"])
+        return _run_test_command("focus", [*extra, *changed_targets])
+
     path = Path(target)
-    pytest_args = [target] if path.exists() or "/" in target or "\\" in target else ["-k", target, "backend/tests"]
+    pytest_args = (
+        [*extra, target]
+        if path.exists() or "/" in target or "\\" in target
+        else ["-k", target, *extra, "backend/tests"]
+    )
     return _run_test_command("focus", pytest_args)
 
 
-def cmd_lint(_args: argparse.Namespace) -> int:
+def cmd_lint(_args: argparse.Namespace | None = None) -> int:
     return _run_lint_command()
 
 
-def cmd_ci(_args: argparse.Namespace) -> int:
+def cmd_ci(args: argparse.Namespace | None = None) -> int:
     precheck_result = _run_ci_precheck_command()
     if precheck_result != EXIT_PASS:
         return precheck_result
     lint_result = _run_lint_command()
     if lint_result != EXIT_PASS:
         return lint_result
-    return _run_test_command("ci", ["-m", "not live", "backend/tests"])
+    extra = ["-x"] if getattr(args, "exitfirst", False) else []
+    return _run_test_command("ci", ["-m", "not live", *extra, "backend/tests"])
 
 
-def cmd_regression(_args: argparse.Namespace) -> int:
-    return _run_test_command("regression", ["-m", "not live", "backend/tests"])
+def cmd_regression(args: argparse.Namespace | None = None) -> int:
+    extra = ["-x"] if getattr(args, "exitfirst", False) else []
+    return _run_test_command("regression", ["-m", "not live", *extra, "backend/tests"])
 
 
 COMMANDS = {
@@ -424,7 +471,8 @@ COMMANDS = {
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="AWF backend validation harness (ADR-0006)")
     parser.add_argument("command", choices=sorted(COMMANDS))
-    parser.add_argument("target", nargs="?", help="path or pytest -k keyword for the focus command")
+    parser.add_argument("target", nargs="?", help="path or pytest -k keyword for the focus command (or 'changed')")
+    parser.add_argument("-x", "--exitfirst", action="store_true", help="exit on first error or failure")
     args = parser.parse_args(argv)
     if args.command == "focus" and not args.target:
         parser.error("focus requires a path or pytest -k keyword")

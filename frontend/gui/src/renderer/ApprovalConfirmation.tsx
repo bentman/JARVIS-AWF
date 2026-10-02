@@ -50,34 +50,30 @@ export function ApprovalConfirmation({
   }, [decision.decided, approvalId]);
 
   return (
-    <div role="dialog" aria-label="Approval confirmation" className="card approval-card" style={{ maxWidth: "680px", margin: "0 auto", padding: "1.25rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-        <h3 style={{ margin: 0 }}>Review & Approval Required</h3>
+    <div role="dialog" aria-label="Approval confirmation" className="card approval-card">
+      <div className="approval-header">
+        <h3>Review & Approval Required</h3>
         <span className={`chip ${stateClass(riskClass)}`}>{riskClass}</span>
       </div>
 
       {isImprovement && (
-        <div style={{ marginBottom: "1rem" }}>
-          {summary && (
-            <div style={{ fontSize: "1.05em", fontWeight: 500, lineHeight: 1.4, marginBottom: "0.5rem" }}>
-              {summary}
-            </div>
-          )}
+        <div style={{ marginBottom: "var(--space-3)" }}>
+          {summary && <div className="approval-summary">{summary}</div>}
           {safety && (
-            <div style={{ fontSize: "0.85em", padding: "0.5rem", background: "var(--bg-subtle, rgba(255,255,255,0.03))", borderLeft: "3px solid var(--accent, #58a6ff)", borderRadius: "2px", marginBottom: "0.75rem" }}>
-              <strong style={{ color: "var(--text-main, #c9d1d9)" }}>Safety Rationale:</strong> {safety}
+            <div className="approval-safety">
+              <strong>Safety Rationale:</strong> {safety}
             </div>
           )}
           {diffStats.length > 0 && (
-            <div style={{ marginTop: "0.5rem" }}>
-              <div className="muted" style={{ fontSize: "0.85em", fontWeight: 600 }}>Proposed Delta:</div>
-              <ul style={{ margin: "0.25rem 0", paddingLeft: "1.2rem" }}>
+            <div>
+              <div className="approval-delta-title">Proposed Delta:</div>
+              <ul className="approval-diff-list">
                 {diffStats.map((f) => (
-                  <li key={f.path} style={{ fontFamily: "monospace", fontSize: "0.85em" }}>
-                    {f.path} <span style={{ color: "#2ea043" }}>+{f.additions}</span> /{" "}
-                    <span style={{ color: "#da3633" }}>-{f.deletions}</span>
+                  <li key={f.path}>
+                    {f.path} <span className="approval-diff-add">+{f.additions}</span> /{" "}
+                    <span className="approval-diff-del">-{f.deletions}</span>
                     {f.preview_lines && f.preview_lines.length > 0 && (
-                      <pre className="pre-scroll" style={{ fontSize: "0.8em", margin: "0.25rem 0", background: "var(--bg-subtle, #161b22)" }}>
+                      <pre className="pre-scroll" style={{ fontSize: "0.8em", marginTop: "var(--space-1)" }}>
                         {f.preview_lines.join("\n")}
                       </pre>
                     )}
@@ -90,7 +86,7 @@ export function ApprovalConfirmation({
       )}
 
       {action && (
-        <div aria-label="Action preview" style={{ marginBottom: "1rem" }}>
+        <div aria-label="Action preview" style={{ marginBottom: "var(--space-3)" }}>
           <p>
             Action: {String(action.kind ?? "action")} {String(action.capability_ref ?? "")}
           </p>
@@ -99,21 +95,21 @@ export function ApprovalConfirmation({
       )}
 
       {decision.requiresOnScreenConfirmation && (
-        <p role="alert" style={{ color: "var(--warning, #d29922)", fontSize: "0.85em" }}>
+        <p role="alert" className="approval-alert">
           Voice alone cannot approve this action - confirm on screen.
         </p>
       )}
 
-      <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
+      <div className="action-cluster">
         <button className="btn btn-primary" onClick={() => onApprove(approvalId)}>
-          Approve
+          <span>Approve</span> <span className="kbd-hint">Ctrl+Enter</span>
         </button>
         <button className="btn btn-danger" onClick={() => onReject(approvalId, "rejected on screen")}>
           Reject
         </button>
       </div>
 
-      <p className="muted mono" style={{ fontSize: "0.8em", marginTop: "0.75rem", marginBottom: 0 }}>
+      <p className="approval-digest-footer mono">
         Action digest: <code className="mono">{actionDigest}</code> ({approvalId})
       </p>
     </div>
